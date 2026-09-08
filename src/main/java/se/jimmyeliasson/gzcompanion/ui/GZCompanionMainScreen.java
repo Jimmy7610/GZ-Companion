@@ -8,7 +8,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
-import se.jimmyeliasson.gzcompanion.ui.layout.ResponsiveBreakpoint;
+import se.jimmyeliasson.gzcompanion.ui.layout.MainScreenLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 import se.jimmyeliasson.gzcompanion.ui.tabs.HomeTabComponent;
@@ -23,12 +23,7 @@ public class GZCompanionMainScreen extends Screen {
     private final HomeTabComponent homeTab = new HomeTabComponent();
     private final PlaceholderTabComponent placeholderTab = new PlaceholderTabComponent();
 
-    // Cached Layout Rectangles
-    private UiRect modalRect = new UiRect(0, 0, 0, 0);
-    private UiRect closeBtnRect = new UiRect(0, 0, 0, 0);
-    private UiRect sidebarRect = new UiRect(0, 0, 0, 0);
-    private UiRect contentRect = new UiRect(0, 0, 0, 0);
-    private UiRect[] tabRects = new UiRect[TabType.values().length];
+    private MainScreenLayout layout;
 
     public GZCompanionMainScreen() {
         super(Component.literal("GZ Companion"));
@@ -39,53 +34,20 @@ public class GZCompanionMainScreen extends Screen {
         return false;
     }
 
-    /**
-     * Precalculates layout geometry based on current viewport dimensions.
-     */
-    private void calculateLayout(int screenWidth, int screenHeight) {
-        ResponsiveBreakpoint bp = ResponsiveBreakpoint.fromScreen(screenWidth, screenHeight);
-
-        int modalW;
-        int modalH;
-        if (bp == ResponsiveBreakpoint.COMPACT) {
-            modalW = Math.max(280, screenWidth - 16);
-            modalH = Math.max(200, screenHeight - 16);
-        } else if (bp == ResponsiveBreakpoint.LARGE) {
-            modalW = Math.min(screenWidth - 48, 560);
-            modalH = Math.min(screenHeight - 48, 340);
-        } else {
-            modalW = Math.min(screenWidth - 32, 500);
-            modalH = Math.min(screenHeight - 32, 310);
-        }
-
-        int modalX = (screenWidth - modalW) / 2;
-        int modalY = (screenHeight - modalH) / 2;
-        this.modalRect = new UiRect(modalX, modalY, modalW, modalH);
-
-        int headerH = 28;
-        int footerH = 16;
-        int sidebarW = (bp == ResponsiveBreakpoint.COMPACT) ? 88 : 104;
-
-        this.closeBtnRect = new UiRect(modalX + modalW - 18, modalY + 6, 12, 12);
-        this.sidebarRect = new UiRect(modalX + 6, modalY + headerH + 4, sidebarW, modalH - headerH - footerH - 8);
-        this.contentRect = new UiRect(sidebarRect.right() + 6, modalY + headerH + 4, modalW - sidebarW - 18, sidebarRect.height());
-
-        TabType[] tabs = TabType.values();
-        int tabCount = tabs.length;
-        int availableH = sidebarRect.height() - 8;
-        int tabH = Math.max(15, Math.min(18, availableH / tabCount));
-        int tabSpacing = Math.max(1, (availableH - (tabH * tabCount)) / (tabCount - 1));
-
-        for (int i = 0; i < tabCount; i++) {
-            int ty = sidebarRect.y() + 4 + (i * (tabH + tabSpacing));
-            tabRects[i] = new UiRect(sidebarRect.x() + 2, ty, sidebarRect.width() - 4, tabH);
-        }
+    public MainScreenLayout getLayout() {
+        return layout;
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) {
         Font font = this.font;
-        calculateLayout(this.width, this.height);
+        this.layout = MainScreenLayout.calculate(this.width, this.height);
+
+        UiRect modalRect = layout.modalRect();
+        UiRect closeBtnRect = layout.closeBtnRect();
+        UiRect sidebarRect = layout.sidebarRect();
+        UiRect contentRect = layout.contentRect();
+        UiRect[] tabRects = layout.tabRects();
 
         // 1. Full Screen Backdrop Tint
         extractor.fill(0, 0, this.width, this.height, GZTheme.COLOR_BACKDROP);
@@ -97,16 +59,22 @@ public class GZCompanionMainScreen extends Screen {
         int headerY = modalRect.y() + 4;
         GZTheme.drawIcon(extractor, IconId.LOGO, modalRect.x() + 8, headerY + 2, 12, GZTheme.COLOR_EMERALD);
         extractor.text(font, CompanionConstants.MOD_NAME.toUpperCase(), modalRect.x() + 24, headerY + 3, GZTheme.COLOR_MINT, true);
-        extractor.text(font, "- Alpha", modalRect.x() + 28 + font.width(CompanionConstants.MOD_NAME.toUpperCase()), headerY + 3, GZTheme.COLOR_TEXT_MUTED, false);
+
+        String subtitle = "- Inofficiellt Alpha";
+        int titleW = font.width(CompanionConstants.MOD_NAME.toUpperCase());
+        int availHeaderW = closeBtnRect.x() - (modalRect.x() + 28 + titleW) - 8;
+        if (availHeaderW > 40) {
+            TextUtil.drawEllipsizedText(extractor, font, subtitle, modalRect.x() + 28 + titleW, headerY + 3, availHeaderW, GZTheme.COLOR_TEXT_MUTED, false);
+        }
 
         // Close Button
         boolean closeHovered = closeBtnRect.contains(mouseX, mouseY);
         extractor.fill(closeBtnRect.x(), closeBtnRect.y(), closeBtnRect.right(), closeBtnRect.bottom(), closeHovered ? 0x99EF4444 : 0x221E293B);
-        TextUtil.drawCenteredText(extractor, font, "x", closeBtnRect.x() + (closeBtnRect.width() / 2), closeBtnRect.y() + 2, closeBtnRect.width(),
+        TextUtil.drawCenteredText(extractor, font, "x", closeBtnRect.x() + (closeBtnRect.width() / 2), closeBtnRect.y() + 1, closeBtnRect.width(),
                 closeHovered ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_MUTED, false);
 
         // Header Divider
-        extractor.fill(modalRect.x() + 6, modalRect.y() + 27, modalRect.right() - 6, modalRect.y() + 28, GZTheme.COLOR_BORDER_SUBTLE);
+        extractor.fill(modalRect.x() + 5, modalRect.y() + 25, modalRect.right() - 5, modalRect.y() + 26, GZTheme.COLOR_BORDER_SUBTLE);
 
         // 3. Sidebar Rail
         GZTheme.drawCard(extractor, sidebarRect, 0x800A1017, GZTheme.COLOR_BORDER_SUBTLE);
@@ -129,11 +97,11 @@ public class GZCompanionMainScreen extends Screen {
             int textTint = isActive ? GZTheme.COLOR_TEXT_PRIMARY : (isHov ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_SECONDARY);
 
             int iconY = tr.y() + ((tr.height() - 10) / 2);
-            GZTheme.drawIcon(extractor, tab.getIcon(), tr.x() + 4, iconY, 10, iconTint);
+            GZTheme.drawIcon(extractor, tab.getIcon(), tr.x() + 3, iconY, 10, iconTint);
 
             int textY = tr.y() + ((tr.height() - 8) / 2);
-            int maxLabelW = tr.width() - 20;
-            TextUtil.drawEllipsizedText(extractor, font, tab.getDisplayName(), tr.x() + 18, textY, maxLabelW, textTint, isActive);
+            int maxLabelW = tr.width() - 17;
+            TextUtil.drawEllipsizedText(extractor, font, tab.getDisplayName(), tr.x() + 15, textY, maxLabelW, textTint, isActive);
         }
 
         // 4. Content Canvas (Home or Placeholder)
@@ -146,10 +114,10 @@ public class GZCompanionMainScreen extends Screen {
         extractor.disableScissor();
 
         // 5. Global Modal Footer
-        int footerY = modalRect.bottom() - 13;
-        TextUtil.drawEllipsizedText(extractor, font, "Client-side - Fair play", modalRect.x() + 8, footerY, modalRect.width() / 2, GZTheme.COLOR_TEXT_MUTED, false);
-        String rightFooter = "GZ Companion " + CompanionConstants.getModVersion();
-        TextUtil.drawRightAlignedText(extractor, font, rightFooter, modalRect.right() - 8, footerY, modalRect.width() / 2, GZTheme.COLOR_TEXT_MUTED, false);
+        int footerY = modalRect.bottom() - 12;
+        TextUtil.drawEllipsizedText(extractor, font, "Fair play - Lokalt", modalRect.x() + 6, footerY, modalRect.width() / 2, GZTheme.COLOR_TEXT_MUTED, false);
+        String rightFooter = "v" + CompanionConstants.getModVersion();
+        TextUtil.drawRightAlignedText(extractor, font, rightFooter, modalRect.right() - 6, footerY, modalRect.width() / 2, GZTheme.COLOR_TEXT_MUTED, false);
 
         super.extractRenderState(extractor, mouseX, mouseY, partialTick);
     }
@@ -164,12 +132,17 @@ public class GZCompanionMainScreen extends Screen {
         double mouseY = event.y();
         int button = event.button();
 
-        if (closeBtnRect.contains(mouseX, mouseY)) {
+        if (layout == null) {
+            this.layout = MainScreenLayout.calculate(this.width, this.height);
+        }
+
+        if (layout.closeBtnRect().contains(mouseX, mouseY)) {
             this.onClose();
             return true;
         }
 
         TabType[] tabs = TabType.values();
+        UiRect[] tabRects = layout.tabRects();
         for (int i = 0; i < tabs.length; i++) {
             if (tabRects[i] != null && tabRects[i].contains(mouseX, mouseY)) {
                 this.activeTab = tabs[i];
@@ -177,6 +150,7 @@ public class GZCompanionMainScreen extends Screen {
             }
         }
 
+        UiRect contentRect = layout.contentRect();
         if (contentRect.contains(mouseX, mouseY)) {
             if (activeTab == TabType.HEM) {
                 if (homeTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {

@@ -1,7 +1,7 @@
 package se.jimmyeliasson.gzcompanion.ui.layout;
 
 /**
- * Immutable 2D rectangle primitive for layout calculation, rendering bounds, and hit testing.
+ * Immutable 2D rectangle primitive for layout calculation, rendering bounds, containment, and intersection testing.
  */
 public record UiRect(int x, int y, int width, int height) {
     public int right() {
@@ -14,6 +14,18 @@ public record UiRect(int x, int y, int width, int height) {
 
     public boolean contains(double px, double py) {
         return px >= x && px < x + width && py >= y && py < y + height;
+    }
+
+    public boolean contains(UiRect other) {
+        if (other == null) return false;
+        return other.x >= this.x && other.right() <= this.right()
+                && other.y >= this.y && other.bottom() <= this.bottom();
+    }
+
+    public boolean intersects(UiRect other) {
+        if (other == null) return false;
+        return this.x < other.right() && this.right() > other.x
+                && this.y < other.bottom() && this.bottom() > other.y;
     }
 
     public UiRect inset(int dx, int dy) {

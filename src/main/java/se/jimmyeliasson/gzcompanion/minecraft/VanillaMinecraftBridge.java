@@ -37,7 +37,7 @@ public class VanillaMinecraftBridge implements MinecraftBridge {
                     return Optional.of(serverData.ip);
                 }
                 if (client.isLocalServer()) {
-                    return Optional.of("Enspelarl\u00E4ge (Lokal)");
+                    return Optional.of("Lokal v\u00E4rld");
                 }
             }
         } catch (Exception ignored) {}

@@ -8,10 +8,9 @@ import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 
 /**
- * Design system tokens, component rendering primitives, and layout styling following docs/design/DESIGN-SYSTEM.md.
+ * Design system tokens, pixel-chamfered component rendering primitives, and layout styling.
  */
 public final class GZTheme {
-    // Development Debug Mode (Toggle with true for bounds inspection)
     public static boolean DEBUG_LAYOUT = false;
 
     // Surfaces & Glass (ARGB)
@@ -51,7 +50,7 @@ public final class GZTheme {
     }
 
     /**
-     * Draws a card container with background and 1px border.
+     * Draws a subtle pixel-chamfered card container.
      */
     public static void drawCard(GuiGraphicsExtractor extractor, UiRect rect, int bgArgb, int borderArgb) {
         drawCard(extractor, rect.x(), rect.y(), rect.width(), rect.height(), bgArgb, borderArgb);
@@ -59,33 +58,41 @@ public final class GZTheme {
 
     public static void drawCard(GuiGraphicsExtractor extractor, int x, int y, int width, int height, int bgArgb, int borderArgb) {
         if (width <= 0 || height <= 0) return;
-        extractor.fill(x, y, x + width, y + height, bgArgb);
-        extractor.fill(x, y, x + width, y + 1, borderArgb);
-        extractor.fill(x, y + height - 1, x + width, y + height, borderArgb);
-        extractor.fill(x, y, x + 1, y + height, borderArgb);
-        extractor.fill(x + width - 1, y, x + width, y + height, borderArgb);
+        // Pixel-chamfered corners: clip 1px from 4 outer corner points for a refined look
+        if (width > 6 && height > 6) {
+            // Main body
+            extractor.fill(x + 1, y, x + width - 1, y + height, bgArgb);
+            extractor.fill(x, y + 1, x + 1, y + height - 1, bgArgb);
+            extractor.fill(x + width - 1, y + 1, x + width, y + height - 1, bgArgb);
+
+            // Borders (horizontal top/bottom, vertical sides)
+            extractor.fill(x + 1, y, x + width - 1, y + 1, borderArgb);
+            extractor.fill(x + 1, y + height - 1, x + width - 1, y + height, borderArgb);
+            extractor.fill(x, y + 1, x + 1, y + height - 1, borderArgb);
+            extractor.fill(x + width - 1, y + 1, x + width, y + height - 1, borderArgb);
+        } else {
+            extractor.fill(x, y, x + width, y + height, bgArgb);
+            extractor.fill(x, y, x + width, y + 1, borderArgb);
+            extractor.fill(x, y + height - 1, x + width, y + height, borderArgb);
+            extractor.fill(x, y, x + 1, y + height, borderArgb);
+            extractor.fill(x + width - 1, y, x + width, y + height, borderArgb);
+        }
 
         if (DEBUG_LAYOUT) {
             drawDebugBounds(extractor, x, y, width, height, 0x44FF00FF);
         }
     }
 
-    /**
-     * Draws a crisp bundled 16x16 icon texture.
-     */
     public static void drawIcon(GuiGraphicsExtractor extractor, IconId icon, int x, int y, int size, int tintColor) {
         if (icon == null) return;
         Identifier id = icon.getIdentifier();
         extractor.blit(RenderPipelines.GUI_TEXTURED, id, x, y, 0.0F, 0.0F, size, size, 16, 16, 16, 16, tintColor);
     }
 
-    /**
-     * Draws a status badge pill with a colored status dot.
-     */
     public static void drawBadge(GuiGraphicsExtractor extractor, Font font, int x, int y, String label, int textArgb, int dotArgb) {
         int textW = font.width(label);
-        int badgeW = textW + 16;
-        int badgeH = 13;
+        int badgeW = textW + 14;
+        int badgeH = 11;
 
         extractor.fill(x, y, x + badgeW, y + badgeH, 0x800A1017);
         extractor.fill(x, y, x + badgeW, y + 1, 0x40475569);
@@ -93,23 +100,15 @@ public final class GZTheme {
         extractor.fill(x, y, x + 1, y + badgeH, 0x40475569);
         extractor.fill(x + badgeW - 1, y, x + badgeW, y + badgeH, 0x40475569);
 
-        // Status Dot
-        drawStatusDot(extractor, x + 4, y + 4, dotArgb);
-        // Label Text
-        extractor.text(font, label, x + 12, y + 3, opaque(textArgb), false);
+        drawStatusDot(extractor, x + 3, y + 3, dotArgb);
+        extractor.text(font, label, x + 10, y + 2, opaque(textArgb), false);
     }
 
-    /**
-     * Draws a crisp 4x4 pixel status dot.
-     */
     public static void drawStatusDot(GuiGraphicsExtractor extractor, int x, int y, int colorArgb) {
         int c = opaque(colorArgb);
         extractor.fill(x, y, x + 4, y + 4, c);
     }
 
-    /**
-     * Draws a standardized button with measured font bounds.
-     */
     public static void drawButton(GuiGraphicsExtractor extractor, Font font, UiRect rect,
                                   String text, boolean isPrimary, boolean isHovered) {
         drawButton(extractor, font, rect.x(), rect.y(), rect.width(), rect.height(), text, isPrimary, isHovered);
@@ -131,12 +130,11 @@ public final class GZTheme {
         drawCard(extractor, x, y, width, height, bg, border);
 
         int textY = y + (height - 8) / 2;
-        TextUtil.drawCenteredText(extractor, font, text, x + (width / 2), textY, width - 6, textColor, isPrimary);
+        // CRITICAL: Drop shadow must be FALSE for primary dark text on emerald background
+        boolean dropShadow = !isPrimary;
+        TextUtil.drawCenteredText(extractor, font, text, x + (width / 2), textY, width - 4, textColor, dropShadow);
     }
 
-    /**
-     * Development debug outline renderer.
-     */
     public static void drawDebugBounds(GuiGraphicsExtractor extractor, int x, int y, int w, int h, int color) {
         extractor.fill(x, y, x + w, y + 1, color);
         extractor.fill(x, y + h - 1, x + w, y + h, color);
