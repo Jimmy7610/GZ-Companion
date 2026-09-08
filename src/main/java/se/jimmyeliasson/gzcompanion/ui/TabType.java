@@ -2,17 +2,18 @@ package se.jimmyeliasson.gzcompanion.ui;
 
 /**
  * The 9 navigation sections defined for GZ Companion.
+ * Uses reliable ASCII/Latin-1 glyphs that render crisply across all Minecraft GUI scales and font engines.
  */
 public enum TabType {
-    HEM("Hem", "⌂", "Startskärm och översikt"),
-    GUIDE("Guide", "📖", "Interaktiva guider och progression"),
-    CRAFTING("Crafting", "🎲", "Recept och hantverkshjälp"),
-    KISTOR("Kistor", "📦", "Kist- och förvaringsöversikt"),
-    SETTLEMENT("Settlement", "🏰", "Samhälls- och stadsverktyg"),
-    BYGGPLANER("Byggplaner", "📄", "Byggnads- och materialplanerare"),
-    MARKETWATCH("MarketWatch", "📊", "Marknads- och ekonomibevakning"),
-    KOMMANDON("Kommandon", "⌨", "Serverkommandon och snabbval"),
-    INSTALLNINGAR("Inställningar", "⚙", "Inställningar för GZ Companion");
+    HEM("Hem", "#", "Startskarm och oversikt"),
+    GUIDE("Guide", "?", "Interaktiva guider och progression"),
+    CRAFTING("Crafting", "+", "Recept och hantverkshjalp"),
+    KISTOR("Kistor", "=", "Kist- och forvaringsoversikt"),
+    SETTLEMENT("Settlement", "^", "Samhalls- och stadsverktyg"),
+    BYGGPLANER("Byggplaner", "%", "Byggnads- och materialplanerare"),
+    MARKETWATCH("MarketWatch", "$", "Marknads- och ekonomibevakning"),
+    KOMMANDON("Kommandon", "/", "Serverkommandon och snabbval"),
+    INSTALLNINGAR("Installningar", "*", "Installningar for GZ Companion");
 
     private final String displayName;
     private final String iconSymbol;

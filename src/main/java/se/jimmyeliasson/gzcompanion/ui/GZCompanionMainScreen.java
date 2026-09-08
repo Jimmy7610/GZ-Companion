@@ -13,7 +13,7 @@ import se.jimmyeliasson.gzcompanion.ui.tabs.PlaceholderTabComponent;
 
 /**
  * Main GZ Companion Screen interface.
- * Implements the full design system and tab navigation from docs/design/GZ-COMPANION-UI-REFERENCE.png.
+ * Implements the compact, centered card dashboard from docs/design/GZ-COMPANION-UI-REFERENCE.png.
  */
 public class GZCompanionMainScreen extends Screen {
     private TabType activeTab = TabType.HEM;
@@ -36,71 +36,77 @@ public class GZCompanionMainScreen extends Screen {
         // 1. Full Screen Backdrop Tint
         extractor.fill(0, 0, this.width, this.height, GZTheme.COLOR_BACKDROP);
 
-        // 2. Centered Modal Dimensions
-        int modalW = Math.min(this.width - 24, 640);
-        int modalH = Math.min(this.height - 24, 400);
+        // 2. Compact Centered Modal Sizing
+        // At 1600x900 / scale 2-3, maintains deliberate padding and crisp proportions
+        int modalW = Math.min(this.width - 32, 540);
+        int modalH = Math.min(this.height - 32, 330);
         int modalX = (this.width - modalW) / 2;
         int modalY = (this.height - modalH) / 2;
 
         // Draw main modal container
         GZTheme.drawCard(extractor, modalX, modalY, modalW, modalH, GZTheme.COLOR_PANEL_BG, GZTheme.COLOR_BORDER_MODAL);
 
-        // Header
-        int headerH = 36;
-        int headerY = modalY + 6;
-        
-        extractor.text(font, "\uD83C\uDF43", modalX + 14, headerY + 4, GZTheme.COLOR_MINT, true);
-        extractor.text(font, CompanionConstants.MOD_NAME.toUpperCase(), modalX + 30, headerY + 4, GZTheme.COLOR_MINT, true);
-        extractor.text(font, "Unofficial community project \u2022 Alpha", modalX + 30, headerY + 16, GZTheme.COLOR_TEXT_SECONDARY, false);
+        // Header Section (Height 32px)
+        int headerH = 30;
+        int headerY = modalY + 5;
 
-        int closeBtnX = modalX + modalW - 24;
-        int closeBtnY = headerY + 4;
-        boolean closeHovered = mouseX >= closeBtnX && mouseX < closeBtnX + 16 && mouseY >= closeBtnY && mouseY < closeBtnY + 16;
-        extractor.fill(closeBtnX, closeBtnY, closeBtnX + 16, closeBtnY + 16, closeHovered ? 0x66EF4444 : 0x221E293B);
-        extractor.text(font, "\u2715", closeBtnX + 4, closeBtnY + 4, closeHovered ? 0xFFFFFFFF : GZTheme.COLOR_TEXT_SECONDARY, false);
+        // Brand Icon & Title
+        extractor.text(font, "*", modalX + 12, headerY + 4, GZTheme.COLOR_EMERALD, true);
+        extractor.text(font, CompanionConstants.MOD_NAME.toUpperCase(), modalX + 22, headerY + 4, GZTheme.COLOR_MINT, true);
+        extractor.text(font, "Unofficial community project - Alpha", modalX + 22, headerY + 14, GZTheme.COLOR_TEXT_SECONDARY, false);
 
-        extractor.fill(modalX + 10, modalY + headerH, modalX + modalW - 10, modalY + headerH + 1, GZTheme.COLOR_BORDER_SUBTLE);
+        // Close Button
+        int closeBtnX = modalX + modalW - 20;
+        int closeBtnY = headerY + 2;
+        boolean closeHovered = mouseX >= closeBtnX && mouseX < closeBtnX + 14 && mouseY >= closeBtnY && mouseY < closeBtnY + 14;
+        extractor.fill(closeBtnX, closeBtnY, closeBtnX + 14, closeBtnY + 14, closeHovered ? 0x99EF4444 : 0x331E293B);
+        extractor.text(font, "x", closeBtnX + 4, closeBtnY + 2, closeHovered ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_SECONDARY, false);
 
-        // Sidebar Navigation
-        int sidebarW = 120;
-        int sidebarX = modalX + 10;
-        int contentX = sidebarX + sidebarW + 8;
-        int bodyY = modalY + headerH + 8;
-        int bodyH = modalH - headerH - 32;
+        // Header Divider Line
+        extractor.fill(modalX + 8, modalY + headerH, modalX + modalW - 8, modalY + headerH + 1, GZTheme.COLOR_BORDER_SUBTLE);
 
-        GZTheme.drawCard(extractor, sidebarX, bodyY, sidebarW, bodyH, 0x4D0F172A, GZTheme.COLOR_BORDER_SUBTLE);
+        // Sidebar Navigation (Width 108px)
+        int sidebarW = 108;
+        int sidebarX = modalX + 8;
+        int bodyY = modalY + headerH + 6;
+        int footerH = 20;
+        int bodyH = modalH - headerH - footerH - 10;
+        int contentX = sidebarX + sidebarW + 6;
+        int contentW = modalW - sidebarW - 20;
+
+        // Sidebar Container
+        GZTheme.drawCard(extractor, sidebarX, bodyY, sidebarW, bodyH, 0x800A1017, GZTheme.COLOR_BORDER_SUBTLE);
 
         TabType[] tabs = TabType.values();
-        int tabBtnH = 22;
-        int tabStartY = bodyY + 6;
+        int tabBtnH = 18;
+        int tabStartY = bodyY + 4;
 
         for (int i = 0; i < tabs.length; i++) {
             TabType tab = tabs[i];
-            int ty = tabStartY + (i * (tabBtnH + 3));
+            int ty = tabStartY + (i * (tabBtnH + 2));
             boolean isActive = (tab == activeTab);
-            boolean isHov = mouseX >= sidebarX + 4 && mouseX < sidebarX + sidebarW - 4 && mouseY >= ty && mouseY < ty + tabBtnH;
+            boolean isHov = mouseX >= sidebarX + 3 && mouseX < sidebarX + sidebarW - 3 && mouseY >= ty && mouseY < ty + tabBtnH;
 
             int tabBg = isActive ? GZTheme.COLOR_NAV_ACTIVE : (isHov ? GZTheme.COLOR_NAV_HOVER : 0x00000000);
-            int tabBorder = isActive ? GZTheme.COLOR_BORDER_EMERALD : (isHov ? 0x33475569 : 0x00000000);
+            int tabBorder = isActive ? GZTheme.COLOR_BORDER_EMERALD : (isHov ? 0x40475569 : 0x00000000);
 
             if (tabBg != 0) {
-                GZTheme.drawCard(extractor, sidebarX + 4, ty, sidebarW - 8, tabBtnH, tabBg, tabBorder);
+                GZTheme.drawCard(extractor, sidebarX + 3, ty, sidebarW - 6, tabBtnH, tabBg, tabBorder);
             }
 
-            int iconColor = isActive ? GZTheme.COLOR_MINT : (isHov ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_SECONDARY);
+            int iconColor = isActive ? GZTheme.COLOR_MINT : (isHov ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_MUTED);
             int textColor = isActive ? GZTheme.COLOR_TEXT_PRIMARY : (isHov ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_SECONDARY);
 
-            extractor.text(font, tab.getIconSymbol(), sidebarX + 10, ty + 6, iconColor, false);
-            extractor.text(font, tab.getDisplayName(), sidebarX + 26, ty + 6, textColor, isActive);
+            extractor.text(font, tab.getIconSymbol(), sidebarX + 7, ty + 5, iconColor, false);
+            extractor.text(font, tab.getDisplayName(), sidebarX + 18, ty + 5, textColor, isActive);
         }
 
-        int sFootY = bodyY + bodyH - 24;
-        extractor.text(font, "GZ", sidebarX + 8, sFootY + 2, GZTheme.COLOR_TEXT_MUTED, true);
-        extractor.text(font, "By the community,", sidebarX + 26, sFootY, GZTheme.COLOR_TEXT_MUTED, false);
-        extractor.text(font, "for the players.", sidebarX + 26, sFootY + 10, GZTheme.COLOR_TEXT_MUTED, false);
+        // Sidebar Community Tagline
+        int sFootY = bodyY + bodyH - 18;
+        extractor.text(font, "By the community,", sidebarX + 8, sFootY, GZTheme.COLOR_TEXT_MUTED, false);
+        extractor.text(font, "for the players.", sidebarX + 8, sFootY + 9, GZTheme.COLOR_TEXT_MUTED, false);
 
-        // Content Area
-        int contentW = modalW - sidebarW - 28;
+        // Content Area Rendering
         if (activeTab == TabType.HEM) {
             homeTab.render(extractor, font, contentX, bodyY, contentW, bodyH, mouseX, mouseY, this);
         } else {
@@ -108,11 +114,11 @@ public class GZCompanionMainScreen extends Screen {
         }
 
         // Global Modal Footer
-        int footerY = modalY + modalH - 18;
-        extractor.text(font, "\uD83D\uDEE1 Client-side \u2022 Fair play \u2022 Inga cheat-funktioner", modalX + 12, footerY, GZTheme.COLOR_TEXT_MUTED, false);
-        String rightFooter = "GZ Companion " + CompanionConstants.getModVersion() + "  \u2764 By the community";
+        int footerY = modalY + modalH - 16;
+        extractor.text(font, "[!] Client-side - Fair play - Inga cheat-funktioner", modalX + 10, footerY, GZTheme.COLOR_TEXT_MUTED, false);
+        String rightFooter = "GZ Companion " + CompanionConstants.getModVersion();
         int rFootW = font.width(rightFooter);
-        extractor.text(font, rightFooter, modalX + modalW - rFootW - 12, footerY, GZTheme.COLOR_TEXT_MUTED, false);
+        extractor.text(font, rightFooter, modalX + modalW - rFootW - 10, footerY, GZTheme.COLOR_TEXT_MUTED, false);
 
         super.extractRenderState(extractor, mouseX, mouseY, partialTick);
     }
@@ -127,37 +133,41 @@ public class GZCompanionMainScreen extends Screen {
         double mouseY = event.y();
         int button = event.button();
 
-        int modalW = Math.min(this.width - 24, 640);
-        int modalH = Math.min(this.height - 24, 400);
+        int modalW = Math.min(this.width - 32, 540);
+        int modalH = Math.min(this.height - 32, 330);
         int modalX = (this.width - modalW) / 2;
         int modalY = (this.height - modalH) / 2;
-        int headerH = 36;
-        int sidebarW = 120;
-        int sidebarX = modalX + 10;
-        int contentX = sidebarX + sidebarW + 8;
-        int bodyY = modalY + headerH + 8;
-        int bodyH = modalH - headerH - 32;
-        int contentW = modalW - sidebarW - 28;
+        int headerH = 30;
+        int sidebarW = 108;
+        int sidebarX = modalX + 8;
+        int contentX = sidebarX + sidebarW + 6;
+        int bodyY = modalY + headerH + 6;
+        int footerH = 20;
+        int bodyH = modalH - headerH - footerH - 10;
+        int contentW = modalW - sidebarW - 20;
 
-        int closeBtnX = modalX + modalW - 24;
-        int closeBtnY = modalY + 10;
-        if (mouseX >= closeBtnX && mouseX < closeBtnX + 16 && mouseY >= closeBtnY && mouseY < closeBtnY + 16) {
+        // Close button click
+        int closeBtnX = modalX + modalW - 20;
+        int closeBtnY = modalY + 7;
+        if (mouseX >= closeBtnX && mouseX < closeBtnX + 14 && mouseY >= closeBtnY && mouseY < closeBtnY + 14) {
             this.onClose();
             return true;
         }
 
+        // Sidebar tab clicks
         TabType[] tabs = TabType.values();
-        int tabBtnH = 22;
-        int tabStartY = bodyY + 6;
+        int tabBtnH = 18;
+        int tabStartY = bodyY + 4;
 
         for (int i = 0; i < tabs.length; i++) {
-            int ty = tabStartY + (i * (tabBtnH + 3));
-            if (mouseX >= sidebarX + 4 && mouseX < sidebarX + sidebarW - 4 && mouseY >= ty && mouseY < ty + tabBtnH) {
+            int ty = tabStartY + (i * (tabBtnH + 2));
+            if (mouseX >= sidebarX + 3 && mouseX < sidebarX + sidebarW - 3 && mouseY >= ty && mouseY < ty + tabBtnH) {
                 this.activeTab = tabs[i];
                 return true;
             }
         }
 
+        // Subtab component clicks
         if (activeTab == TabType.HEM) {
             if (homeTab.mouseClicked(mouseX, mouseY, button, contentX, bodyY, contentW, bodyH, this)) {
                 return true;
