@@ -4,6 +4,8 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
+import se.jimmyeliasson.gzcompanion.core.feature.FeatureManager;
+import se.jimmyeliasson.gzcompanion.core.feature.ModuleStatus;
 import se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityResult;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
@@ -23,6 +25,7 @@ public class HomeTabComponent {
         String serverAddr = session.getBridge().getCurrentServerAddress().orElse("Inte ansluten");
         CompatibilityResult compat = session.getCompatibilityResult();
         String packVersion = session.getActiveRulePack() != null ? session.getActiveRulePack().manifest().packVersion() : "1.0.0";
+        FeatureManager featureManager = session.getFeatureManager();
 
         int gap = 8;
         int leftColW = (int) (width * 0.58f);
@@ -80,7 +83,7 @@ public class HomeTabComponent {
         int badgeW = (width - 20 - (gap * 3)) / 4;
 
         drawMiniBadge(extractor, font, x + 10, badgeAreaY, badgeW, 20, "Minecraft:", CompanionConstants.TARGET_MINECRAFT_VERSION, 0xFFFFFFFF);
-        drawMiniBadge(extractor, font, x + 10 + (badgeW + gap), badgeAreaY, badgeW, 20, "GZ Companion:", CompanionConstants.MOD_VERSION, GZTheme.COLOR_MINT);
+        drawMiniBadge(extractor, font, x + 10 + (badgeW + gap), badgeAreaY, badgeW, 20, "GZ Companion:", CompanionConstants.getModVersion(), GZTheme.COLOR_MINT);
         drawMiniBadge(extractor, font, x + 10 + (badgeW + gap) * 2, badgeAreaY, badgeW, 20, "Rule Pack:", packVersion, 0xFFFFFFFF);
         drawMiniBadge(extractor, font, x + 10 + (badgeW + gap) * 3, badgeAreaY, badgeW, 20, "Kompatibilitet:", compat.overallStatus().getDisplayName(), compat.overallStatus().getRgbColor());
 
@@ -94,7 +97,7 @@ public class HomeTabComponent {
         GZTheme.drawCard(extractor, x, botY, botLeftW, botH, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         extractor.text(font, "\uD83C\uDFAF N\u00E4sta uppgift", x + 12, botY + 8, GZTheme.COLOR_MINT, true);
         extractor.text(font, "\u00D6ppna guiden f\u00F6r att b\u00F6rja", x + 12, botY + 22, GZTheme.COLOR_TEXT_PRIMARY, true);
-        extractor.text(font, "F\u00E5 hj\u00E4lp, l\u00E4r dig grunderna och kom ig\u00E5ng med din resa p\u00E5 GameZoneMC.", x + 12, botY + 34, GZTheme.COLOR_TEXT_SECONDARY, false);
+        extractor.text(font, "F\u00E5 hj\u00E4lp, l\u00E4r dig grunderna och kom ig\u00E5ng med din resa.", x + 12, botY + 34, GZTheme.COLOR_TEXT_SECONDARY, false);
 
         int chkY = botY + 48;
         drawCheckItem(extractor, font, x + 14, chkY, "\u25CB \u00D6ppna guiden f\u00F6r nyb\u00F6rjare");
@@ -119,21 +122,24 @@ public class HomeTabComponent {
         extractor.fill(x + 12 + (btnW * 2) + 26, btnY, x + 12 + (btnW * 2) + 26 + btnW + 5, btnY + 1, 0x4064748B);
         extractor.text(font, "\uD83D\uDEE1 Kompatibilitet", x + 12 + (btnW * 2) + 32, btnY + 6, GZTheme.COLOR_TEXT_PRIMARY, false);
 
-        // Bottom Right: Module Status
+        // Bottom Right: Module Status (Dynamically queried from FeatureManager)
         int botRightX = x + botLeftW + gap;
         GZTheme.drawCard(extractor, botRightX, botY, botRightW, botH, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         extractor.text(font, "\uD83E\uDDE9 Modulstatus", botRightX + 10, botY + 8, GZTheme.COLOR_TEXT_PRIMARY, true);
 
         int modY = botY + 24;
         int rowH = 12;
-        drawModuleRow(extractor, font, botRightX + 10, modY, "Hem", "Tillg\u00E4nglig", GZTheme.COLOR_STATUS_GREEN);
-        drawModuleRow(extractor, font, botRightX + 10, modY + rowH, "Guide", "Tillg\u00E4nglig", GZTheme.COLOR_STATUS_GREEN);
-        drawModuleRow(extractor, font, botRightX + 10, modY + rowH * 2, "Crafting", "Tillg\u00E4nglig", GZTheme.COLOR_STATUS_GREEN);
-        drawModuleRow(extractor, font, botRightX + 10, modY + rowH * 3, "Kistor", "Tillg\u00E4nglig", GZTheme.COLOR_STATUS_GREEN);
-        drawModuleRow(extractor, font, botRightX + 10, modY + rowH * 4, "Settlement", "Kommer snart", GZTheme.COLOR_STATUS_GREY);
-        drawModuleRow(extractor, font, botRightX + 10, modY + rowH * 5, "Byggplaner", "Kommer snart", GZTheme.COLOR_STATUS_GREY);
-        drawModuleRow(extractor, font, botRightX + 10, modY + rowH * 6, "MarketWatch", "Kommer snart", GZTheme.COLOR_STATUS_GREY);
-        drawModuleRow(extractor, font, botRightX + 10, modY + rowH * 7, "Kommandon", "Tillg\u00E4nglig", GZTheme.COLOR_STATUS_GREEN);
+        TabType[] trackedTabs = {
+            TabType.HEM, TabType.GUIDE, TabType.CRAFTING, TabType.KISTOR,
+            TabType.SETTLEMENT, TabType.BYGGPLANER, TabType.MARKETWATCH,
+            TabType.KOMMANDON, TabType.INSTALLNINGAR
+        };
+
+        for (int i = 0; i < trackedTabs.length; i++) {
+            TabType tab = trackedTabs[i];
+            ModuleStatus status = featureManager.getModuleStatus(tab);
+            drawModuleRow(extractor, font, botRightX + 10, modY + (rowH * i), tab.getDisplayName(), status.getDisplayName(), status.getRgbColor());
+        }
 
         if (feedbackMessage != null && System.currentTimeMillis() < feedbackExpiry) {
             int msgW = font.width(feedbackMessage) + 16;
@@ -165,7 +171,7 @@ public class HomeTabComponent {
         extractor.fill(mx, my + 3, mx + 4, my + 7, 0xFF000000 | dotColor);
         extractor.text(font, modName, mx + 8, my, GZTheme.COLOR_TEXT_PRIMARY, false);
         int statusW = font.width(statusName);
-        extractor.text(font, statusName, mx + 120 - statusW, my, dotColor == GZTheme.COLOR_STATUS_GREEN ? GZTheme.COLOR_TEXT_SECONDARY : GZTheme.COLOR_TEXT_MUTED, false);
+        extractor.text(font, statusName, mx + 120 - statusW, my, dotColor == 0x22C55E ? GZTheme.COLOR_TEXT_SECONDARY : GZTheme.COLOR_TEXT_MUTED, false);
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, int x, int y, int width, int height, GZCompanionMainScreen mainScreen) {

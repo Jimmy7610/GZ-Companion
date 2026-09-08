@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class CompatibilityServiceTest {
 
     @Test
-    @DisplayName("Should report verified compatibility for bundled pack and 26.1.2")
+    @DisplayName("Should evaluate bundled pack as unverified/compatible pending live confirmation")
     void testBundledCompatibility() {
         RulePackLoader loader = new RulePackLoader();
         RulePack pack = loader.loadBundled();
@@ -19,7 +19,7 @@ class CompatibilityServiceTest {
         CompatibilityResult result = service.evaluate(pack, "26.1.2");
 
         assertNotNull(result);
-        assertEquals(CompatibilityStatus.VERIFIED, result.overallStatus());
+        assertEquals(CompatibilityStatus.UNVERIFIED, result.overallStatus());
         assertFalse(result.moduleReports().isEmpty());
     }
 

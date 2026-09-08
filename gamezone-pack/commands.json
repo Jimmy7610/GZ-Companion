@@ -1,53 +1,5 @@
 {
   "schemaVersion": "1.0.0",
-  "categories": [
-    {
-      "id": "general",
-      "name": "Allmänt",
-      "commands": [
-        {
-          "command": "/spawn",
-          "description": "Teleporterar dig till serverns huvudspawn.",
-          "permission": "ALL",
-          "status": "VERIFIED"
-        },
-        {
-          "command": "/sethome [namn]",
-          "description": "Sätter en hempunkt på din nuvarande position.",
-          "permission": "ALL",
-          "status": "VERIFIED"
-        },
-        {
-          "command": "/home [namn]",
-          "description": "Teleporterar till en av dina sparade hempunkter.",
-          "permission": "ALL",
-          "status": "VERIFIED"
-        },
-        {
-          "command": "/tpa <spelare>",
-          "description": "Skickar en teleporteringsförfrågan till en annan spelare.",
-          "permission": "ALL",
-          "status": "VERIFIED"
-        }
-      ]
-    },
-    {
-      "id": "settlement",
-      "name": "Settlement",
-      "commands": [
-        {
-          "command": "/s create <namn>",
-          "description": "Skapar en ny settlement (kräver tillräckligt med mynt).",
-          "permission": "ALL",
-          "status": "UNVERIFIED"
-        },
-        {
-          "command": "/s info",
-          "description": "Visar information om ditt nuvarande settlement.",
-          "permission": "ALL",
-          "status": "UNVERIFIED"
-        }
-      ]
-    }
-  ]
+  "description": "Schema definition and placeholder for server commands. Server-specific commands require live verification before activation.",
+  "categories": []
 }

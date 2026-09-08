@@ -1,10 +1,13 @@
 package se.jimmyeliasson.gzcompanion.core.feature;
 
+import se.jimmyeliasson.gzcompanion.ui.TabType;
+
 import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * Evaluates feature availability driven by the loaded GameZone Rule Pack.
+ * Evaluates feature availability and module implementation readiness.
+ * Driven by both Milestone implementation state and loaded Rule Pack flags.
  */
 public class FeatureManager {
     private final Map<FeatureFlag, Boolean> flagStates = new EnumMap<>(FeatureFlag.class);
@@ -41,5 +44,26 @@ public class FeatureManager {
     public boolean isEnabled(String key) {
         FeatureFlag flag = FeatureFlag.fromKey(key);
         return flag != null && isEnabled(flag);
+    }
+
+    /**
+     * Determines the actual runtime module readiness for UI display.
+     * In Milestone 1, only HEM is fully implemented and AVAILABLE.
+     * Other functional tabs (like Guide, Crafting, Settlements) are COMING_SOON
+     * until their respective milestone implementations are complete.
+     */
+    public ModuleStatus getModuleStatus(TabType tab) {
+        if (tab == null) return ModuleStatus.COMING_SOON;
+        return switch (tab) {
+            case HEM -> ModuleStatus.AVAILABLE;
+            case GUIDE -> ModuleStatus.COMING_SOON;
+            case CRAFTING -> ModuleStatus.COMING_SOON;
+            case KISTOR -> ModuleStatus.COMING_SOON;
+            case SETTLEMENT -> ModuleStatus.COMING_SOON;
+            case BYGGPLANER -> ModuleStatus.COMING_SOON;
+            case MARKETWATCH -> ModuleStatus.COMING_SOON;
+            case KOMMANDON -> ModuleStatus.COMING_SOON;
+            case INSTALLNINGAR -> ModuleStatus.COMING_SOON;
+        };
     }
 }

@@ -2,12 +2,12 @@
   "schemaVersion": "1.0.0",
   "flags": {
     "beginnerGuide": {
-      "enabled": true,
-      "description": "Interactive beginner guide for new GameZoneMC players"
+      "enabled": false,
+      "description": "Interactive beginner guide for players (Coming Soon)"
     },
     "chestManager": {
-      "enabled": true,
-      "description": "Fair-play tracking of legitimately opened player containers"
+      "enabled": false,
+      "description": "Fair-play tracking of legitimately opened player containers (Coming Soon)"
     },
     "settlementTools": {
       "enabled": false,
@@ -22,8 +22,8 @@
       "description": "Server marketplace price and auction tracker (Coming Soon)"
     },
     "deathRiskAdvisor": {
-      "enabled": true,
-      "description": "Contextual advice on risky areas and fair-play survival reminders"
+      "enabled": false,
+      "description": "Contextual survival reminders and advice (Coming Soon)"
     }
   }
 }

@@ -1,15 +1,20 @@
 package se.jimmyeliasson.gzcompanion.core.feature;
 
 /**
- * Rule Pack-driven feature flags for GZ Companion.
+ * Feature flag identifiers supported by GZ Companion.
+ *
+ * In accordance with "Java understands Minecraft. Data understands GameZone",
+ * Java defines stable feature keys with safe defaults (disabled/false for optional
+ * server-specific features). Active states are driven dynamically by the loaded
+ * Rule Pack (feature-flags.json).
  */
 public enum FeatureFlag {
-    BEGINNER_GUIDE("beginnerGuide", "Interaktiv nyb\u00F6rjarguide", true),
-    CHEST_MANAGER("chestManager", "Kist- och container\u00F6versikt", true),
-    SETTLEMENT_TOOLS("settlementTools", "Settlement-hj\u00E4lpmedel", false),
+    BEGINNER_GUIDE("beginnerGuide", "Interaktiv nybörjarguide", false),
+    CHEST_MANAGER("chestManager", "Kist- och containeröversikt", false),
+    SETTLEMENT_TOOLS("settlementTools", "Settlement-hjälpmedel", false),
     BUILDING_PLANNER("buildingPlanner", "Byggplanerare", false),
     MARKET_WATCH("marketWatch", "Marknadsbevakare", false),
-    DEATH_RISK_ADVISOR("deathRiskAdvisor", "\u00D6verlevnads- och riskr\u00E5dgivare", true);
+    DEATH_RISK_ADVISOR("deathRiskAdvisor", "Överlevnads- och riskrådgivare", false);
 
     private final String key;
     private final String displayName;

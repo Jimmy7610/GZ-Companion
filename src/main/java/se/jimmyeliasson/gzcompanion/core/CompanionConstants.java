@@ -1,18 +1,36 @@
 package se.jimmyeliasson.gzcompanion.core;
 
+import net.fabricmc.loader.api.FabricLoader;
+
 /**
- * Fundamental constants for GZ Companion.
+ * Fundamental constants and runtime metadata for GZ Companion.
+ *
+ * GameZone server host/domain specifics reside in the profile/ and gamezone/ layers.
+ * Mod version is resolved dynamically from Fabric Loader metadata at runtime with
+ * a fallback to the build-time version string.
  */
 public final class CompanionConstants {
     public static final String MOD_ID = "gzcompanion";
     public static final String MOD_NAME = "GZ Companion";
-    public static final String MOD_VERSION = "0.1.0-alpha";
     public static final String AUTHOR = "Jimmy Eliasson";
     public static final String TARGET_MINECRAFT_VERSION = "26.1.2";
-    
-    public static final String DEFAULT_SERVER_NAME = "GameZoneMC";
-    public static final String DEFAULT_SERVER_HOST = "play.gamezonemc.se";
+
+    private static final String FALLBACK_VERSION = "0.1.0-alpha.1";
 
     private CompanionConstants() {
+    }
+
+    /**
+     * Obtains the single source of truth for the mod version from Fabric Loader.
+     */
+    public static String getModVersion() {
+        try {
+            return FabricLoader.getInstance()
+                    .getModContainer(MOD_ID)
+                    .map(container -> container.getMetadata().getVersion().getFriendlyString())
+                    .orElse(FALLBACK_VERSION);
+        } catch (Throwable ignored) {
+            return FALLBACK_VERSION;
+        }
     }
 }

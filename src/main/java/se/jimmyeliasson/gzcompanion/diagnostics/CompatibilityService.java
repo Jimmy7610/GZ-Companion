@@ -8,12 +8,19 @@ import java.util.List;
 
 /**
  * Evaluates compatibility across Minecraft version, Companion version, and Rule Pack modules.
+ *
+ * Verification status definitions:
+ * - COMPATIBLE: Schema and module are technically valid and loadable.
+ * - VERIFIED: Server-specific data has been confirmed against live GameZoneMC behavior.
+ * - UNVERIFIED: Structure is valid, but server-specific values are not yet confirmed.
+ * - UNAVAILABLE: Module is not yet implemented in the current milestone.
+ * - INCOMPATIBLE: Version mismatch or structural loading error.
  */
 public class CompatibilityService {
 
     public CompatibilityResult evaluate(RulePack rulePack, String runningMinecraftVersion) {
         List<ModuleReport> reports = new ArrayList<>();
-        CompatibilityStatus overall = CompatibilityStatus.VERIFIED;
+        CompatibilityStatus overall = CompatibilityStatus.COMPATIBLE;
 
         if (rulePack == null || rulePack.manifest() == null) {
             reports.add(new ModuleReport("rulepack", "GameZone Rule Pack", CompatibilityStatus.INCOMPATIBLE, "Inget Rule Pack laddat"));
@@ -26,11 +33,11 @@ public class CompatibilityService {
         boolean mcTested = runningMinecraftVersion != null && manifest.testedMinecraftVersions().contains(runningMinecraftVersion);
         if (!mcTested) {
             reports.add(new ModuleReport("minecraft", "Minecraft-version", CompatibilityStatus.WARNING,
-                    "K\u00F6rs p\u00E5 " + runningMinecraftVersion + ", testad f\u00F6r " + manifest.testedMinecraftVersions()));
+                    "Körs på " + runningMinecraftVersion + ", testad för " + manifest.testedMinecraftVersions()));
             overall = CompatibilityStatus.WARNING;
         } else {
-            reports.add(new ModuleReport("minecraft", "Minecraft-version", CompatibilityStatus.VERIFIED,
-                    "K\u00F6rs p\u00E5 verifierad version " + runningMinecraftVersion));
+            reports.add(new ModuleReport("minecraft", "Minecraft-version", CompatibilityStatus.COMPATIBLE,
+                    "Körs på kompatibel version " + runningMinecraftVersion));
         }
 
         // 2. Check Pack Manifest Verification
@@ -39,8 +46,8 @@ public class CompatibilityService {
             if (packStatus == CompatibilityStatus.INCOMPATIBLE) {
                 overall = CompatibilityStatus.INCOMPATIBLE;
             } else if (packStatus == CompatibilityStatus.WARNING || packStatus == CompatibilityStatus.UNVERIFIED || packStatus == CompatibilityStatus.STALE) {
-                if (overall == CompatibilityStatus.VERIFIED) {
-                    overall = CompatibilityStatus.WARNING;
+                if (overall == CompatibilityStatus.COMPATIBLE || overall == CompatibilityStatus.VERIFIED) {
+                    overall = CompatibilityStatus.UNVERIFIED;
                 }
             }
         }
@@ -53,8 +60,13 @@ public class CompatibilityService {
             });
         }
 
-        String summary = overall.isGood() ? "Alla aktiva moduler \u00E4r verifierade och kompatibla."
-                : (overall.isWarning() ? "Vissa moduler beh\u00F6ver verifiering." : "Inkompatibilitet uppt\u00E4ckt.");
+        String summary = overall == CompatibilityStatus.VERIFIED
+                ? "Alla aktiva moduler är verifierade mot live-servern."
+                : (overall == CompatibilityStatus.COMPATIBLE
+                ? "Alla moduler är tekniskt kompatibla (schemavaliderade)."
+                : (overall == CompatibilityStatus.UNVERIFIED
+                ? "Moduler är kompatibla. Serverdata väntar på liveverifiering."
+                : (overall.isWarning() ? "Vissa moduler behöver verifiering." : "Inkompatibilitet upptäckt.")));
 
         return new CompatibilityResult(overall, summary, reports);
     }

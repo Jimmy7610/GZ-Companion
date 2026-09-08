@@ -1,8 +1,9 @@
 {
   "schemaVersion": "1.0.0",
+  "description": "Schema definition and placeholder for economy rules. Currency parameters require live verification before activation.",
   "currency": {
-    "name": "Mynt",
-    "symbol": "GZ$",
+    "name": "Valuta",
+    "symbol": "",
     "fractionalDigits": 2
   },
   "shopCategories": []

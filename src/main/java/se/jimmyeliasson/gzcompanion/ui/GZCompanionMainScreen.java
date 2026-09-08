@@ -110,7 +110,7 @@ public class GZCompanionMainScreen extends Screen {
         // Global Modal Footer
         int footerY = modalY + modalH - 18;
         extractor.text(font, "\uD83D\uDEE1 Client-side \u2022 Fair play \u2022 Inga cheat-funktioner", modalX + 12, footerY, GZTheme.COLOR_TEXT_MUTED, false);
-        String rightFooter = "GZ Companion " + CompanionConstants.MOD_VERSION + "  \u2764 By the community";
+        String rightFooter = "GZ Companion " + CompanionConstants.getModVersion() + "  \u2764 By the community";
         int rFootW = font.width(rightFooter);
         extractor.text(font, rightFooter, modalX + modalW - rFootW - 12, footerY, GZTheme.COLOR_TEXT_MUTED, false);
 

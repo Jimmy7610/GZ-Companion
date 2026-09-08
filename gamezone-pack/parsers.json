@@ -1,17 +1,5 @@
 {
   "schemaVersion": "1.0.0",
-  "parsers": [
-    {
-      "id": "chat_balance",
-      "pattern": "Saldo:\\s*([0-9.,]+)\\s*Mynt",
-      "target": "player_balance",
-      "status": "VERIFIED"
-    },
-    {
-      "id": "settlement_join",
-      "pattern": "Du har gått med i settlement (\\w+)",
-      "target": "settlement_name",
-      "status": "VERIFIED"
-    }
-  ]
+  "description": "Schema definition and placeholder for chat and event parser rules. Requires live verification against actual server messages before activation.",
+  "parsers": []
 }

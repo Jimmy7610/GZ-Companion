@@ -16,7 +16,7 @@ class RulePackLoaderTest {
     }
 
     @Test
-    @DisplayName("Should successfully load bundled GameZone Rule Pack")
+    @DisplayName("Should successfully load bundled GameZone Rule Pack with unofficial unverified status")
     void testLoadBundled() {
         RulePack pack = loader.loadBundled();
         assertNotNull(pack, "Loaded RulePack must not be null");
@@ -28,35 +28,35 @@ class RulePackLoaderTest {
         assertEquals("play.gamezonemc.se", manifest.targetHost());
         assertTrue(manifest.testedMinecraftVersions().contains("26.1.2"), "Must support 26.1.2");
         assertNotNull(manifest.verification());
-        assertEquals(CompatibilityStatus.VERIFIED, manifest.verification().status());
+        assertEquals(CompatibilityStatus.UNVERIFIED, manifest.verification().status());
+        assertFalse(manifest.name().contains("Official"), "Manifest name must not claim official status");
     }
 
     @Test
-    @DisplayName("Should parse feature flags from bundled pack")
+    @DisplayName("Should parse feature flags from bundled pack with safe defaults")
     void testFeatureFlags() {
         RulePack pack = loader.loadBundled();
         assertNotNull(pack.featureFlags());
         assertTrue(pack.featureFlags().containsKey("beginnerGuide"));
-        assertTrue(pack.featureFlags().get("beginnerGuide"));
+        assertFalse(pack.featureFlags().get("beginnerGuide"), "Unimplemented guide flag must default to false");
         assertTrue(pack.featureFlags().containsKey("settlementTools"));
         assertFalse(pack.featureFlags().get("settlementTools"));
     }
 
     @Test
-    @DisplayName("Should parse commands from bundled pack")
-    void testCommands() {
+    @DisplayName("Should parse empty unverified collections without errors")
+    void testEmptyCollections() {
         RulePack pack = loader.loadBundled();
-        assertNotNull(pack.commands());
-        assertFalse(pack.commands().isEmpty());
-        assertTrue(pack.commands().stream().anyMatch(c -> c.command().equals("/spawn")));
-    }
+        assertNotNull(pack.commands(), "Commands list must not be null");
+        assertTrue(pack.commands().isEmpty(), "Commands list should be empty pending live server verification");
 
-    @Test
-    @DisplayName("Should parse guides from bundled pack")
-    void testGuides() {
-        RulePack pack = loader.loadBundled();
-        assertNotNull(pack.guides());
-        assertFalse(pack.guides().isEmpty());
-        assertEquals("beginner_welcome", pack.guides().getFirst().id());
+        assertNotNull(pack.guides(), "Guides list must not be null");
+        assertTrue(pack.guides().isEmpty(), "Guides list should be empty pending live server verification");
+
+        assertNotNull(pack.worldRules(), "World rules list must not be null");
+        assertTrue(pack.worldRules().isEmpty(), "World rules list should be empty pending live server verification");
+
+        assertNotNull(pack.parsers(), "Parsers list must not be null");
+        assertTrue(pack.parsers().isEmpty(), "Parsers list should be empty pending live server verification");
     }
 }

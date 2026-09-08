@@ -2,24 +2,24 @@
   "schemaVersion": "1.0.0",
   "profile": "gamezone",
   "packVersion": "2026.09.09.1",
-  "name": "GameZoneMC Official Rule Pack",
+  "name": "GZ Companion GameZone Rule Pack",
   "author": "Jimmy Eliasson",
-  "compatibleCompanionVersions": ">=0.1.0-alpha",
+  "compatibleCompanionVersions": ">=0.1.0-alpha.1",
   "testedMinecraftVersions": ["26.1.2"],
   "targetHost": "play.gamezonemc.se",
   "verification": {
-    "source": "Official Community Specification",
+    "source": "GZ Companion Initial Alpha Schema",
     "lastVerified": "2026-09-09",
-    "status": "VERIFIED"
+    "status": "UNVERIFIED"
   },
   "modules": {
     "featureFlags": {
       "file": "feature-flags.json",
-      "status": "VERIFIED"
+      "status": "COMPATIBLE"
     },
     "commands": {
       "file": "commands.json",
-      "status": "VERIFIED"
+      "status": "UNVERIFIED"
     },
     "buildings": {
       "file": "buildings.json",
@@ -43,7 +43,7 @@
     },
     "guides": {
       "file": "guides.json",
-      "status": "VERIFIED"
+      "status": "UNVERIFIED"
     },
     "itemOverrides": {
       "file": "item-overrides.json",
@@ -55,7 +55,7 @@
     },
     "parsers": {
       "file": "parsers.json",
-      "status": "VERIFIED"
+      "status": "UNVERIFIED"
     }
   }
 }

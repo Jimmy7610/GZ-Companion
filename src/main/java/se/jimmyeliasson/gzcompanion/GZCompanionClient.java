@@ -17,7 +17,7 @@ public class GZCompanionClient implements ClientModInitializer {
     public void onInitializeClient() {
         LOGGER.info("Initializing {} v{} for Minecraft {}",
                 CompanionConstants.MOD_NAME,
-                CompanionConstants.MOD_VERSION,
+                CompanionConstants.getModVersion(),
                 CompanionConstants.TARGET_MINECRAFT_VERSION);
 
         // 1. Initialize core runtime session, storage, and bundled Rule Pack
