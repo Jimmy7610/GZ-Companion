@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0.0",
+  "guides": [
+    {
+      "id": "beginner_welcome",
+      "title": "Välkommen till GameZoneMC",
+      "category": "Komma igång",
+      "steps": [
+        {
+          "stepNumber": 1,
+          "title": "Hitta en plats att bygga",
+          "body": "Gå ut från spawn via /rtp eller portalsystemet för att hitta orörd mark.",
+          "status": "VERIFIED"
+        },
+        {
+          "stepNumber": 2,
+          "title": "Sätt ditt hem",
+          "body": "Använd kommandot /sethome hem för att spara din första basplats.",
+          "status": "VERIFIED"
+        },
+        {
+          "stepNumber": 3,
+          "title": "Skapa ditt första claim",
+          "body": "Skydda dina kistor och byggnader så att ingen kan förstöra dem.",
+          "status": "VERIFIED"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0.0",
+  "flags": {
+    "beginnerGuide": {
+      "enabled": true,
+      "description": "Interactive beginner guide for new GameZoneMC players"
+    },
+    "chestManager": {
+      "enabled": true,
+      "description": "Fair-play tracking of legitimately opened player containers"
+    },
+    "settlementTools": {
+      "enabled": false,
+      "description": "Settlement progression and requirement helper (Coming Soon)"
+    },
+    "buildingPlanner": {
+      "enabled": false,
+      "description": "Building material and blueprint cost planner (Coming Soon)"
+    },
+    "marketWatch": {
+      "enabled": false,
+      "description": "Server marketplace price and auction tracker (Coming Soon)"
+    },
+    "deathRiskAdvisor": {
+      "enabled": true,
+      "description": "Contextual advice on risky areas and fair-play survival reminders"
+    }
+  }
+}

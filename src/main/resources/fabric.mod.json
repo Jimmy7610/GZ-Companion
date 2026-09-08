@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "gzcompanion",
+  "version": "${version}",
+  "name": "GZ Companion",
+  "description": "Unofficial client-side companion mod for GameZoneMC players.",
+  "authors": [
+    "Jimmy Eliasson"
+  ],
+  "contact": {
+    "homepage": "https://github.com/Jimmy7610/GZ-Companion",
+    "sources": "https://github.com/Jimmy7610/GZ-Companion"
+  },
+  "license": "MIT",
+  "icon": "assets/gzcompanion/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "se.jimmyeliasson.gzcompanion.GZCompanionClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "minecraft": "26.1.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}

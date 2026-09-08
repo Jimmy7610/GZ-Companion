@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "rules": [
+    {
+      "id": "pvp_protection",
+      "name": "PvP-skydd i claims",
+      "description": "PvP är avaktiverat i skyddade områden om inte båda parter aktiverar det.",
+      "status": "VERIFIED"
+    },
+    {
+      "id": "grief_protection",
+      "name": "Grief-förbud",
+      "description": "All form av förstörelse och stöld i andras claims är strikt förbjudet.",
+      "status": "VERIFIED"
+    }
+  ]
+}

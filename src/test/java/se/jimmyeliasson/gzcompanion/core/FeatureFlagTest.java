@@ -1,0 +1,40 @@
+package se.jimmyeliasson.gzcompanion.core;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import se.jimmyeliasson.gzcompanion.core.feature.FeatureFlag;
+import se.jimmyeliasson.gzcompanion.core.feature.FeatureManager;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class FeatureFlagTest {
+
+    @Test
+    @DisplayName("Should evaluate default feature flag values")
+    void testDefaultValues() {
+        FeatureManager manager = new FeatureManager();
+        assertTrue(manager.isEnabled(FeatureFlag.BEGINNER_GUIDE));
+        assertTrue(manager.isEnabled(FeatureFlag.CHEST_MANAGER));
+        assertFalse(manager.isEnabled(FeatureFlag.SETTLEMENT_TOOLS));
+        assertFalse(manager.isEnabled(FeatureFlag.MARKET_WATCH));
+    }
+
+    @Test
+    @DisplayName("Should dynamically update feature flag values")
+    void testUpdateFlagState() {
+        FeatureManager manager = new FeatureManager();
+        manager.setFeatureState(FeatureFlag.SETTLEMENT_TOOLS, true);
+        assertTrue(manager.isEnabled(FeatureFlag.SETTLEMENT_TOOLS));
+
+        manager.setFeatureState("marketWatch", true);
+        assertTrue(manager.isEnabled(FeatureFlag.MARKET_WATCH));
+    }
+
+    @Test
+    @DisplayName("Should safely return false for null or unknown flags")
+    void testUnknownFlags() {
+        FeatureManager manager = new FeatureManager();
+        assertFalse(manager.isEnabled((FeatureFlag) null));
+        assertFalse(manager.isEnabled("unknownRandomFeatureFlag"));
+    }
+}

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0.0",
+  "description": "Schema definition and placeholder for GameZone settlement progression rules.",
+  "rules": {
+    "creationCost": 0,
+    "maxMembersInitial": 5,
+    "claimBlockCost": 0
+  },
+  "settlements": []
+}
