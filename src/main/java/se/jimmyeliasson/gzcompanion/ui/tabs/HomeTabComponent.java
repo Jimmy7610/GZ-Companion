@@ -9,6 +9,7 @@ import se.jimmyeliasson.gzcompanion.core.feature.ModuleStatus;
 import se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityResult;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
+import se.jimmyeliasson.gzcompanion.ui.HomeCopy;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TabType;
 import se.jimmyeliasson.gzcompanion.ui.layout.HomeTabLayout;
@@ -38,9 +39,9 @@ public class HomeTabComponent {
         CompanionSession session = CompanionSession.getInstance();
         String playerName = session.getBridge().getPlayerName();
         boolean isGameZone = session.getBridge().isConnectedToGameZone();
-        String serverAddr = session.getBridge().getCurrentServerAddress().orElse("Lokal värld");
+        String serverAddr = session.getBridge().getCurrentServerAddress().orElse(HomeCopy.SERVER_LOCAL_WORLD);
         CompatibilityResult compat = session.getCompatibilityResult();
-        String packVersion = session.getActiveRulePack() != null ? session.getActiveRulePack().manifest().packVersion() : "Ej laddad";
+        String packVersion = session.getActiveRulePack() != null ? session.getActiveRulePack().manifest().packVersion() : HomeCopy.RULE_PACK_FALLBACK;
         FeatureManager featureManager = session.getFeatureManager();
 
         UiRect welcomeRect = layout.welcomeRect();
@@ -52,7 +53,7 @@ public class HomeTabComponent {
         UiRect secondaryBtn1Rect = layout.secondaryButton1Rect();
         UiRect secondaryBtn2Rect = layout.secondaryButton2Rect();
 
-        // 1. WELCOME CARD (58% width)
+        // 1. WELCOME CARD (60% width)
         GZTheme.drawCard(extractor, welcomeRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         extractor.fill(welcomeRect.x() + 2, welcomeRect.y() + 2, welcomeRect.x() + 4, welcomeRect.bottom() - 2, GZTheme.COLOR_EMERALD);
 
@@ -64,16 +65,17 @@ public class HomeTabComponent {
 
         int textX = avatarX + avatarSize + 6;
         int maxWelcomeTextW = welcomeRect.right() - textX - 5;
-        extractor.text(font, "Välkommen,", textX, welcomeRect.y() + 5, GZTheme.COLOR_TEXT_SECONDARY, false);
+        extractor.text(font, HomeCopy.WELCOME_PREFIX, textX, welcomeRect.y() + 5, GZTheme.COLOR_TEXT_SECONDARY, false);
         TextUtil.drawEllipsizedText(extractor, font, playerName, textX, welcomeRect.y() + 14, maxWelcomeTextW, GZTheme.COLOR_MINT, true);
-        TextUtil.drawEllipsizedText(extractor, font, "GZ Companion hjälper dig.", textX, welcomeRect.y() + 24, maxWelcomeTextW, GZTheme.COLOR_TEXT_SECONDARY, false);
-        TextUtil.drawEllipsizedText(extractor, font, "Allt sparas lokalt.", textX, welcomeRect.y() + 33, maxWelcomeTextW, GZTheme.COLOR_TEXT_MUTED, false);
+        TextUtil.drawEllipsizedText(extractor, font, HomeCopy.WELCOME_SUBTITLE, textX, welcomeRect.y() + 24, maxWelcomeTextW, GZTheme.COLOR_TEXT_SECONDARY, false);
+        TextUtil.drawEllipsizedText(extractor, font, HomeCopy.WELCOME_NOTE, textX, welcomeRect.y() + 33, maxWelcomeTextW, GZTheme.COLOR_TEXT_MUTED, false);
 
-        // 2. SERVER STATUS CARD (42% width)
+        // 2. SERVER STATUS CARD (40% width)
         GZTheme.drawCard(extractor, serverRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         int sPad = 5;
-        TextUtil.drawEllipsizedText(extractor, font, "Serverstatus", serverRect.x() + sPad, serverRect.y() + 4, serverRect.width() - 44, GZTheme.COLOR_TEXT_PRIMARY, true);
-        GZTheme.drawBadge(extractor, font, serverRect.right() - 44, serverRect.y() + 3, isGameZone ? "Online" : "Lokal",
+        TextUtil.drawEllipsizedText(extractor, font, HomeCopy.SERVER_TITLE, serverRect.x() + sPad, serverRect.y() + 4, serverRect.width() - 44, GZTheme.COLOR_TEXT_PRIMARY, true);
+        GZTheme.drawBadge(extractor, font, serverRect.right() - 44, serverRect.y() + 3,
+                isGameZone ? HomeCopy.SERVER_ONLINE_BADGE : HomeCopy.SERVER_LOCAL_BADGE,
                 isGameZone ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_STATUS_YELLOW,
                 isGameZone ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_STATUS_YELLOW);
 
@@ -83,53 +85,50 @@ public class HomeTabComponent {
         int sValX = serverRect.x() + 38;
         int sValW = serverRect.right() - sValX - sPad;
 
-        extractor.text(font, "Profil:", serverRect.x() + sPad, row1Y, GZTheme.COLOR_TEXT_SECONDARY, false);
-        TextUtil.drawEllipsizedText(extractor, font, isGameZone ? "GameZoneMC" : "Fristående", sValX, row1Y, sValW, GZTheme.COLOR_TEXT_PRIMARY, false);
+        extractor.text(font, HomeCopy.SERVER_LABEL_PROFILE, serverRect.x() + sPad, row1Y, GZTheme.COLOR_TEXT_SECONDARY, false);
+        TextUtil.drawEllipsizedText(extractor, font, isGameZone ? HomeCopy.SERVER_PROFILE_GAMEZONE : HomeCopy.SERVER_PROFILE_STANDALONE, sValX, row1Y, sValW, GZTheme.COLOR_TEXT_PRIMARY, false);
 
-        extractor.text(font, "Status:", serverRect.x() + sPad, row2Y, GZTheme.COLOR_TEXT_SECONDARY, false);
+        extractor.text(font, HomeCopy.SERVER_LABEL_STATUS, serverRect.x() + sPad, row2Y, GZTheme.COLOR_TEXT_SECONDARY, false);
         GZTheme.drawStatusDot(extractor, sValX, row2Y + 2, isGameZone ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_STATUS_GREY);
-        TextUtil.drawEllipsizedText(extractor, font, isGameZone ? "Ansluten" : "Ej ansluten", sValX + 6, row2Y, sValW - 6,
+        TextUtil.drawEllipsizedText(extractor, font, isGameZone ? HomeCopy.SERVER_STATUS_CONNECTED : HomeCopy.SERVER_STATUS_DISCONNECTED, sValX + 6, row2Y, sValW - 6,
                 isGameZone ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_TEXT_MUTED, false);
 
-        extractor.text(font, "Server:", serverRect.x() + sPad, row3Y, GZTheme.COLOR_TEXT_SECONDARY, false);
+        extractor.text(font, HomeCopy.SERVER_LABEL_SERVER, serverRect.x() + sPad, row3Y, GZTheme.COLOR_TEXT_SECONDARY, false);
         TextUtil.drawEllipsizedText(extractor, font, serverAddr, sValX, row3Y, sValW, GZTheme.COLOR_TEXT_MUTED, false);
 
-        // 3. VERSION STRIP
+        // 3. VERSION STRIP (Weighted allocations)
         GZTheme.drawCard(extractor, versionRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
-        int vPad = 3;
-        int vCardW = (versionRect.width() - (vPad * 5)) / 4;
-        int vCardH = versionRect.height() - (vPad * 2);
+        UiRect[] badges = layout.versionBadgeRects();
+        drawMiniBadge(extractor, font, badges[0], HomeCopy.STRIP_HEADER_MINECRAFT, CompanionConstants.TARGET_MINECRAFT_VERSION, GZTheme.COLOR_TEXT_PRIMARY);
+        drawMiniBadge(extractor, font, badges[1], HomeCopy.STRIP_HEADER_COMPANION, CompanionConstants.getModVersion(), GZTheme.COLOR_MINT);
+        drawMiniBadge(extractor, font, badges[2], HomeCopy.STRIP_HEADER_RULE_PACK, packVersion, GZTheme.COLOR_TEXT_PRIMARY);
+        drawMiniBadge(extractor, font, badges[3], HomeCopy.STRIP_HEADER_STATUS, compat.overallStatus().getDisplayName(), compat.overallStatus().getArgbColor());
 
-        drawMiniBadge(extractor, font, versionRect.x() + vPad, versionRect.y() + vPad, vCardW, vCardH, "Minecraft", CompanionConstants.TARGET_MINECRAFT_VERSION, GZTheme.COLOR_TEXT_PRIMARY);
-        drawMiniBadge(extractor, font, versionRect.x() + vPad + (vCardW + vPad), versionRect.y() + vPad, vCardW, vCardH, "Companion", CompanionConstants.getModVersion(), GZTheme.COLOR_MINT);
-        drawMiniBadge(extractor, font, versionRect.x() + vPad + (vCardW + vPad) * 2, versionRect.y() + vPad, vCardW, vCardH, "Rule Pack", packVersion, GZTheme.COLOR_TEXT_PRIMARY);
-        drawMiniBadge(extractor, font, versionRect.x() + vPad + (vCardW + vPad) * 3, versionRect.y() + vPad, vCardW, vCardH, "Status", compat.overallStatus().getDisplayName(), compat.overallStatus().getArgbColor());
-
-        // 4. NEXT OBJECTIVE CARD
+        // 4. NEXT OBJECTIVE CARD (61% width)
         GZTheme.drawCard(extractor, objectiveRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         int oPad = 5;
         int maxObjW = objectiveRect.width() - (oPad * 2);
 
         GZTheme.drawIcon(extractor, IconId.OBJECTIVE, objectiveRect.x() + oPad, objectiveRect.y() + 5, 9, GZTheme.COLOR_MINT);
-        extractor.text(font, "Nästa uppgift", objectiveRect.x() + oPad + 13, objectiveRect.y() + 5, GZTheme.COLOR_MINT, true);
-        TextUtil.drawEllipsizedText(extractor, font, "Öppna guiden och kom igång", objectiveRect.x() + oPad, objectiveRect.y() + 15, maxObjW, GZTheme.COLOR_TEXT_PRIMARY, true);
-        TextUtil.drawEllipsizedText(extractor, font, "Lär dig Minecraft steg för steg.", objectiveRect.x() + oPad, objectiveRect.y() + 24, maxObjW, GZTheme.COLOR_TEXT_SECONDARY, false);
+        extractor.text(font, HomeCopy.OBJECTIVE_HEADER, objectiveRect.x() + oPad + 13, objectiveRect.y() + 5, GZTheme.COLOR_MINT, true);
+        TextUtil.drawEllipsizedText(extractor, font, HomeCopy.OBJECTIVE_TITLE, objectiveRect.x() + oPad, objectiveRect.y() + 15, maxObjW, GZTheme.COLOR_TEXT_PRIMARY, true);
+        TextUtil.drawEllipsizedText(extractor, font, HomeCopy.OBJECTIVE_DESC, objectiveRect.x() + oPad, objectiveRect.y() + 24, maxObjW, GZTheme.COLOR_TEXT_SECONDARY, false);
 
         int chkY = objectiveRect.y() + 34;
         int chkSpacing = 8;
-        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY, "[ ] Öppna nybörjarguiden", maxObjW);
-        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + chkSpacing, "[ ] Lär dig grunderna", maxObjW);
-        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + (chkSpacing * 2), "[ ] Utforska säkert", maxObjW);
+        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY, HomeCopy.CHECK_ITEM_1, maxObjW);
+        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + chkSpacing, HomeCopy.CHECK_ITEM_2, maxObjW);
+        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + (chkSpacing * 2), HomeCopy.CHECK_ITEM_3, maxObjW);
 
         // Render Action Buttons
-        GZTheme.drawButton(extractor, font, primaryBtnRect, "Öppna Guide", true, primaryBtnRect.contains(mouseX, mouseY));
-        GZTheme.drawButton(extractor, font, secondaryBtn1Rect, "Vad ska jag göra?", false, secondaryBtn1Rect.contains(mouseX, mouseY));
-        GZTheme.drawButton(extractor, font, secondaryBtn2Rect, "Kompatibilitet", false, secondaryBtn2Rect.contains(mouseX, mouseY));
+        GZTheme.drawButton(extractor, font, primaryBtnRect, HomeCopy.ACTION_OPEN_GUIDE, true, primaryBtnRect.contains(mouseX, mouseY));
+        GZTheme.drawButton(extractor, font, secondaryBtn1Rect, HomeCopy.ACTION_WHAT_TO_DO, false, secondaryBtn1Rect.contains(mouseX, mouseY));
+        GZTheme.drawButton(extractor, font, secondaryBtn2Rect, HomeCopy.ACTION_COMPATIBILITY, false, secondaryBtn2Rect.contains(mouseX, mouseY));
 
-        // 5. MODULE STATUS CARD
+        // 5. MODULE STATUS CARD (39% width)
         GZTheme.drawCard(extractor, moduleRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         int mPad = 5;
-        TextUtil.drawEllipsizedText(extractor, font, "Modulstatus", moduleRect.x() + mPad, moduleRect.y() + 4, moduleRect.width() - 10, GZTheme.COLOR_TEXT_PRIMARY, true);
+        TextUtil.drawEllipsizedText(extractor, font, HomeCopy.MODULES_TITLE, moduleRect.x() + mPad, moduleRect.y() + 4, moduleRect.width() - 10, GZTheme.COLOR_TEXT_PRIMARY, true);
 
         TabType[] trackedTabs = {
             TabType.HEM, TabType.GUIDE, TabType.CRAFTING, TabType.KISTOR,
@@ -144,7 +143,7 @@ public class HomeTabComponent {
         for (int i = 0; i < trackedTabs.length; i++) {
             TabType tab = trackedTabs[i];
             ModuleStatus status = featureManager.getModuleStatus(tab);
-            String compactStatus = (status == ModuleStatus.AVAILABLE) ? "Aktiv" : "Snart";
+            String compactStatus = (status == ModuleStatus.AVAILABLE) ? HomeCopy.MODULE_STATUS_ACTIVE : HomeCopy.MODULE_STATUS_SOON;
             drawModuleRow(extractor, font, moduleRect.x() + mPad, modStartY + (i * rowH), moduleRect.width() - (mPad * 2), tab.getDisplayName(), compactStatus, status.getRgbColor());
         }
 
@@ -160,10 +159,10 @@ public class HomeTabComponent {
         }
     }
 
-    private void drawMiniBadge(GuiGraphicsExtractor extractor, Font font, int bx, int by, int bw, int bh, String title, String val, int valArgb) {
-        GZTheme.drawCard(extractor, bx, by, bw, bh, GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
-        TextUtil.drawEllipsizedText(extractor, font, title, bx + 3, by + 2, bw - 6, GZTheme.COLOR_TEXT_SECONDARY, false);
-        TextUtil.drawEllipsizedText(extractor, font, val, bx + 3, by + 9, bw - 6, GZTheme.opaque(valArgb), false);
+    private void drawMiniBadge(GuiGraphicsExtractor extractor, Font font, UiRect rect, String title, String val, int valArgb) {
+        GZTheme.drawCard(extractor, rect, GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
+        TextUtil.drawEllipsizedText(extractor, font, title, rect.x() + 3, rect.y() + 2, rect.width() - 6, GZTheme.COLOR_TEXT_SECONDARY, false);
+        TextUtil.drawEllipsizedText(extractor, font, val, rect.x() + 3, rect.y() + 9, rect.width() - 6, GZTheme.opaque(valArgb), false);
     }
 
     private void drawCheckItem(GuiGraphicsExtractor extractor, Font font, int cx, int cy, String text, int maxW) {

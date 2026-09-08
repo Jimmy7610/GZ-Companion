@@ -92,8 +92,20 @@ class ResponsiveLayoutTest {
 
         HomeTabLayout home = HomeTabLayout.calculate(main.contentRect());
         assertTrue(home.primaryButtonRect().width() > 100, "Primary button must have adequate width for Öppna Guide");
-        assertTrue(home.secondaryButton1Rect().width() > 60, "Secondary button 1 must have width for Vad ska jag göra?");
-        assertTrue(home.secondaryButton2Rect().width() > 50, "Secondary button 2 must have width for Kompatibilitet");
+        assertTrue(home.secondaryButton1Rect().width() >= 100, "Secondary button 1 must have at least 100px width for 'Vad ska jag göra?'");
+        assertTrue(home.secondaryButton2Rect().width() >= 70, "Secondary button 2 must have at least 70px width for 'Kompatibilitet'");
+
+        // Version Badges check
+        UiRect[] badges = home.versionBadgeRects();
+        assertNotNull(badges);
+        assertEquals(4, badges.length);
+        for (UiRect b : badges) {
+            assertTrue(home.versionRect().contains(b), "Version badge must stay inside version strip");
+        }
+        assertTrue(badges[0].width() >= 55, "Minecraft badge width should accommodate 26.1.2");
+        assertTrue(badges[1].width() >= 85, "Companion badge width should accommodate 0.1.0-alpha.1");
+        assertTrue(badges[2].width() >= 80, "Rule Pack badge width should accommodate Ej laddad / version");
+        assertTrue(badges[3].width() >= 65, "Status badge width should accommodate Overifierad");
     }
 
     @Test
