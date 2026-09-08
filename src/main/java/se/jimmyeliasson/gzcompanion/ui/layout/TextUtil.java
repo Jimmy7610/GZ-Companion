@@ -7,23 +7,22 @@ import net.minecraft.util.FormattedCharSequence;
 import java.util.List;
 
 /**
- * Robust typography measurement, wrapping, ellipsizing, and alignment utilities.
+ * Robust typography measurement, wrapping, ellipsizing, and alignment utilities
+ * with support for typography scaling tokens.
  */
 public final class TextUtil {
     private TextUtil() {}
 
     /**
-     * Draws text with ellipsis (...) if it exceeds maxPixelWidth.
+     * Computes the scaled pixel width of a string.
      */
-    public static void drawEllipsizedText(GuiGraphicsExtractor extractor, Font font, String text,
-                                          int x, int y, int maxPixelWidth, int colorArgb, boolean dropShadow) {
-        if (text == null || text.isEmpty() || maxPixelWidth <= 0) return;
-        String fitted = ellipsize(font, text, maxPixelWidth);
-        extractor.text(font, fitted, x, y, colorArgb, dropShadow);
+    public static int scaledWidth(Font font, String text, float scale) {
+        if (text == null || text.isEmpty()) return 0;
+        return (int) Math.ceil(font.width(text) * scale);
     }
 
     /**
-     * Truncates a string and appends "..." if it exceeds the pixel width.
+     * Truncates a string and appends "..." if its unscaled pixel width exceeds maxPixelWidth.
      */
     public static String ellipsize(Font font, String text, int maxPixelWidth) {
         if (text == null) return "";
@@ -47,8 +46,43 @@ public final class TextUtil {
     }
 
     /**
+     * Draws text with ellipsis (...) if it exceeds maxPixelWidth at 1.0 scale.
+     */
+    public static void drawEllipsizedText(GuiGraphicsExtractor extractor, Font font, String text,
+                                          int x, int y, int maxPixelWidth, int colorArgb, boolean dropShadow) {
+        drawScaledEllipsizedText(extractor, font, text, x, y, maxPixelWidth, 1.0f, colorArgb, dropShadow);
+    }
+
+    /**
+     * Draws scaled text with ellipsis (...) if it exceeds maxPixelWidth in scaled screen coordinates.
+     */
+    public static void drawScaledEllipsizedText(GuiGraphicsExtractor extractor, Font font, String text,
+                                                int x, int y, int maxPixelWidth, float scale, int colorArgb, boolean dropShadow) {
+        if (text == null || text.isEmpty() || maxPixelWidth <= 0) return;
+        int unscaledMaxW = (scale >= 0.999f) ? maxPixelWidth : (int) (maxPixelWidth / scale);
+        String fitted = ellipsize(font, text, unscaledMaxW);
+        drawScaledText(extractor, font, fitted, x, y, scale, colorArgb, dropShadow);
+    }
+
+    /**
+     * Draws scaled text at (x, y) using Matrix3x2fStack.
+     */
+    public static void drawScaledText(GuiGraphicsExtractor extractor, Font font, String text,
+                                      int x, int y, float scale, int colorArgb, boolean dropShadow) {
+        if (text == null || text.isEmpty()) return;
+        if (Math.abs(scale - 1.0f) < 0.001f) {
+            extractor.text(font, text, x, y, colorArgb, dropShadow);
+            return;
+        }
+        extractor.pose().pushMatrix();
+        extractor.pose().translate(x, y);
+        extractor.pose().scale(scale, scale);
+        extractor.text(font, text, 0, 0, colorArgb, dropShadow);
+        extractor.pose().popMatrix();
+    }
+
+    /**
      * Draws multi-line wrapped text inside a maximum pixel width.
-     * Returns the total height rendered in pixels.
      */
     public static int drawWrappedText(GuiGraphicsExtractor extractor, Font font, String text,
                                        int x, int y, int maxPixelWidth, int maxLines, int colorArgb, boolean dropShadow) {
@@ -64,24 +98,42 @@ public final class TextUtil {
     }
 
     /**
-     * Draws right-aligned text within bounds.
+     * Draws right-aligned text within bounds at 1.0 scale.
      */
     public static void drawRightAlignedText(GuiGraphicsExtractor extractor, Font font, String text,
                                            int rightX, int y, int maxPixelWidth, int colorArgb, boolean dropShadow) {
-        if (text == null || text.isEmpty()) return;
-        String fitted = ellipsize(font, text, maxPixelWidth);
-        int textW = font.width(fitted);
-        extractor.text(font, fitted, rightX - textW, y, colorArgb, dropShadow);
+        drawScaledRightAlignedText(extractor, font, text, rightX, y, maxPixelWidth, 1.0f, colorArgb, dropShadow);
     }
 
     /**
-     * Draws horizontally centered text.
+     * Draws right-aligned text within bounds at a specified scale.
+     */
+    public static void drawScaledRightAlignedText(GuiGraphicsExtractor extractor, Font font, String text,
+                                                  int rightX, int y, int maxPixelWidth, float scale, int colorArgb, boolean dropShadow) {
+        if (text == null || text.isEmpty()) return;
+        int unscaledMaxW = (scale >= 0.999f) ? maxPixelWidth : (int) (maxPixelWidth / scale);
+        String fitted = ellipsize(font, text, unscaledMaxW);
+        int textW = scaledWidth(font, fitted, scale);
+        drawScaledText(extractor, font, fitted, rightX - textW, y, scale, colorArgb, dropShadow);
+    }
+
+    /**
+     * Draws horizontally centered text at 1.0 scale.
      */
     public static void drawCenteredText(GuiGraphicsExtractor extractor, Font font, String text,
                                         int centerX, int y, int maxPixelWidth, int colorArgb, boolean dropShadow) {
+        drawScaledCenteredText(extractor, font, text, centerX, y, maxPixelWidth, 1.0f, colorArgb, dropShadow);
+    }
+
+    /**
+     * Draws horizontally centered text at a specified scale.
+     */
+    public static void drawScaledCenteredText(GuiGraphicsExtractor extractor, Font font, String text,
+                                              int centerX, int y, int maxPixelWidth, float scale, int colorArgb, boolean dropShadow) {
         if (text == null || text.isEmpty()) return;
-        String fitted = ellipsize(font, text, maxPixelWidth);
-        int textW = font.width(fitted);
-        extractor.text(font, fitted, centerX - (textW / 2), y, colorArgb, dropShadow);
+        int unscaledMaxW = (scale >= 0.999f) ? maxPixelWidth : (int) (maxPixelWidth / scale);
+        String fitted = ellipsize(font, text, unscaledMaxW);
+        int textW = scaledWidth(font, fitted, scale);
+        drawScaledText(extractor, font, fitted, centerX - (textW / 2), y, scale, colorArgb, dropShadow);
     }
 }

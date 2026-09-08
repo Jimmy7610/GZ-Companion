@@ -90,7 +90,8 @@ public final class GZTheme {
     }
 
     public static void drawBadge(GuiGraphicsExtractor extractor, Font font, int x, int y, String label, int textArgb, int dotArgb) {
-        int textW = font.width(label);
+        float scale = TypographyScale.META.getScale();
+        int textW = TextUtil.scaledWidth(font, label, scale);
         int badgeW = textW + 14;
         int badgeH = 11;
 
@@ -101,7 +102,7 @@ public final class GZTheme {
         extractor.fill(x + badgeW - 1, y, x + badgeW, y + badgeH, 0x40475569);
 
         drawStatusDot(extractor, x + 3, y + 3, dotArgb);
-        extractor.text(font, label, x + 10, y + 2, opaque(textArgb), false);
+        TextUtil.drawScaledText(extractor, font, label, x + 10, y + 2, scale, opaque(textArgb), false);
     }
 
     public static void drawStatusDot(GuiGraphicsExtractor extractor, int x, int y, int colorArgb) {
@@ -111,11 +112,23 @@ public final class GZTheme {
 
     public static void drawButton(GuiGraphicsExtractor extractor, Font font, UiRect rect,
                                   String text, boolean isPrimary, boolean isHovered) {
-        drawButton(extractor, font, rect.x(), rect.y(), rect.width(), rect.height(), text, isPrimary, isHovered);
+        float scale = isPrimary ? TypographyScale.BODY.getScale() : TypographyScale.SMALL.getScale();
+        drawButton(extractor, font, rect.x(), rect.y(), rect.width(), rect.height(), text, isPrimary, isHovered, scale);
+    }
+
+    public static void drawButton(GuiGraphicsExtractor extractor, Font font, UiRect rect,
+                                  String text, boolean isPrimary, boolean isHovered, float scale) {
+        drawButton(extractor, font, rect.x(), rect.y(), rect.width(), rect.height(), text, isPrimary, isHovered, scale);
     }
 
     public static void drawButton(GuiGraphicsExtractor extractor, Font font, int x, int y, int width, int height,
                                   String text, boolean isPrimary, boolean isHovered) {
+        float scale = isPrimary ? TypographyScale.BODY.getScale() : TypographyScale.SMALL.getScale();
+        drawButton(extractor, font, x, y, width, height, text, isPrimary, isHovered, scale);
+    }
+
+    public static void drawButton(GuiGraphicsExtractor extractor, Font font, int x, int y, int width, int height,
+                                  String text, boolean isPrimary, boolean isHovered, float scale) {
         if (width <= 0 || height <= 0) return;
         int bg = isPrimary
                 ? (isHovered ? COLOR_EMERALD_DARK : COLOR_EMERALD)
@@ -129,10 +142,11 @@ public final class GZTheme {
 
         drawCard(extractor, x, y, width, height, bg, border);
 
-        int textY = y + (height - 8) / 2;
+        int textH = (int) Math.ceil(8 * scale);
+        int textY = y + (height - textH) / 2;
         // CRITICAL: Drop shadow must be FALSE for primary dark text on emerald background
         boolean dropShadow = !isPrimary;
-        TextUtil.drawCenteredText(extractor, font, text, x + (width / 2), textY, width - 4, textColor, dropShadow);
+        TextUtil.drawScaledCenteredText(extractor, font, text, x + (width / 2), textY, width - 4, scale, textColor, dropShadow);
     }
 
     public static void drawDebugBounds(GuiGraphicsExtractor extractor, int x, int y, int w, int h, int color) {

@@ -64,7 +64,7 @@ public class GZCompanionMainScreen extends Screen {
         int titleW = font.width(CompanionConstants.MOD_NAME.toUpperCase());
         int availHeaderW = closeBtnRect.x() - (modalRect.x() + 28 + titleW) - 8;
         if (availHeaderW > 40) {
-            TextUtil.drawEllipsizedText(extractor, font, subtitle, modalRect.x() + 28 + titleW, headerY + 3, availHeaderW, GZTheme.COLOR_TEXT_MUTED, false);
+            TextUtil.drawScaledEllipsizedText(extractor, font, subtitle, modalRect.x() + 28 + titleW, headerY + 4, availHeaderW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
         }
 
         // Close Button
@@ -80,6 +80,8 @@ public class GZCompanionMainScreen extends Screen {
         GZTheme.drawCard(extractor, sidebarRect, 0x800A1017, GZTheme.COLOR_BORDER_SUBTLE);
 
         TabType[] tabs = TabType.values();
+        float tabScale = TypographyScale.BODY.getScale();
+        int tabTextH = (int) Math.ceil(8 * tabScale);
         for (int i = 0; i < tabs.length; i++) {
             TabType tab = tabs[i];
             UiRect tr = tabRects[i];
@@ -99,9 +101,9 @@ public class GZCompanionMainScreen extends Screen {
             int iconY = tr.y() + ((tr.height() - 10) / 2);
             GZTheme.drawIcon(extractor, tab.getIcon(), tr.x() + 3, iconY, 10, iconTint);
 
-            int textY = tr.y() + ((tr.height() - 8) / 2);
+            int textY = tr.y() + ((tr.height() - tabTextH) / 2);
             int maxLabelW = tr.width() - 17;
-            TextUtil.drawEllipsizedText(extractor, font, tab.getDisplayName(), tr.x() + 15, textY, maxLabelW, textTint, isActive);
+            TextUtil.drawScaledEllipsizedText(extractor, font, tab.getDisplayName(), tr.x() + 15, textY, maxLabelW, tabScale, textTint, isActive);
         }
 
         // 4. Content Canvas (Home or Placeholder)
@@ -115,9 +117,9 @@ public class GZCompanionMainScreen extends Screen {
 
         // 5. Global Modal Footer
         int footerY = modalRect.bottom() - 12;
-        TextUtil.drawEllipsizedText(extractor, font, "Fair play - Lokalt", modalRect.x() + 6, footerY, modalRect.width() / 2, GZTheme.COLOR_TEXT_MUTED, false);
+        TextUtil.drawScaledEllipsizedText(extractor, font, "Fair play - Lokalt", modalRect.x() + 6, footerY, modalRect.width() / 2, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
         String rightFooter = "v" + CompanionConstants.getModVersion();
-        TextUtil.drawRightAlignedText(extractor, font, rightFooter, modalRect.right() - 6, footerY, modalRect.width() / 2, GZTheme.COLOR_TEXT_MUTED, false);
+        TextUtil.drawScaledRightAlignedText(extractor, font, rightFooter, modalRect.right() - 6, footerY, modalRect.width() / 2, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
 
         super.extractRenderState(extractor, mouseX, mouseY, partialTick);
     }
