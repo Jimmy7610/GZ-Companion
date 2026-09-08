@@ -29,7 +29,7 @@ class ResponsiveLayoutTest {
             {480, 300}, // Intermediate scale
             {640, 360}, // Standard scaled window
             {640, 384}, // Target 1920x1152 scaled logical window
-            {800, 450}, // 16:9 Scale 2
+            {800, 450}, // Scale 2
             {960, 540}  // High resolution
         };
 
@@ -54,6 +54,7 @@ class ResponsiveLayoutTest {
             for (UiRect tr : main.tabRects()) {
                 assertNotNull(tr);
                 assertTrue(main.sidebarRect().contains(tr), "Tab rect must stay inside sidebar for " + sw + "x" + sh);
+                assertTrue(tr.width() >= 80, "Tab width must provide at least 80px for Swedish labels in " + sw + "x" + sh);
             }
             for (int i = 0; i < main.tabRects().length - 1; i++) {
                 assertFalse(main.tabRects()[i].intersects(main.tabRects()[i + 1]), "Adjacent tabs must not intersect");
@@ -80,6 +81,19 @@ class ResponsiveLayoutTest {
             assertFalse(home.primaryButtonRect().intersects(home.secondaryButton1Rect()), "Primary and secondary buttons must not intersect");
             assertFalse(home.secondaryButton1Rect().intersects(home.secondaryButton2Rect()), "Secondary buttons must not intersect each other");
         }
+    }
+
+    @Test
+    @DisplayName("Normal Mode Geometry: Explicit allocation for controlled static strings")
+    void testNormalModeControlledStringGeometry() {
+        MainScreenLayout main = MainScreenLayout.calculate(640, 384);
+        assertEquals(ResponsiveBreakpoint.NORMAL, main.breakpoint());
+        assertTrue(main.sidebarRect().width() >= 100, "NORMAL sidebar must be at least 100px wide for Inställningar");
+
+        HomeTabLayout home = HomeTabLayout.calculate(main.contentRect());
+        assertTrue(home.primaryButtonRect().width() > 100, "Primary button must have adequate width for Öppna Guide");
+        assertTrue(home.secondaryButton1Rect().width() > 60, "Secondary button 1 must have width for Vad ska jag göra?");
+        assertTrue(home.secondaryButton2Rect().width() > 50, "Secondary button 2 must have width for Kompatibilitet");
     }
 
     @Test

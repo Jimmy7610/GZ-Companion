@@ -21,14 +21,14 @@ public record MainScreenLayout(
         int marginX = Math.max(8, (int) (screenWidth * 0.04f));
         int marginY = Math.max(8, (int) (screenHeight * 0.04f));
 
-        // Normal mode target: ~460-475 x ~280-295 logical px
-        int maxW = (bp == ResponsiveBreakpoint.LARGE) ? 520 : ((bp == ResponsiveBreakpoint.COMPACT) ? 380 : 465);
-        int maxH = (bp == ResponsiveBreakpoint.LARGE) ? 320 : ((bp == ResponsiveBreakpoint.COMPACT) ? 240 : 285);
+        // NORMAL mode tuned to 476 x 288 (comfortably fits Inställningar without exceeding viewport)
+        int maxW = (bp == ResponsiveBreakpoint.LARGE) ? 524 : ((bp == ResponsiveBreakpoint.COMPACT) ? 384 : 476);
+        int maxH = (bp == ResponsiveBreakpoint.LARGE) ? 320 : ((bp == ResponsiveBreakpoint.COMPACT) ? 240 : 288);
 
         int modalW = Math.min(screenWidth - (marginX * 2), maxW);
         int modalH = Math.min(screenHeight - (marginY * 2), maxH);
 
-        // Clamping edge case: never exceed screen bounds minus minimal 4px safe margin
+        // Clamping edge case: never exceed screen bounds minus minimal safe margin
         modalW = Math.min(modalW, Math.max(10, screenWidth - 8));
         modalH = Math.min(modalH, Math.max(10, screenHeight - 8));
 
@@ -38,7 +38,8 @@ public record MainScreenLayout(
 
         int headerH = 26;
         int footerH = 15;
-        int sidebarW = (bp == ResponsiveBreakpoint.COMPACT) ? 82 : 98;
+        // Sidebar widened to 108px in NORMAL mode to fully fit "Inställningar"
+        int sidebarW = (bp == ResponsiveBreakpoint.COMPACT) ? 86 : 108;
 
         UiRect header = new UiRect(modalX, modalY, modalW, headerH);
         UiRect closeBtn = new UiRect(modalX + modalW - 16, modalY + 6, 11, 11);

@@ -40,7 +40,7 @@ public class HomeTabComponent {
         boolean isGameZone = session.getBridge().isConnectedToGameZone();
         String serverAddr = session.getBridge().getCurrentServerAddress().orElse("Lokal värld");
         CompatibilityResult compat = session.getCompatibilityResult();
-        String packVersion = session.getActiveRulePack() != null ? session.getActiveRulePack().manifest().packVersion() : "1.0.0";
+        String packVersion = session.getActiveRulePack() != null ? session.getActiveRulePack().manifest().packVersion() : "Ej laddad";
         FeatureManager featureManager = session.getFeatureManager();
 
         UiRect welcomeRect = layout.welcomeRect();
@@ -52,7 +52,7 @@ public class HomeTabComponent {
         UiRect secondaryBtn1Rect = layout.secondaryButton1Rect();
         UiRect secondaryBtn2Rect = layout.secondaryButton2Rect();
 
-        // 1. WELCOME CARD
+        // 1. WELCOME CARD (58% width)
         GZTheme.drawCard(extractor, welcomeRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         extractor.fill(welcomeRect.x() + 2, welcomeRect.y() + 2, welcomeRect.x() + 4, welcomeRect.bottom() - 2, GZTheme.COLOR_EMERALD);
 
@@ -69,7 +69,7 @@ public class HomeTabComponent {
         TextUtil.drawEllipsizedText(extractor, font, "GZ Companion hjälper dig.", textX, welcomeRect.y() + 24, maxWelcomeTextW, GZTheme.COLOR_TEXT_SECONDARY, false);
         TextUtil.drawEllipsizedText(extractor, font, "Allt sparas lokalt.", textX, welcomeRect.y() + 33, maxWelcomeTextW, GZTheme.COLOR_TEXT_MUTED, false);
 
-        // 2. SERVER STATUS CARD
+        // 2. SERVER STATUS CARD (42% width)
         GZTheme.drawCard(extractor, serverRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         int sPad = 5;
         TextUtil.drawEllipsizedText(extractor, font, "Serverstatus", serverRect.x() + sPad, serverRect.y() + 4, serverRect.width() - 44, GZTheme.COLOR_TEXT_PRIMARY, true);
@@ -103,7 +103,7 @@ public class HomeTabComponent {
         drawMiniBadge(extractor, font, versionRect.x() + vPad, versionRect.y() + vPad, vCardW, vCardH, "Minecraft", CompanionConstants.TARGET_MINECRAFT_VERSION, GZTheme.COLOR_TEXT_PRIMARY);
         drawMiniBadge(extractor, font, versionRect.x() + vPad + (vCardW + vPad), versionRect.y() + vPad, vCardW, vCardH, "Companion", CompanionConstants.getModVersion(), GZTheme.COLOR_MINT);
         drawMiniBadge(extractor, font, versionRect.x() + vPad + (vCardW + vPad) * 2, versionRect.y() + vPad, vCardW, vCardH, "Rule Pack", packVersion, GZTheme.COLOR_TEXT_PRIMARY);
-        drawMiniBadge(extractor, font, versionRect.x() + vPad + (vCardW + vPad) * 3, versionRect.y() + vPad, vCardW, vCardH, "Kompatibilitet", compat.overallStatus().getDisplayName(), compat.overallStatus().getArgbColor());
+        drawMiniBadge(extractor, font, versionRect.x() + vPad + (vCardW + vPad) * 3, versionRect.y() + vPad, vCardW, vCardH, "Status", compat.overallStatus().getDisplayName(), compat.overallStatus().getArgbColor());
 
         // 4. NEXT OBJECTIVE CARD
         GZTheme.drawCard(extractor, objectiveRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
@@ -112,18 +112,18 @@ public class HomeTabComponent {
 
         GZTheme.drawIcon(extractor, IconId.OBJECTIVE, objectiveRect.x() + oPad, objectiveRect.y() + 5, 9, GZTheme.COLOR_MINT);
         extractor.text(font, "Nästa uppgift", objectiveRect.x() + oPad + 13, objectiveRect.y() + 5, GZTheme.COLOR_MINT, true);
-        TextUtil.drawEllipsizedText(extractor, font, "Öppna guiden för att börja", objectiveRect.x() + oPad, objectiveRect.y() + 15, maxObjW, GZTheme.COLOR_TEXT_PRIMARY, true);
-        TextUtil.drawEllipsizedText(extractor, font, "Lär dig grunderna steg för steg.", objectiveRect.x() + oPad, objectiveRect.y() + 24, maxObjW, GZTheme.COLOR_TEXT_SECONDARY, false);
+        TextUtil.drawEllipsizedText(extractor, font, "Öppna guiden och kom igång", objectiveRect.x() + oPad, objectiveRect.y() + 15, maxObjW, GZTheme.COLOR_TEXT_PRIMARY, true);
+        TextUtil.drawEllipsizedText(extractor, font, "Lär dig Minecraft steg för steg.", objectiveRect.x() + oPad, objectiveRect.y() + 24, maxObjW, GZTheme.COLOR_TEXT_SECONDARY, false);
 
         int chkY = objectiveRect.y() + 34;
         int chkSpacing = 8;
-        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY, "[ ] Öppna guiden för nybörjare", maxObjW);
-        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + chkSpacing, "[ ] Lär dig grundläggande funktioner", maxObjW);
-        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + (chkSpacing * 2), "[ ] Utforska säkra zoner och skydd", maxObjW);
+        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY, "[ ] Öppna nybörjarguiden", maxObjW);
+        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + chkSpacing, "[ ] Lär dig grunderna", maxObjW);
+        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + (chkSpacing * 2), "[ ] Utforska säkert", maxObjW);
 
-        // Render Action Buttons (Row 1 Primary, Row 2 Secondaries)
+        // Render Action Buttons
         GZTheme.drawButton(extractor, font, primaryBtnRect, "Öppna Guide", true, primaryBtnRect.contains(mouseX, mouseY));
-        GZTheme.drawButton(extractor, font, secondaryBtn1Rect, "Vad göra?", false, secondaryBtn1Rect.contains(mouseX, mouseY));
+        GZTheme.drawButton(extractor, font, secondaryBtn1Rect, "Vad ska jag göra?", false, secondaryBtn1Rect.contains(mouseX, mouseY));
         GZTheme.drawButton(extractor, font, secondaryBtn2Rect, "Kompatibilitet", false, secondaryBtn2Rect.contains(mouseX, mouseY));
 
         // 5. MODULE STATUS CARD
@@ -174,7 +174,7 @@ public class HomeTabComponent {
         GZTheme.drawStatusDot(extractor, mx, my + 2, dotColor);
         int statusW = font.width(statusName);
         int rightStatusX = mx + rowW;
-        int maxModNameW = Math.max(10, rowW - statusW - 10);
+        int maxModNameW = Math.max(10, rowW - statusW - 8);
 
         TextUtil.drawEllipsizedText(extractor, font, modName, mx + 6, my, maxModNameW, GZTheme.COLOR_TEXT_PRIMARY, false);
         TextUtil.drawRightAlignedText(extractor, font, statusName, rightStatusX, my, statusW + 2,
