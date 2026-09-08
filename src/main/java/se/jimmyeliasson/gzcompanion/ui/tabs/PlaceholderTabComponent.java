@@ -5,62 +5,62 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.TabType;
+import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
+import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 
 /**
  * Polished, consistent placeholder view for tabs under development.
  */
 public class PlaceholderTabComponent {
+    private UiRect backBtnRect = new UiRect(0, 0, 0, 0);
 
-    public void render(GuiGraphicsExtractor extractor, Font font, int x, int y, int width, int height, int mouseX, int mouseY, TabType tab, GZCompanionMainScreen mainScreen) {
-        GZTheme.drawCard(extractor, x, y, width, height, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
-
-        extractor.fill(x + 2, y + 2, x + 4, y + 28, GZTheme.COLOR_EMERALD);
-        extractor.text(font, tab.getDisplayName(), x + 10, y + 8, GZTheme.COLOR_TEXT_PRIMARY, true);
-        extractor.text(font, tab.getDescription(), x + 10, y + 19, GZTheme.COLOR_TEXT_SECONDARY, false);
-
-        int boxY = y + 34;
-        int boxH = height - 42;
-        GZTheme.drawCard(extractor, x + 8, boxY, width - 16, boxH, 0x800A1017, 0x33475569);
-
-        int centerX = x + width / 2;
-        int msgY = boxY + 24;
-
-        String icon = "[" + tab.getIconSymbol() + "]";
-        int iconW = font.width(icon);
-        extractor.text(font, icon, centerX - iconW / 2, msgY, GZTheme.COLOR_MINT, true);
-
-        String title = tab.getDisplayName() + " - Modul under utveckling";
-        int titleW = font.width(title);
-        extractor.text(font, title, centerX - titleW / 2, msgY + 14, GZTheme.COLOR_TEXT_PRIMARY, true);
-
-        String desc1 = getTabExplanation(tab);
-        int desc1W = font.width(desc1);
-        extractor.text(font, desc1, centerX - desc1W / 2, msgY + 28, GZTheme.COLOR_TEXT_SECONDARY, false);
-
-        String desc2 = "Denna funktion kommer att aktiveras i en framtida uppdatering av GZ Companion.";
-        int desc2W = font.width(desc2);
-        extractor.text(font, desc2, centerX - desc2W / 2, msgY + 39, GZTheme.COLOR_TEXT_MUTED, false);
-
-        int btnW = 120;
-        int btnH = 18;
-        int btnX = centerX - btnW / 2;
-        int btnY = boxY + boxH - 26;
-
-        boolean hov = mouseX >= btnX && mouseX < btnX + btnW && mouseY >= btnY && mouseY < btnY + btnH;
-        GZTheme.drawButton(extractor, font, btnX, btnY, btnW, btnH, "< Tillbaka till Hem", true, hov);
+    public void calculateLayout(UiRect bounds) {
+        int btnW = Math.min(130, bounds.width() - 32);
+        int btnH = 16;
+        int btnX = bounds.x() + (bounds.width() - btnW) / 2;
+        int btnY = bounds.bottom() - btnH - 12;
+        this.backBtnRect = new UiRect(btnX, btnY, btnW, btnH);
     }
 
-    public boolean mouseClicked(double mouseX, double mouseY, int button, int x, int y, int width, int height, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
-        int centerX = x + width / 2;
-        int boxY = y + 34;
-        int boxH = height - 42;
-        int btnW = 120;
-        int btnH = 18;
-        int btnX = centerX - btnW / 2;
-        int btnY = boxY + boxH - 26;
+    public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, TabType tab, GZCompanionMainScreen mainScreen) {
+        calculateLayout(bounds);
 
-        if (mouseX >= btnX && mouseX < btnX + btnW && mouseY >= btnY && mouseY < btnY + btnH) {
+        GZTheme.drawCard(extractor, bounds, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
+        extractor.fill(bounds.x() + 2, bounds.y() + 2, bounds.x() + 4, bounds.y() + 28, GZTheme.COLOR_EMERALD);
+
+        int pad = 8;
+        GZTheme.drawIcon(extractor, tab.getIcon(), bounds.x() + pad + 2, bounds.y() + 6, 12, GZTheme.COLOR_MINT);
+        extractor.text(font, tab.getDisplayName(), bounds.x() + pad + 18, bounds.y() + 7, GZTheme.COLOR_TEXT_PRIMARY, true);
+        TextUtil.drawEllipsizedText(extractor, font, tab.getDescription(), bounds.x() + pad + 18, bounds.y() + 18, bounds.width() - 36, GZTheme.COLOR_TEXT_SECONDARY, false);
+
+        int boxY = bounds.y() + 32;
+        int boxH = bounds.height() - 40;
+        UiRect innerBox = new UiRect(bounds.x() + pad, boxY, bounds.width() - (pad * 2), boxH);
+        GZTheme.drawCard(extractor, innerBox, GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
+
+        int centerX = innerBox.x() + (innerBox.width() / 2);
+        int msgY = innerBox.y() + 16;
+        int maxTextW = innerBox.width() - 16;
+
+        GZTheme.drawIcon(extractor, tab.getIcon(), centerX - 8, msgY, 16, GZTheme.COLOR_MINT);
+
+        String title = tab.getDisplayName() + " - Under utveckling";
+        TextUtil.drawCenteredText(extractor, font, title, centerX, msgY + 20, maxTextW, GZTheme.COLOR_TEXT_PRIMARY, true);
+
+        String desc1 = getTabExplanation(tab);
+        TextUtil.drawCenteredText(extractor, font, desc1, centerX, msgY + 34, maxTextW, GZTheme.COLOR_TEXT_SECONDARY, false);
+
+        String desc2 = "Denna funktion aktiveras i en kommande uppdatering.";
+        TextUtil.drawCenteredText(extractor, font, desc2, centerX, msgY + 46, maxTextW, GZTheme.COLOR_TEXT_MUTED, false);
+
+        GZTheme.drawButton(extractor, font, backBtnRect, "Tillbaka till Hem", true, backBtnRect.contains(mouseX, mouseY));
+    }
+
+    public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
+        if (button != 0) return false;
+        calculateLayout(bounds);
+
+        if (backBtnRect.contains(mouseX, mouseY)) {
             mainScreen.setActiveTab(TabType.HEM);
             return true;
         }
@@ -69,14 +69,14 @@ public class PlaceholderTabComponent {
 
     private String getTabExplanation(TabType tab) {
         return switch (tab) {
-            case GUIDE -> "Har hittar du interaktiva steg-for-steg-guider och framstegsmal for GameZoneMC.";
-            case CRAFTING -> "Snabb och smidig receptoversikt anpassad efter serverns unika foremal.";
-            case KISTOR -> "Hall koll pa dina kistor och forvaringar du legitimt har oppnat.";
-            case SETTLEMENT -> "Hjalpmedel for att hantera claims, stader och medlemmar pa GameZoneMC.";
-            case BYGGPLANER -> "Planera dina byggen och berakna materialkostnader enkelt.";
-            case MARKETWATCH -> "Overvaka priser och trender pa serverns handelsmarknad.";
-            case KOMMANDON -> "Snabbguide och genvagar till alla vanliga och anvandbara serverkommandon.";
-            case INSTALLNINGAR -> "Anpassa utseende, tangentbindningar och installningar for GZ Companion.";
+            case GUIDE -> "Här hittar du interaktiva steg-för-steg-guider och framstegsmål för GameZoneMC.";
+            case CRAFTING -> "Snabb och smidig receptöversikt anpassad efter serverns unika föremål.";
+            case KISTOR -> "Håll koll på dina kistor och förvaringar du legitimt har öppnat.";
+            case SETTLEMENT -> "Hjälpmedel för att hantera claims, städer och medlemmar på GameZoneMC.";
+            case BYGGPLANER -> "Planera dina byggen och beräkna materialkostnader enkelt.";
+            case MARKETWATCH -> "Övervaka priser och trender på serverns handelsmarknad.";
+            case KOMMANDON -> "Snabbguide och genvägar till alla vanliga och användbara serverkommandon.";
+            case INSTALLNINGAR -> "Anpassa utseende, tangentbindningar och inställningar för GZ Companion.";
             default -> "Information om denna funktion kommer snart.";
         };
     }

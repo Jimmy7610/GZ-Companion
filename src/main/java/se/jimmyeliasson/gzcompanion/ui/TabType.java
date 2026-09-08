@@ -2,26 +2,26 @@ package se.jimmyeliasson.gzcompanion.ui;
 
 /**
  * The 9 navigation sections defined for GZ Companion.
- * Uses reliable ASCII/Latin-1 glyphs that render crisply across all Minecraft GUI scales and font engines.
+ * Uses bundled high-definition pixel icons and authentic Swedish localization.
  */
 public enum TabType {
-    HEM("Hem", "#", "Startskarm och oversikt"),
-    GUIDE("Guide", "?", "Interaktiva guider och progression"),
-    CRAFTING("Crafting", "+", "Recept och hantverkshjalp"),
-    KISTOR("Kistor", "=", "Kist- och forvaringsoversikt"),
-    SETTLEMENT("Settlement", "^", "Samhalls- och stadsverktyg"),
-    BYGGPLANER("Byggplaner", "%", "Byggnads- och materialplanerare"),
-    MARKETWATCH("MarketWatch", "$", "Marknads- och ekonomibevakning"),
-    KOMMANDON("Kommandon", "/", "Serverkommandon och snabbval"),
-    INSTALLNINGAR("Installningar", "*", "Installningar for GZ Companion");
+    HEM("Hem", IconId.HOME, "Startskärm och översikt"),
+    GUIDE("Guide", IconId.GUIDE, "Interaktiva guider och progression"),
+    CRAFTING("Crafting", IconId.CRAFTING, "Recept och hantverkshjälp"),
+    KISTOR("Kistor", IconId.CHEST, "Kist- och förvaringsöversikt"),
+    SETTLEMENT("Settlement", IconId.SETTLEMENT, "Samhälls- och stadsverktyg"),
+    BYGGPLANER("Byggplaner", IconId.BUILDING, "Byggnads- och materialplanerare"),
+    MARKETWATCH("MarketWatch", IconId.MARKET, "Marknads- och ekonomibevakning"),
+    KOMMANDON("Kommandon", IconId.COMMANDS, "Serverkommandon och snabbval"),
+    INSTALLNINGAR("Inställningar", IconId.SETTINGS, "Inställningar för GZ Companion");
 
     private final String displayName;
-    private final String iconSymbol;
+    private final IconId icon;
     private final String description;
 
-    TabType(String displayName, String iconSymbol, String description) {
+    TabType(String displayName, IconId icon, String description) {
         this.displayName = displayName;
-        this.iconSymbol = iconSymbol;
+        this.icon = icon;
         this.description = description;
     }
 
@@ -29,8 +29,8 @@ public enum TabType {
         return displayName;
     }
 
-    public String getIconSymbol() {
-        return iconSymbol;
+    public IconId getIcon() {
+        return icon;
     }
 
     public String getDescription() {

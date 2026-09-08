@@ -36,14 +36,14 @@ class UIThemeRegressionTest {
     }
 
     @Test
-    @DisplayName("Regression: All TabType values have valid non-blank symbols and labels")
+    @DisplayName("Regression: All TabType values have valid IconId and authentic Swedish names")
     void testTabTypeSymbols() {
         for (TabType tab : TabType.values()) {
             assertNotNull(tab.getDisplayName());
             assertFalse(tab.getDisplayName().isBlank(), "Tab display name cannot be blank");
-            assertNotNull(tab.getIconSymbol());
-            assertFalse(tab.getIconSymbol().isBlank(), "Tab icon symbol cannot be blank");
-            assertEquals(1, tab.getIconSymbol().length(), "Icon symbol must be single character ASCII/Latin-1 glyph");
+            assertNotNull(tab.getIcon(), "Tab must have a valid IconId");
+            assertNotNull(tab.getIcon().getIdentifier());
+            assertFalse(tab.getDescription().isBlank());
         }
     }
 

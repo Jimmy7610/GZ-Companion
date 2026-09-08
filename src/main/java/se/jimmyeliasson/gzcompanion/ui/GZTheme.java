@@ -2,19 +2,21 @@ package se.jimmyeliasson.gzcompanion.ui;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.resources.Identifier;
+import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
+import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 
 /**
- * Design system tokens, color definitions, and drawing helpers following docs/design/DESIGN-SYSTEM.md.
- *
- * CRITICAL RENDERING NOTE FOR MINECRAFT 26.1.2:
- * All color integers passed to Minecraft GUI methods (extractor.fill, extractor.text, etc.)
- * MUST include an explicit Alpha byte (ARGB, 32-bit). An RGB value like 0xF8FAFC will be
- * interpreted as Alpha=0x00 and render completely invisible.
+ * Design system tokens, component rendering primitives, and layout styling following docs/design/DESIGN-SYSTEM.md.
  */
 public final class GZTheme {
+    // Development Debug Mode (Toggle with true for bounds inspection)
+    public static boolean DEBUG_LAYOUT = false;
+
     // Surfaces & Glass (ARGB)
     public static final int COLOR_BACKDROP = 0xB3070A0E;      // 70% dark background overlay
-    public static final int COLOR_PANEL_BG = 0xF00D141C;      // 94% dark navy dialog container
+    public static final int COLOR_PANEL_BG = 0xF20D141C;      // 95% dark navy dialog container
     public static final int COLOR_CARD_BG = 0xCC131F2B;       // 80% slate card surface
     public static final int COLOR_CARD_HOVER = 0xE61E2E3D;    // 90% slate hover surface
     public static final int COLOR_CARD_INNER = 0x800A1017;    // 50% recessed inner container
@@ -44,9 +46,6 @@ public final class GZTheme {
 
     private GZTheme() {}
 
-    /**
-     * Ensures an RGB or ARGB color has full alpha (0xFF) if no alpha was provided.
-     */
     public static int opaque(int rgb) {
         return (rgb & 0xFF000000) == 0 ? (0xFF000000 | rgb) : rgb;
     }
@@ -54,12 +53,30 @@ public final class GZTheme {
     /**
      * Draws a card container with background and 1px border.
      */
+    public static void drawCard(GuiGraphicsExtractor extractor, UiRect rect, int bgArgb, int borderArgb) {
+        drawCard(extractor, rect.x(), rect.y(), rect.width(), rect.height(), bgArgb, borderArgb);
+    }
+
     public static void drawCard(GuiGraphicsExtractor extractor, int x, int y, int width, int height, int bgArgb, int borderArgb) {
+        if (width <= 0 || height <= 0) return;
         extractor.fill(x, y, x + width, y + height, bgArgb);
         extractor.fill(x, y, x + width, y + 1, borderArgb);
         extractor.fill(x, y + height - 1, x + width, y + height, borderArgb);
         extractor.fill(x, y, x + 1, y + height, borderArgb);
         extractor.fill(x + width - 1, y, x + width, y + height, borderArgb);
+
+        if (DEBUG_LAYOUT) {
+            drawDebugBounds(extractor, x, y, width, height, 0x44FF00FF);
+        }
+    }
+
+    /**
+     * Draws a crisp bundled 16x16 icon texture.
+     */
+    public static void drawIcon(GuiGraphicsExtractor extractor, IconId icon, int x, int y, int size, int tintColor) {
+        if (icon == null) return;
+        Identifier id = icon.getIdentifier();
+        extractor.blit(RenderPipelines.GUI_TEXTURED, id, x, y, 0.0F, 0.0F, size, size, 16, 16, 16, 16, tintColor);
     }
 
     /**
@@ -91,10 +108,16 @@ public final class GZTheme {
     }
 
     /**
-     * Draws a consistent action button with state styling.
+     * Draws a standardized button with measured font bounds.
      */
+    public static void drawButton(GuiGraphicsExtractor extractor, Font font, UiRect rect,
+                                  String text, boolean isPrimary, boolean isHovered) {
+        drawButton(extractor, font, rect.x(), rect.y(), rect.width(), rect.height(), text, isPrimary, isHovered);
+    }
+
     public static void drawButton(GuiGraphicsExtractor extractor, Font font, int x, int y, int width, int height,
                                   String text, boolean isPrimary, boolean isHovered) {
+        if (width <= 0 || height <= 0) return;
         int bg = isPrimary
                 ? (isHovered ? COLOR_EMERALD_DARK : COLOR_EMERALD)
                 : (isHovered ? 0xE61E2E3D : 0x991E293B);
@@ -107,9 +130,17 @@ public final class GZTheme {
 
         drawCard(extractor, x, y, width, height, bg, border);
 
-        int textW = font.width(text);
-        int textX = x + Math.max(4, (width - textW) / 2);
         int textY = y + (height - 8) / 2;
-        extractor.text(font, text, textX, textY, textColor, isPrimary);
+        TextUtil.drawCenteredText(extractor, font, text, x + (width / 2), textY, width - 6, textColor, isPrimary);
+    }
+
+    /**
+     * Development debug outline renderer.
+     */
+    public static void drawDebugBounds(GuiGraphicsExtractor extractor, int x, int y, int w, int h, int color) {
+        extractor.fill(x, y, x + w, y + 1, color);
+        extractor.fill(x, y + h - 1, x + w, y + h, color);
+        extractor.fill(x, y, x + 1, y + h, color);
+        extractor.fill(x + w - 1, y, x + w, y + h, color);
     }
 }
