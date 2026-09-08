@@ -125,11 +125,7 @@ public class GZCompanionMainScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean isDown) {
-        if (!isDown) {
-            return super.mouseClicked(event, false);
-        }
-
+    public boolean mouseClicked(MouseButtonEvent event, boolean isDoubleClick) {
         double mouseX = event.x();
         double mouseY = event.y();
         int button = event.button();
@@ -138,22 +134,19 @@ public class GZCompanionMainScreen extends Screen {
             this.layout = MainScreenLayout.calculate(this.width, this.height);
         }
 
-        if (layout.closeBtnRect().contains(mouseX, mouseY)) {
+        if (UiInput.isPointInside(layout.closeBtnRect(), mouseX, mouseY)) {
             this.onClose();
             return true;
         }
 
-        TabType[] tabs = TabType.values();
-        UiRect[] tabRects = layout.tabRects();
-        for (int i = 0; i < tabs.length; i++) {
-            if (tabRects[i] != null && tabRects[i].contains(mouseX, mouseY)) {
-                this.activeTab = tabs[i];
-                return true;
-            }
+        TabType clickedTab = UiInput.findClickedTab(layout.tabRects(), mouseX, mouseY);
+        if (clickedTab != null) {
+            this.activeTab = clickedTab;
+            return true;
         }
 
         UiRect contentRect = layout.contentRect();
-        if (contentRect.contains(mouseX, mouseY)) {
+        if (UiInput.isPointInside(contentRect, mouseX, mouseY)) {
             if (activeTab == TabType.HEM) {
                 if (homeTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
@@ -165,7 +158,7 @@ public class GZCompanionMainScreen extends Screen {
             }
         }
 
-        return super.mouseClicked(event, isDown);
+        return super.mouseClicked(event, isDoubleClick);
     }
 
     @Override
