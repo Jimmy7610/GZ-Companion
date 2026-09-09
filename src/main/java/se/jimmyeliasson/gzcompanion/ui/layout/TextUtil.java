@@ -82,19 +82,59 @@ public final class TextUtil {
     }
 
     /**
+     * Splits text into lines fitting inside maxPixelWidth at the specified typography scale.
+     */
+    public static List<FormattedCharSequence> splitLines(Font font, String text, int maxPixelWidth, float scale) {
+        if (text == null || text.isEmpty() || maxPixelWidth <= 0 || font == null) return List.of();
+        int unscaledMaxW = (scale >= 0.999f) ? maxPixelWidth : (int) (maxPixelWidth / scale);
+        return font.split(net.minecraft.network.chat.Component.literal(text), unscaledMaxW);
+    }
+
+    /**
+     * Computes total pixel height required for multi-line wrapped text at the specified typography scale.
+     */
+    public static int measureWrappedHeight(Font font, String text, int maxPixelWidth, float scale, int lineSpacing) {
+        if (text == null || text.isEmpty() || maxPixelWidth <= 0 || font == null) return 0;
+        List<FormattedCharSequence> lines = splitLines(font, text, maxPixelWidth, scale);
+        if (lines.isEmpty()) return 0;
+        int scaledLineH = (int) Math.ceil(9 * scale);
+        return (lines.size() * scaledLineH) + ((lines.size() - 1) * lineSpacing);
+    }
+
+    /**
      * Draws multi-line wrapped text inside a maximum pixel width.
      */
     public static int drawWrappedText(GuiGraphicsExtractor extractor, Font font, String text,
                                        int x, int y, int maxPixelWidth, int maxLines, int colorArgb, boolean dropShadow) {
-        if (text == null || text.isEmpty() || maxPixelWidth <= 0) return 0;
-        List<FormattedCharSequence> lines = font.split(net.minecraft.network.chat.Component.literal(text), maxPixelWidth);
-        int rendered = 0;
-        int lineH = 9;
+        return drawScaledWrappedText(extractor, font, text, x, y, maxPixelWidth, 1.0f, maxLines, 1, colorArgb, dropShadow);
+    }
+
+    /**
+     * Draws multi-line wrapped text at a specified typography scale.
+     */
+    public static int drawScaledWrappedText(GuiGraphicsExtractor extractor, Font font, String text,
+                                            int x, int y, int maxPixelWidth, float scale, int maxLines, int lineSpacing,
+                                            int colorArgb, boolean dropShadow) {
+        if (text == null || text.isEmpty() || maxPixelWidth <= 0 || font == null) return 0;
+        List<FormattedCharSequence> lines = splitLines(font, text, maxPixelWidth, scale);
+        if (lines.isEmpty()) return 0;
+        int scaledLineH = (int) Math.ceil(9 * scale);
+        int currentY = y;
+        int renderedLines = 0;
         for (int i = 0; i < lines.size() && i < maxLines; i++) {
-            extractor.text(font, lines.get(i), x, y + (i * lineH), colorArgb, dropShadow);
-            rendered++;
+            if (Math.abs(scale - 1.0f) < 0.001f) {
+                extractor.text(font, lines.get(i), x, currentY, colorArgb, dropShadow);
+            } else {
+                extractor.pose().pushMatrix();
+                extractor.pose().translate(x, currentY);
+                extractor.pose().scale(scale, scale);
+                extractor.text(font, lines.get(i), 0, 0, colorArgb, dropShadow);
+                extractor.pose().popMatrix();
+            }
+            currentY += scaledLineH + lineSpacing;
+            renderedLines++;
         }
-        return rendered * lineH;
+        return (renderedLines * scaledLineH) + ((renderedLines - 1) * lineSpacing);
     }
 
     /**

@@ -1,5 +1,6 @@
 package se.jimmyeliasson.gzcompanion.ui.tabs;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
@@ -221,6 +222,73 @@ public class GuideTabComponent {
         extractor.disableScissor();
     }
 
+    private int detailScrollOffset = 0;
+
+    private int calculateMaxDetailScroll(Font font, UiRect contentArea, GuideStep step, GuideEngine engine,
+                                         GuideContext context, GuidePlayerSnapshot snapshot) {
+        if (font == null || contentArea == null || step == null || engine == null) return 0;
+        int pad = 5;
+        int maxW = Math.max(10, contentArea.width() - (pad * 2));
+        int totalH = 4;
+
+        // Title & badge
+        totalH += 15;
+
+        // Optional badge
+        if (step.optional()) {
+            totalH += 11;
+        }
+
+        // Summary
+        if (step.summary() != null && !step.summary().isBlank()) {
+            String summary = engine.resolveTokens(step.summary());
+            totalH += TextUtil.measureWrappedHeight(font, summary, maxW, TypographyScale.BODY.getScale(), 1) + 4;
+        }
+
+        // Description
+        String desc = engine.resolveTokens(step.description());
+        totalH += TextUtil.measureWrappedHeight(font, desc, maxW, TypographyScale.SMALL.getScale(), 1) + 5;
+
+        // Divider
+        totalH += 5;
+
+        // Why
+        if (step.why() != null && !step.why().isBlank()) {
+            totalH += 9;
+            String whyText = engine.resolveTokens(step.why());
+            totalH += TextUtil.measureWrappedHeight(font, whyText, maxW, TypographyScale.SMALL.getScale(), 1) + 5;
+        }
+
+        // Conditions
+        if (step.conditions() != null) {
+            for (GuideCondition cond : step.conditions()) {
+                if (cond.type() != GuideConditionType.MANUAL) {
+                    totalH += 25;
+                }
+            }
+        }
+
+        // Tip
+        if (step.tip() != null && !step.tip().isBlank()) {
+            String tipText = "Tips: " + engine.resolveTokens(step.tip());
+            totalH += TextUtil.measureWrappedHeight(font, tipText, maxW - 8, TypographyScale.SMALL.getScale(), 1) + 8;
+        }
+
+        // Warning
+        if (step.warning() != null && !step.warning().isBlank()) {
+            String warnText = "Obs: " + engine.resolveTokens(step.warning());
+            totalH += TextUtil.measureWrappedHeight(font, warnText, maxW - 8, TypographyScale.SMALL.getScale(), 1) + 8;
+        }
+
+        // Guide completed banner
+        if (engine.isRequiredGuideComplete(context)) {
+            totalH += 26;
+        }
+
+        totalH += 8;
+        return Math.max(0, totalH - contentArea.height());
+    }
+
     private void renderDetailPane(GuiGraphicsExtractor extractor, Font font, UiRect detailRect, GuideEngine engine,
                                   GuideContext context, int mouseX, int mouseY, boolean isCompact) {
         GZTheme.drawCard(extractor, detailRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
@@ -233,106 +301,153 @@ public class GuideTabComponent {
         }
 
         GuideStepState state = engine.getStepState(context, step.id());
-        int pad = 6;
-        int currY = detailRect.y() + pad;
+        GuidePlayerSnapshot snapshot = engine.getLastSnapshot();
+        int pad = 5;
+
+        // Action buttons are pinned at the bottom of the detail pane
+        UiRect markBtn = layout.markDoneBtnRect();
+        UiRect resetBtn = layout.resetBtnRect();
+        int contentTop = detailRect.y() + (isCompact ? 16 : 4);
+        int contentBottom = markBtn.y() - 3;
+        int contentH = Math.max(1, contentBottom - contentTop);
+        UiRect contentArea = new UiRect(detailRect.x() + 1, contentTop, detailRect.width() - 2, contentH);
+
+        int maxDetailScroll = calculateMaxDetailScroll(font, contentArea, step, engine, context, snapshot);
+        this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset, maxDetailScroll));
 
         // Compact Back Button
         if (isCompact) {
             UiRect backBtn = layout.backBtnRect();
             boolean backHover = backBtn.contains(mouseX, mouseY);
             GZTheme.drawButton(extractor, font, backBtn, "< Lista", false, backHover, TypographyScale.SMALL.getScale());
-            currY += 14;
         }
+
+        // Enable scissor clipping for scrollable detail content
+        extractor.enableScissor(contentArea.x(), contentArea.y(), contentArea.right(), contentArea.bottom());
+
+        int currY = contentArea.y() + 2 - detailScrollOffset;
+        int maxW = contentArea.width() - (pad * 2);
 
         // 1. Header: Step Title & State Badge
         String badgeLabel = getStateBadgeLabel(state);
         int badgeColor = getStepColor(state);
         int badgeW = TextUtil.scaledWidth(font, badgeLabel, TypographyScale.META.getScale()) + 8;
-        int badgeX = detailRect.right() - badgeW - pad;
+        int badgeX = contentArea.right() - badgeW - pad;
 
-        int availTitleW = badgeX - (detailRect.x() + pad) - 6;
-        TextUtil.drawScaledEllipsizedText(extractor, font, step.title(), detailRect.x() + pad, currY,
+        int availTitleW = badgeX - (contentArea.x() + pad) - 4;
+        TextUtil.drawScaledEllipsizedText(extractor, font, step.title(), contentArea.x() + pad, currY,
                 availTitleW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
 
         GZTheme.drawBadge(extractor, font, badgeX, currY, badgeLabel, badgeColor, badgeColor);
         currY += 14;
 
-        // 2. Summary
-        if (step.summary() != null && !step.summary().isBlank()) {
-            String summary = engine.resolveTokens(step.summary());
-            TextUtil.drawScaledEllipsizedText(extractor, font, summary, detailRect.x() + pad, currY,
-                    detailRect.width() - (pad * 2), TypographyScale.BODY.getScale(), GZTheme.COLOR_MINT, false);
+        // Optional step tag
+        if (step.optional()) {
+            GZTheme.drawBadge(extractor, font, contentArea.x() + pad, currY, "VALFRITT BONUSSTEG", GZTheme.COLOR_MINT, 0x4010B981);
             currY += 11;
         }
 
-        // Description
+        // 2. Summary (Wrapped)
+        if (step.summary() != null && !step.summary().isBlank()) {
+            String summary = engine.resolveTokens(step.summary());
+            int h = TextUtil.drawScaledWrappedText(extractor, font, summary, contentArea.x() + pad, currY,
+                    maxW, TypographyScale.BODY.getScale(), 5, 1, GZTheme.COLOR_MINT, false);
+            currY += h + 4;
+        }
+
+        // Description (Wrapped)
         String desc = engine.resolveTokens(step.description());
-        int descW = detailRect.width() - (pad * 2);
-        TextUtil.drawScaledEllipsizedText(extractor, font, desc, detailRect.x() + pad, currY,
-                descW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-        currY += 12;
+        int descH = TextUtil.drawScaledWrappedText(extractor, font, desc, contentArea.x() + pad, currY,
+                maxW, TypographyScale.SMALL.getScale(), 10, 1, GZTheme.COLOR_TEXT_SECONDARY, false);
+        currY += descH + 5;
 
         // Divider
-        extractor.fill(detailRect.x() + pad, currY, detailRect.right() - pad, currY + 1, GZTheme.COLOR_BORDER_SUBTLE);
+        extractor.fill(contentArea.x() + pad, currY, contentArea.right() - pad, currY + 1, GZTheme.COLOR_BORDER_SUBTLE);
         currY += 4;
 
-        // 3. Why / Rationale
+        // 3. Why / Rationale (Wrapped)
         if (step.why() != null && !step.why().isBlank()) {
-            TextUtil.drawScaledText(extractor, font, "Varför?", detailRect.x() + pad, currY,
+            TextUtil.drawScaledText(extractor, font, "Varför?", contentArea.x() + pad, currY,
                     TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, true);
             currY += 8;
             String whyText = engine.resolveTokens(step.why());
-            TextUtil.drawScaledEllipsizedText(extractor, font, whyText, detailRect.x() + pad, currY,
-                    detailRect.width() - (pad * 2), TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-            currY += 11;
+            int whyH = TextUtil.drawScaledWrappedText(extractor, font, whyText, contentArea.x() + pad, currY,
+                    maxW, TypographyScale.SMALL.getScale(), 5, 1, GZTheme.COLOR_TEXT_MUTED, false);
+            currY += whyH + 5;
         }
 
-        // 4. Live Condition / Inventory Requirements Box
+        // 4. Live Condition / Inventory Requirements Box (Live Counts)
         if (step.conditions() != null && !step.conditions().isEmpty()) {
             for (GuideCondition cond : step.conditions()) {
                 if (cond.type() != GuideConditionType.MANUAL) {
-                    UiRect condBox = new UiRect(detailRect.x() + pad, currY, detailRect.width() - (pad * 2), 22);
+                    UiRect condBox = new UiRect(contentArea.x() + pad, currY, maxW, 22);
                     GZTheme.drawCard(extractor, condBox, GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
 
-                    GuidePlayerSnapshot snapshot = engine.getLastSnapshot();
-                    boolean isMet = (state == GuideStepState.COMPLETED_AUTO || state == GuideStepState.SATISFIED_BY_LATER_PROGRESS);
-                    if (!isMet && snapshot != null) {
-                        isMet = GuideConditionEvaluator.evaluate(cond, snapshot).satisfied();
-                    }
+                    GuideConditionResult res = (snapshot != null)
+                            ? GuideConditionEvaluator.evaluate(cond, snapshot)
+                            : GuideConditionResult.notMet();
+                    boolean isMet = (state == GuideStepState.COMPLETED_AUTO || state == GuideStepState.SATISFIED_BY_LATER_PROGRESS) || res.satisfied();
 
                     String reqLabel = getConditionRequirementLabel(cond);
-                    String statusLabel = isMet ? "Uppfyllt" : "Ej uppfyllt";
-                    int condDotColor = isMet ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_STATUS_YELLOW;
+                    String statusLabel;
+                    if (res.requiredCount() > 0) {
+                        statusLabel = res.currentCount() + " / " + res.requiredCount();
+                    } else {
+                        statusLabel = isMet ? "Uppfyllt" : "Ej uppfyllt";
+                    }
+                    int condDotColor = isMet ? GZTheme.COLOR_STATUS_GREEN : (res.currentCount() > 0 ? GZTheme.COLOR_STATUS_YELLOW : GZTheme.COLOR_STATUS_GREY);
 
                     TextUtil.drawScaledText(extractor, font, "Krav i ryggsäck:", condBox.x() + 4, condBox.y() + 2,
                             TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
                     TextUtil.drawScaledEllipsizedText(extractor, font, reqLabel, condBox.x() + 4, condBox.y() + 10,
-                            condBox.width() - 50, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
+                            condBox.width() - 52, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
 
                     GZTheme.drawStatusDot(extractor, condBox.right() - 44, condBox.y() + 7, condDotColor);
                     TextUtil.drawScaledRightAlignedText(extractor, font, statusLabel, condBox.right() - 4, condBox.y() + 5,
-                            36, TypographyScale.META.getScale(), condDotColor, false);
+                            38, TypographyScale.META.getScale(), isMet ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_TEXT_PRIMARY, false);
 
                     currY += 25;
                 }
             }
         }
 
-        // 5. Tip Box (if exists)
+        // 5. Tip Box (Wrapped)
         if (step.tip() != null && !step.tip().isBlank()) {
-            int tipH = 15;
-            UiRect tipBox = new UiRect(detailRect.x() + pad, currY, detailRect.width() - (pad * 2), tipH);
-            GZTheme.drawCard(extractor, tipBox, 0x3310B981, GZTheme.COLOR_BORDER_EMERALD);
             String tipText = "Tips: " + engine.resolveTokens(step.tip());
-            TextUtil.drawScaledEllipsizedText(extractor, font, tipText, tipBox.x() + 4, tipBox.y() + 3,
-                    tipBox.width() - 8, TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, false);
-            currY += 18;
+            int tipH = TextUtil.measureWrappedHeight(font, tipText, maxW - 8, TypographyScale.SMALL.getScale(), 1) + 6;
+            UiRect tipBox = new UiRect(contentArea.x() + pad, currY, maxW, tipH);
+            GZTheme.drawCard(extractor, tipBox, 0x3310B981, GZTheme.COLOR_BORDER_EMERALD);
+            TextUtil.drawScaledWrappedText(extractor, font, tipText, tipBox.x() + 4, tipBox.y() + 3,
+                    maxW - 8, TypographyScale.SMALL.getScale(), 6, 1, GZTheme.COLOR_MINT, false);
+            currY += tipH + 4;
         }
 
-        // 6. Action Buttons at Bottom
-        UiRect markBtn = layout.markDoneBtnRect();
-        UiRect resetBtn = layout.resetBtnRect();
+        // 6. Warning Box (Wrapped)
+        if (step.warning() != null && !step.warning().isBlank()) {
+            String warnText = "Obs: " + engine.resolveTokens(step.warning());
+            int warnH = TextUtil.measureWrappedHeight(font, warnText, maxW - 8, TypographyScale.SMALL.getScale(), 1) + 6;
+            UiRect warnBox = new UiRect(contentArea.x() + pad, currY, maxW, warnH);
+            GZTheme.drawCard(extractor, warnBox, 0x33EF4444, 0x88EF4444);
+            TextUtil.drawScaledWrappedText(extractor, font, warnText, warnBox.x() + 4, warnBox.y() + 3,
+                    maxW - 8, TypographyScale.SMALL.getScale(), 6, 1, 0xFFFCA5A5, false);
+            currY += warnH + 4;
+        }
 
+        // 7. Real Guide Completion Banner
+        if (engine.isRequiredGuideComplete(context)) {
+            int compH = 22;
+            UiRect compBox = new UiRect(contentArea.x() + pad, currY, maxW, compH);
+            GZTheme.drawCard(extractor, compBox, 0x4010B981, GZTheme.COLOR_STATUS_GREEN);
+            TextUtil.drawScaledText(extractor, font, "NYBÖRJARGUIDEN KLAR", compBox.x() + 4, compBox.y() + 2,
+                    TypographyScale.META.getScale(), GZTheme.COLOR_STATUS_GREEN, true);
+            TextUtil.drawScaledEllipsizedText(extractor, font, "Du kan grunderna: ✓ verktyg ✓ mat ✓ skydd ✓ gruva ✓ järn",
+                    compBox.x() + 4, compBox.y() + 10, maxW - 8, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
+            currY += compH + 4;
+        }
+
+        extractor.disableScissor();
+
+        // 8. Action Buttons at Bottom (Pinned)
         boolean isCompleted = (state == GuideStepState.COMPLETED_AUTO || state == GuideStepState.COMPLETED_MANUAL || state == GuideStepState.SATISFIED_BY_LATER_PROGRESS);
 
         if (state == GuideStepState.COMPLETED_MANUAL) {
@@ -441,11 +556,13 @@ public class GuideTabComponent {
             }
         }
 
-        // Navigator Step Clicks
-        for (StepRowHit hit : stepHitTargets) {
-            if (hit.rect.contains(mouseX, mouseY)) {
-                selectStep(hit.stepId);
-                return true;
+        // Navigator Step Clicks (Clamped strictly to visible left navigator viewport)
+        if (layout.leftNavRect().contains(mouseX, mouseY)) {
+            for (StepRowHit hit : stepHitTargets) {
+                if (hit.rect.contains(mouseX, mouseY)) {
+                    selectStep(hit.stepId);
+                    return true;
+                }
             }
         }
 
@@ -482,14 +599,37 @@ public class GuideTabComponent {
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (layout != null && layout.leftNavRect().contains(mouseX, mouseY)) {
-            CompanionSession session = CompanionSession.getInstance();
-            GuideEngine engine = session.getGuideEngine();
-            GuideDefinition guide = engine != null ? engine.getActiveGuide() : null;
+        if (layout == null) return false;
+        CompanionSession session = CompanionSession.getInstance();
+        GuideEngine engine = session.getGuideEngine();
+        GuideDefinition guide = engine != null ? engine.getActiveGuide() : null;
+
+        // Left Navigator Scrolling
+        if (layout.leftNavRect().contains(mouseX, mouseY)) {
             int maxScroll = calculateMaxScroll(layout.leftNavRect(), engine, guide);
             this.scrollOffset = Math.max(0, Math.min(scrollOffset - (int) (scrollY * 14), maxScroll));
             return true;
         }
+
+        // Right Detail Pane Scrolling
+        if (layout.detailRect().contains(mouseX, mouseY) && engine != null && selectedStepId != null) {
+            GuideStep step = engine.getStep(selectedStepId);
+            if (step != null) {
+                UiRect markBtn = layout.markDoneBtnRect();
+                int contentTop = layout.detailRect().y() + (layout.isCompact() ? 16 : 4);
+                int contentBottom = markBtn.y() - 3;
+                int contentH = Math.max(1, contentBottom - contentTop);
+                UiRect contentArea = new UiRect(layout.detailRect().x() + 1, contentTop, layout.detailRect().width() - 2, contentH);
+
+                Font font = Minecraft.getInstance().font;
+                GuideContext context = session.getCurrentGuideContext();
+                GuidePlayerSnapshot snapshot = engine.getLastSnapshot();
+                int maxDetailScroll = calculateMaxDetailScroll(font, contentArea, step, engine, context, snapshot);
+                this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset - (int) (scrollY * 14), maxDetailScroll));
+                return true;
+            }
+        }
+
         return false;
     }
 }

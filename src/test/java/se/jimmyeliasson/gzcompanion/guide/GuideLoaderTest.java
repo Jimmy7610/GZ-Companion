@@ -61,4 +61,94 @@ class GuideLoaderTest {
         assertTrue(result.guides().isEmpty());
         assertFalse(result.errors().isEmpty());
     }
+
+    @Test
+    @DisplayName("Should reject unsupported future manifest schema version (> 1)")
+    void testRejectFutureManifestSchema() {
+        GuideLoader loader = new GuideLoader();
+        com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+        json.addProperty("schemaVersion", 999);
+        json.addProperty("contentVersion", "2026.09.09.1");
+        json.addProperty("locale", "sv-SE");
+
+        java.util.List<String> warnings = new java.util.ArrayList<>();
+        java.util.List<String> errors = new java.util.ArrayList<>();
+        GuideManifest manifest = loader.parseManifest(json, warnings, errors);
+
+        assertNull(manifest);
+        assertFalse(errors.isEmpty());
+        assertTrue(errors.get(0).contains("schemaVersion 999"));
+    }
+
+    @Test
+    @DisplayName("Should reject manifest schema version <= 0 or missing")
+    void testRejectInvalidManifestSchema() {
+        GuideLoader loader = new GuideLoader();
+        com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+        json.addProperty("schemaVersion", 0);
+
+        java.util.List<String> warnings = new java.util.ArrayList<>();
+        java.util.List<String> errors = new java.util.ArrayList<>();
+        GuideManifest manifest = loader.parseManifest(json, warnings, errors);
+
+        assertNull(manifest);
+        assertFalse(errors.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Should reject unsupported future guide schema version (> 1)")
+    void testRejectFutureGuideSchema() {
+        GuideLoader loader = new GuideLoader();
+        com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+        json.addProperty("schemaVersion", 999);
+        json.addProperty("id", "future-guide");
+
+        java.util.List<String> warnings = new java.util.ArrayList<>();
+        java.util.List<String> errors = new java.util.ArrayList<>();
+        GuideDefinition guide = loader.parseGuide(json, null, warnings, errors);
+
+        assertNull(guide);
+        assertFalse(errors.isEmpty());
+        assertTrue(errors.get(0).contains("schemaVersion 999"));
+    }
+
+    @Test
+    @DisplayName("Should reject unknown condition types without converting to MANUAL")
+    void testRejectUnknownConditionType() {
+        GuideLoader loader = new GuideLoader();
+        com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+        json.addProperty("schemaVersion", 1);
+        json.addProperty("id", "test-guide");
+        json.addProperty("title", "Test Guide");
+
+        com.google.gson.JsonArray chapters = new com.google.gson.JsonArray();
+        com.google.gson.JsonObject ch = new com.google.gson.JsonObject();
+        ch.addProperty("id", "ch1");
+        ch.addProperty("title", "Chapter 1");
+        chapters.add(ch);
+        json.add("chapters", chapters);
+
+        com.google.gson.JsonArray steps = new com.google.gson.JsonArray();
+        com.google.gson.JsonObject step = new com.google.gson.JsonObject();
+        step.addProperty("id", "step_typo");
+        step.addProperty("chapterId", "ch1");
+        step.addProperty("title", "Step Typo");
+
+        com.google.gson.JsonArray conditions = new com.google.gson.JsonArray();
+        com.google.gson.JsonObject cond = new com.google.gson.JsonObject();
+        cond.addProperty("type", "HAS_ITME"); // Typo
+        conditions.add(cond);
+        step.add("conditions", conditions);
+        steps.add(step);
+        json.add("steps", steps);
+
+        java.util.List<String> warnings = new java.util.ArrayList<>();
+        java.util.List<String> errors = new java.util.ArrayList<>();
+        GuideDefinition guide = loader.parseGuide(json, null, warnings, errors);
+
+        assertNotNull(guide);
+        assertTrue(guide.steps().isEmpty(), "Step with invalid condition type must not be loaded");
+        assertFalse(errors.isEmpty(), "Error must be recorded for unknown condition type");
+        assertTrue(errors.stream().anyMatch(e -> e.contains("HAS_ITME")));
+    }
 }

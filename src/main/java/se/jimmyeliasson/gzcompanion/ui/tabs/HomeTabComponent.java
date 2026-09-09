@@ -115,18 +115,45 @@ public class HomeTabComponent {
 
         GuideEngine engine = session.getGuideEngine();
         GuideContext context = session.getCurrentGuideContext();
+        boolean isGuideComplete = engine != null && engine.isRequiredGuideComplete(context);
         GuideStep nextStep = engine != null ? engine.getActiveOrNextStep(context) : null;
 
-        String objHeader = HomeCopy.OBJECTIVE_HEADER;
-        String objTitle = nextStep != null ? nextStep.title() : "Alla uppgifter klara!";
-        String objDesc = nextStep != null ? engine.resolveTokens(nextStep.summary()) : "Du har slutfört hela nybörjarguiden i Minecraft.";
-        String chk1 = nextStep != null && nextStep.why() != null ? engine.resolveTokens(nextStep.why()) : HomeCopy.CHECK_ITEM_1;
-        String chk2 = nextStep != null && nextStep.tip() != null ? engine.resolveTokens("Tips: " + nextStep.tip()) : HomeCopy.CHECK_ITEM_2;
-        String chk3 = nextStep != null && !nextStep.conditions().isEmpty() && nextStep.conditions().get(0).description() != null
-                ? nextStep.conditions().get(0).description() : HomeCopy.CHECK_ITEM_3;
+        String objHeader;
+        String objTitle;
+        String objDesc;
+        String chk1;
+        String chk2;
+        String chk3;
 
-        GZTheme.drawIcon(extractor, IconId.OBJECTIVE, objectiveRect.x() + oPad, objectiveRect.y() + 5, 9, GZTheme.COLOR_MINT);
-        TextUtil.drawScaledText(extractor, font, objHeader, objectiveRect.x() + oPad + 13, objectiveRect.y() + 5, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
+        if (isGuideComplete) {
+            int optLeft = engine.getIncompleteOptionalStepsCount(context);
+            objHeader = "NYBÖRJARGUIDEN KLAR";
+            objTitle = "Grunderna i Minecraft avklarade";
+            objDesc = "Du behärskar nu de viktigaste grunderna:";
+            chk1 = "✓ Verktyg, vapen, mat & skydd";
+            chk2 = "✓ Gruvstart, sten- och järnåldern";
+            chk3 = optLeft > 0 ? "Valfria bonussteg kvar: " + optLeft + " st (t.ex. säng)" : "✓ Alla steg i nybörjarguiden slutförda";
+        } else if (nextStep != null) {
+            objHeader = HomeCopy.OBJECTIVE_HEADER;
+            objTitle = nextStep.title();
+            objDesc = engine.resolveTokens(nextStep.summary());
+            chk1 = nextStep.why() != null ? engine.resolveTokens(nextStep.why()) : HomeCopy.CHECK_ITEM_1;
+            chk2 = nextStep.tip() != null ? engine.resolveTokens("Tips: " + nextStep.tip()) : HomeCopy.CHECK_ITEM_2;
+            chk3 = !nextStep.conditions().isEmpty() && nextStep.conditions().get(0).description() != null
+                    ? nextStep.conditions().get(0).description() : HomeCopy.CHECK_ITEM_3;
+        } else {
+            objHeader = HomeCopy.OBJECTIVE_HEADER;
+            objTitle = "Öppna Nybörjarguiden";
+            objDesc = "Lär dig grunderna i Minecraft steg för steg.";
+            chk1 = HomeCopy.CHECK_ITEM_1;
+            chk2 = HomeCopy.CHECK_ITEM_2;
+            chk3 = HomeCopy.CHECK_ITEM_3;
+        }
+
+        GZTheme.drawIcon(extractor, IconId.OBJECTIVE, objectiveRect.x() + oPad, objectiveRect.y() + 5, 9,
+                isGuideComplete ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_MINT);
+        TextUtil.drawScaledText(extractor, font, objHeader, objectiveRect.x() + oPad + 13, objectiveRect.y() + 5,
+                TypographyScale.HEADING.getScale(), isGuideComplete ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_MINT, true);
         TextUtil.drawScaledEllipsizedText(extractor, font, objTitle, objectiveRect.x() + oPad, objectiveRect.y() + 15, maxObjW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
         TextUtil.drawScaledEllipsizedText(extractor, font, objDesc, objectiveRect.x() + oPad, objectiveRect.y() + 24, maxObjW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
 

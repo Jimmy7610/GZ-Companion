@@ -187,6 +187,98 @@ public final class GuideValidator {
         }
     }
 
+    public static ValidationResult validateRegistry(GuideDefinition guide) {
+        List<String> errors = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+
+        if (guide == null) {
+            errors.add("Guide definition is null");
+            return ValidationResult.failure(errors, warnings);
+        }
+
+        for (GuideStep step : guide.steps()) {
+            if (step.conditions() != null) {
+                for (GuideCondition cond : step.conditions()) {
+                    validateConditionRegistry(step.id(), cond, errors, warnings);
+                }
+            }
+        }
+
+        if (errors.isEmpty()) {
+            return ValidationResult.success(warnings);
+        } else {
+            return ValidationResult.failure(errors, warnings);
+        }
+    }
+
+    private static void validateConditionRegistry(String stepId, GuideCondition condition, List<String> errors, List<String> warnings) {
+        if (condition == null) return;
+
+        if (condition.itemId() != null) {
+            validateItemId(stepId, condition.itemId(), errors, warnings);
+        }
+
+        if (condition.itemIds() != null) {
+            for (String itemId : condition.itemIds()) {
+                validateItemId(stepId, itemId, errors, warnings);
+            }
+        }
+
+        if (condition.tag() != null) {
+            validateTagId(stepId, condition.tag(), errors, warnings);
+        }
+
+        if (condition.subConditions() != null) {
+            for (GuideCondition sub : condition.subConditions()) {
+                validateConditionRegistry(stepId, sub, errors, warnings);
+            }
+        }
+    }
+
+    private static void validateItemId(String stepId, String itemId, List<String> errors, List<String> warnings) {
+        if (!isValidIdentifier(itemId)) {
+            errors.add("Step '" + stepId + "' uses invalid item ID format: '" + itemId + "'");
+            return;
+        }
+
+        try {
+            net.minecraft.resources.Identifier loc = net.minecraft.resources.Identifier.tryParse(itemId);
+            if (loc == null) {
+                errors.add("Step '" + stepId + "' item ID is unparseable: '" + itemId + "'");
+                return;
+            }
+
+            if (net.minecraft.core.registries.BuiltInRegistries.ITEM != null) {
+                if (!net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(loc)) {
+                    errors.add("Step '" + stepId + "' references unknown item in BuiltInRegistries.ITEM: '" + itemId + "'");
+                }
+            }
+        } catch (Throwable ignored) {
+            // Standalone unit test environment without loaded registries
+        }
+    }
+
+    private static void validateTagId(String stepId, String tag, List<String> errors, List<String> warnings) {
+        if (!isValidIdentifier(tag)) {
+            errors.add("Step '" + stepId + "' uses invalid item tag format: '" + tag + "'");
+            return;
+        }
+
+        try {
+            net.minecraft.resources.Identifier loc = net.minecraft.resources.Identifier.tryParse(tag);
+            if (loc == null) {
+                errors.add("Step '" + stepId + "' tag is unparseable: '" + tag + "'");
+            }
+        } catch (Throwable ignored) {
+            // Standalone unit test environment without loaded registries
+        }
+    }
+
+    public static boolean isValidIdentifier(String id) {
+        if (id == null || id.isBlank()) return false;
+        return id.matches("^[a-z0-9_.-]+:[a-z0-9_/.-]+$");
+    }
+
     private static void detectCycles(Map<String, GuideStep> stepMap, List<String> errors) {
         Map<String, Integer> state = new HashMap<>();
         for (String stepId : stepMap.keySet()) {

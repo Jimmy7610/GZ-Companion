@@ -23,12 +23,17 @@ public final class GuideContextResolver {
 
     /**
      * Resolves a normalized multiplayer server context identifier.
+     * Normalizes case and strips default Minecraft port :25565.
      */
     public static String resolveServerContext(String serverAddress) {
         if (serverAddress == null || serverAddress.isBlank()) {
             return "server:unknown";
         }
-        return "server:" + serverAddress.trim().toLowerCase();
+        String normalized = serverAddress.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.endsWith(":25565")) {
+            normalized = normalized.substring(0, normalized.length() - 6);
+        }
+        return "server:" + normalized;
     }
 
     /**

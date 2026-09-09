@@ -70,4 +70,23 @@ class GuideLayoutTest {
         int maxScrollShort = se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent.calculateMaxScroll(shortNav, engine, guide);
         assertTrue(maxScrollShort > 0, "Max scroll should be positive when content exceeds visible height");
     }
+
+    @Test
+    @DisplayName("Should reject clicks outside visible navigator viewport even if row target rect extends beyond")
+    void testNavigatorHitboxClamping() {
+        UiRect navRect = new UiRect(50, 40, 150, 100);
+        // A row positioned partially outside the top or bottom of navRect
+        UiRect topClippedRow = new UiRect(52, 35, 146, 14); // y=35 is above navRect.y=40
+        UiRect bottomClippedRow = new UiRect(52, 135, 146, 14); // bottom=149 is below navRect.bottom=140
+
+        // Click coordinates located outside the navigator viewport
+        int clickAboveNavY = 38; // Inside topClippedRow, but OUTSIDE navRect
+        int clickBelowNavY = 142; // Inside bottomClippedRow, but OUTSIDE navRect
+
+        assertTrue(topClippedRow.contains(60, clickAboveNavY));
+        assertFalse(navRect.contains(60, clickAboveNavY), "Click above navRect must be outside navigator viewport");
+
+        assertTrue(bottomClippedRow.contains(60, clickBelowNavY));
+        assertFalse(navRect.contains(60, clickBelowNavY), "Click below navRect must be outside navigator viewport");
+    }
 }

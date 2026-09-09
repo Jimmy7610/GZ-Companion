@@ -68,6 +68,32 @@ public class GuideEngine {
                     stepChapterIndex.put(step.id(), step.chapterId());
                 }
             }
+
+            // Check Minecraft version compatibility against manifest tested versions
+            String currentMcVersion = se.jimmyeliasson.gzcompanion.core.CompanionConstants.TARGET_MINECRAFT_VERSION;
+            if (manifest != null && manifest.testedMinecraftVersions() != null && !manifest.testedMinecraftVersions().isEmpty()) {
+                if (!manifest.testedMinecraftVersions().contains(currentMcVersion)) {
+                    this.loadStatus = GuideLoadStatus.INCOMPATIBLE;
+                    LOGGER.warn("Guide manifest tested versions {} do not contain current Minecraft version {}",
+                            manifest.testedMinecraftVersions(), currentMcVersion);
+                    this.progressData = progressStore.load();
+                    return;
+                }
+            }
+
+            // Runtime registry validation of item IDs and tags
+            for (GuideDefinition guide : result.guides()) {
+                GuideValidator.ValidationResult regResult = GuideValidator.validateRegistry(guide);
+                if (!regResult.isValid()) {
+                    this.loadStatus = GuideLoadStatus.ERROR;
+                    for (String err : regResult.errors()) {
+                        LOGGER.error("Guide registry validation error: {}", err);
+                    }
+                    this.progressData = progressStore.load();
+                    return;
+                }
+            }
+
             this.loadStatus = GuideLoadStatus.LOADED;
         } else if (!result.errors().isEmpty()) {
             this.loadStatus = GuideLoadStatus.ERROR;
@@ -100,38 +126,52 @@ public class GuideEngine {
         return loadStatus;
     }
 
-    public void setSnapshotProvider(GuideSnapshotProvider provider) {
-        this.snapshotProvider = provider;
-    }
-
-    public GuideSnapshotProvider getSnapshotProvider() {
-        return snapshotProvider;
-    }
-
     public GuideManifest getManifest() {
         return manifest;
-    }
-
-    public List<GuideDefinition> getGuides() {
-        return new ArrayList<>(guides.values());
     }
 
     public GuideDefinition getActiveGuide() {
         return guides.get(activeGuideId);
     }
 
-    public void setActiveGuideId(String guideId) {
+    public void setActiveGuide(String guideId) {
         if (guides.containsKey(guideId)) {
             this.activeGuideId = guideId;
         }
     }
 
-    public GuideStep getStep(String stepId) {
-        return stepIndex.get(stepId);
+    public GuideSnapshotProvider getSnapshotProvider() {
+        return snapshotProvider;
+    }
+
+    public void setSnapshotProvider(GuideSnapshotProvider provider) {
+        this.snapshotProvider = provider;
     }
 
     public GuidePlayerSnapshot getLastSnapshot() {
         return lastSnapshot;
+    }
+
+    public List<GuideChapter> getChapters() {
+        GuideDefinition guide = getActiveGuide();
+        return guide != null ? guide.chapters() : Collections.emptyList();
+    }
+
+    public List<GuideStep> getStepsForChapter(String chapterId) {
+        GuideDefinition guide = getActiveGuide();
+        if (guide == null || chapterId == null) return Collections.emptyList();
+        List<GuideStep> result = new ArrayList<>();
+        for (GuideStep s : guide.steps()) {
+            if (chapterId.equals(s.chapterId())) {
+                result.add(s);
+            }
+        }
+        return result;
+    }
+
+    public GuideStep getStep(String stepId) {
+        if (stepId == null) return null;
+        return stepIndex.get(stepId);
     }
 
     public boolean isStepCompleted(GuideContext context, String stepId) {
@@ -145,27 +185,32 @@ public class GuideEngine {
     }
 
     /**
-     * Evaluates progression against current player snapshot.
-     * Skips evaluation if snapshot fingerprint and context have not changed.
+     * Periodic progression evaluation.
+     * Evaluates automatic inventory conditions and applies transitive progression inference (fixed-point).
+     *
+     * @return true if progression state changed and was saved, false otherwise.
      */
-    public synchronized boolean evaluate(GuideContext context) {
+    public boolean evaluate(GuideContext context) {
         return evaluate(context, false);
     }
 
     /**
-     * Evaluates progression against player snapshot, with option to force evaluation.
+     * Periodic or forced progression evaluation.
      */
-    public synchronized boolean evaluate(GuideContext context, boolean force) {
-        if (context == null || loadStatus != GuideLoadStatus.LOADED) {
+    public boolean evaluate(GuideContext context, boolean force) {
+        if (context == null || snapshotProvider == null) {
             return false;
         }
 
-        GuidePlayerSnapshot snapshot = snapshotProvider != null ? snapshotProvider.createSnapshot() : GuidePlayerSnapshot.EMPTY;
+        GuidePlayerSnapshot snapshot = snapshotProvider.createSnapshot();
+        if (snapshot == null) {
+            snapshot = GuidePlayerSnapshot.EMPTY;
+        }
         this.lastSnapshot = snapshot;
 
         String ctxKey = context.getStorageKey();
         String currentFingerprint = snapshot.inventoryFingerprint();
-        int currentKeysHash = snapshot.keyTokens().hashCode();
+        int currentKeysHash = snapshot.keyTokens() != null ? snapshot.keyTokens().hashCode() : 0;
 
         // Optimization: Skip evaluation if neither context nor inventory/keys changed
         if (!force
@@ -220,26 +265,34 @@ public class GuideEngine {
             }
         }
 
-        // Step 2: Progression inference (supersededBy)
-        for (GuideStep step : guide.steps()) {
-            if (completed.containsKey(step.id())) {
-                continue;
-            }
+        // Step 2: Transitive Progression inference (supersededBy) via fixed-point iteration
+        boolean inferenceChanged;
+        int maxIterations = guide.steps().size() + 1;
+        int iterations = 0;
+        do {
+            inferenceChanged = false;
+            iterations++;
+            for (GuideStep step : guide.steps()) {
+                if (completed.containsKey(step.id())) {
+                    continue;
+                }
 
-            if (step.supersededBy() != null && !step.supersededBy().isEmpty()) {
-                for (String laterStepId : step.supersededBy()) {
-                    if (completed.containsKey(laterStepId)) {
-                        completed.put(step.id(), new StepCompletionRecord(
-                                step.id(),
-                                GuideCompletionSource.PROGRESSION_INFERENCE,
-                                System.currentTimeMillis()
-                        ));
-                        changed = true;
-                        break;
+                if (step.supersededBy() != null && !step.supersededBy().isEmpty()) {
+                    for (String laterStepId : step.supersededBy()) {
+                        if (completed.containsKey(laterStepId)) {
+                            completed.put(step.id(), new StepCompletionRecord(
+                                    step.id(),
+                                    GuideCompletionSource.PROGRESSION_INFERENCE,
+                                    System.currentTimeMillis()
+                            ));
+                            inferenceChanged = true;
+                            changed = true;
+                            break;
+                        }
                     }
                 }
             }
-        }
+        } while (inferenceChanged && iterations < maxIterations);
 
         if (changed) {
             Map<String, ContextProgress> updatedContexts = new HashMap<>(progressData.contexts());
@@ -288,14 +341,27 @@ public class GuideEngine {
     }
 
     /**
-     * Finds the next actionable step (first incomplete required step whose prerequisites are met,
-     * or first available optional step if all required steps are completed).
+     * Checks if all required (non-optional) steps in the active guide are completed.
      */
-    public GuideStep getActiveOrNextStep(GuideContext context) {
+    public boolean isRequiredGuideComplete(GuideContext context) {
+        GuideDefinition guide = getActiveGuide();
+        if (guide == null || guide.steps().isEmpty()) return false;
+        for (GuideStep step : guide.steps()) {
+            if (!step.optional() && !isStepCompleted(context, step.id())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns the next incomplete required step whose prerequisites are met,
+     * or null if all required steps are complete.
+     */
+    public GuideStep getNextRequiredStep(GuideContext context) {
         GuideDefinition guide = getActiveGuide();
         if (guide == null) return null;
 
-        // 1. Search for first incomplete REQUIRED step
         for (GuideStep step : guide.steps()) {
             if (step.optional()) continue;
             if (isStepCompleted(context, step.id())) continue;
@@ -304,8 +370,17 @@ public class GuideEngine {
                 return step;
             }
         }
+        return null;
+    }
 
-        // 2. Fallback: Search for any incomplete OPTIONAL step
+    /**
+     * Returns the next incomplete optional step whose prerequisites are met,
+     * or null if no optional steps are available.
+     */
+    public GuideStep getNextOptionalStep(GuideContext context) {
+        GuideDefinition guide = getActiveGuide();
+        if (guide == null) return null;
+
         for (GuideStep step : guide.steps()) {
             if (!step.optional()) continue;
             if (isStepCompleted(context, step.id())) continue;
@@ -314,8 +389,30 @@ public class GuideEngine {
                 return step;
             }
         }
-
         return null;
+    }
+
+    /**
+     * Returns the number of incomplete optional steps remaining in the active guide.
+     */
+    public int getIncompleteOptionalStepsCount(GuideContext context) {
+        GuideDefinition guide = getActiveGuide();
+        if (guide == null) return 0;
+        int count = 0;
+        for (GuideStep step : guide.steps()) {
+            if (step.optional() && !isStepCompleted(context, step.id())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Finds the next actionable step (first incomplete REQUIRED step whose prerequisites are met).
+     * Returns null if all required steps are completed.
+     */
+    public GuideStep getActiveOrNextStep(GuideContext context) {
+        return getNextRequiredStep(context);
     }
 
     private boolean arePrerequisitesMet(GuideContext context, GuideStep step) {
@@ -462,19 +559,6 @@ public class GuideEngine {
 
         int percent = totalRequired > 0 ? (completedRequired * 100) / totalRequired : 0;
         return new ProgressSummary(completedRequired, totalRequired, percent, completedOptional, totalOptional);
-    }
-
-    public List<GuideStep> getStepsForChapter(String chapterId) {
-        GuideDefinition guide = getActiveGuide();
-        if (guide == null || chapterId == null) return Collections.emptyList();
-
-        List<GuideStep> chapterSteps = new ArrayList<>();
-        for (GuideStep step : guide.steps()) {
-            if (chapterId.equals(step.chapterId())) {
-                chapterSteps.add(step);
-            }
-        }
-        return chapterSteps;
     }
 
     /**

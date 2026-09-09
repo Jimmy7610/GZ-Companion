@@ -8,6 +8,7 @@ import se.jimmyeliasson.gzcompanion.guide.bridge.GuidePlayerSnapshot;
 import se.jimmyeliasson.gzcompanion.guide.bridge.MinecraftGuideSnapshotProvider;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideCompletionSource;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideLoadStatus;
+import se.jimmyeliasson.gzcompanion.guide.model.GuideManifest;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideStep;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideStepState;
 import se.jimmyeliasson.gzcompanion.guide.progress.GuideContext;
@@ -15,6 +16,7 @@ import se.jimmyeliasson.gzcompanion.guide.progress.JsonGuideProgressStore;
 
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -209,5 +211,83 @@ class GuideEngineTest {
 
         String defaultOffhandText = engine.resolveTokens("Tryck {key.swapOffhand} för att byta.");
         assertEquals("Tryck [F] för att byta.", defaultOffhandText);
+    }
+
+    @Test
+    @DisplayName("Should resolve transitive supersession chains (A <- B <- C) in a single evaluate() call")
+    void testTransitiveFixedPointSupersession() {
+        // craft_iron_pickaxe supersedes craft_stone_pickaxe, which in turn supersedes craft_planks/craft_crafting_table
+        // Providing iron_pickaxe snapshot must transitively satisfy the entire chain in ONE evaluate() call
+        GuidePlayerSnapshot snapshotWithIronPick = new GuidePlayerSnapshot(
+                Map.of("minecraft:iron_pickaxe", 1), Map.of(), false, "fp_iron_pick_transitive", Map.of()
+        );
+        engine.setSnapshotProvider(() -> snapshotWithIronPick);
+        boolean changed = engine.evaluate(testContext, true);
+        assertTrue(changed);
+
+        assertEquals(GuideStepState.COMPLETED_AUTO, engine.getStepState(testContext, "craft_iron_pickaxe"));
+        assertEquals(GuideStepState.SATISFIED_BY_LATER_PROGRESS, engine.getStepState(testContext, "craft_stone_pickaxe"));
+        assertEquals(GuideStepState.SATISFIED_BY_LATER_PROGRESS, engine.getStepState(testContext, "craft_wooden_pickaxe"));
+        assertEquals(GuideStepState.SATISFIED_BY_LATER_PROGRESS, engine.getStepState(testContext, "craft_crafting_table"));
+        assertEquals(GuideStepState.SATISFIED_BY_LATER_PROGRESS, engine.getStepState(testContext, "craft_planks"));
+        assertEquals(GuideStepState.SATISFIED_BY_LATER_PROGRESS, engine.getStepState(testContext, "gather_wood"));
+    }
+
+    @Test
+    @DisplayName("Should correctly distinguish required completion from optional recommendations")
+    void testRequiredVsOptionalSemantics() {
+        assertFalse(engine.isRequiredGuideComplete(testContext));
+        assertEquals("movement_controls", engine.getActiveOrNextStep(testContext).id());
+        assertEquals("movement_controls", engine.getNextRequiredStep(testContext).id());
+
+        // Complete all 21 required steps
+        for (GuideStep step : engine.getActiveGuide().steps()) {
+            if (!step.optional()) {
+                engine.markStepCompleted(testContext, step.id(), true);
+            }
+        }
+
+        assertTrue(engine.isRequiredGuideComplete(testContext), "Required guide must be complete");
+        assertNull(engine.getNextRequiredStep(testContext), "Next required step must be null when all required steps are complete");
+        assertNull(engine.getActiveOrNextStep(testContext), "Active/Next step must be null when all required steps are complete");
+
+        // Optional step craft_bed remains available and separate
+        GuideStep optStep = engine.getNextOptionalStep(testContext);
+        assertNotNull(optStep, "Optional step craft_bed must be available");
+        assertEquals("craft_bed", optStep.id());
+        assertEquals(1, engine.getIncompleteOptionalStepsCount(testContext));
+
+        // Player can still complete the optional step after required completion
+        boolean markedOpt = engine.markStepCompleted(testContext, "craft_bed", true);
+        assertTrue(markedOpt);
+        assertTrue(engine.isStepCompleted(testContext, "craft_bed"));
+        assertEquals(0, engine.getIncompleteOptionalStepsCount(testContext));
+        assertNull(engine.getNextOptionalStep(testContext));
+    }
+
+    @Test
+    @DisplayName("Should enter INCOMPATIBLE state when manifest does not support current Minecraft version")
+    void testIncompatibleMinecraftVersion() {
+        GuideLoader incompatibleLoader = new GuideLoader() {
+            @Override
+            public LoadResult loadBundled() {
+                GuideLoader realLoader = new GuideLoader();
+                LoadResult real = realLoader.loadBundled();
+                GuideManifest incompatibleManifest = new GuideManifest(
+                        real.manifest().schemaVersion(),
+                        real.manifest().contentVersion(),
+                        real.manifest().locale(),
+                        List.of("1.19.2", "1.20.1"), // Missing 26.1.2
+                        real.manifest().guides()
+                );
+                return new LoadResult(incompatibleManifest, real.guides(), real.warnings(), real.errors());
+            }
+        };
+
+        JsonGuideProgressStore store = new JsonGuideProgressStore(tempDir.resolve("incompatible-progress.json"));
+        GuideEngine incompEngine = new GuideEngine(incompatibleLoader, store, () -> GuidePlayerSnapshot.EMPTY);
+        incompEngine.initialize();
+
+        assertEquals(GuideLoadStatus.INCOMPATIBLE, incompEngine.getLoadStatus());
     }
 }

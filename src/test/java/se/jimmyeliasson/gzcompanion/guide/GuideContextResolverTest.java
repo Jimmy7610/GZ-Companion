@@ -31,13 +31,17 @@ class GuideContextResolverTest {
     }
 
     @Test
-    @DisplayName("Should normalize multiplayer server host addresses")
+    @DisplayName("Should normalize multiplayer server host addresses and strip default port 25565")
     void testMultiplayerServerContext() {
         String server1 = GuideContextResolver.resolveServerContext("PLAY.GAMEZONEMC.SE");
         String server2 = GuideContextResolver.resolveServerContext("play.gamezonemc.se ");
+        String server3 = GuideContextResolver.resolveServerContext("play.gamezonemc.se:25565");
+        String server4 = GuideContextResolver.resolveServerContext("PLAY.GAMEZONEMC.SE:25565 ");
 
         assertEquals("server:play.gamezonemc.se", server1);
         assertEquals("server:play.gamezonemc.se", server2);
+        assertEquals("server:play.gamezonemc.se", server3);
+        assertEquals("server:play.gamezonemc.se", server4);
     }
 
     @Test

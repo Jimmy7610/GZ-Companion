@@ -39,13 +39,13 @@ GZ Companion includes a modular, data-driven, client-side **Guide Engine** for M
 ```
 
 ### `minecraft-beginner-sv.json` Structure
-Contains 5 chapters and 22 verified survival steps:
+Contains 5 chapters and 22 validated beginner progression steps:
 1. **Kom igång** (`ch1_kom_igang`):
    - `movement_controls`: Rörelse och blick (MANUAL)
    - `open_inventory`: Öppna ditt inventory (MANUAL)
    - `gather_wood`: Samla träblock (`HAS_ITEM_TAG` `minecraft:logs`, count: 4)
 2. **Första verktygen** (`ch2_forsta_verktygen`):
-   - `craft_planks`: Tillverka träplankor (`HAS_ITEM_TAG` `minecraft:planks`, count: 4)
+   - `craft_planks`: Tillverka träplankor (`HAS_ITEM_TAG` `minecraft:planks`, count: 8)
    - `craft_crafting_table`: Tillverka en arbetsbänk (`HAS_ITEM` `minecraft:crafting_table`, count: 1)
    - `craft_sticks`: Gör träpinnar (`HAS_ITEM` `minecraft:stick`, count: 4)
    - `craft_wooden_pickaxe`: Gör en trähacka (`HAS_ITEM` `minecraft:wooden_pickaxe`, count: 1)
@@ -55,7 +55,7 @@ Contains 5 chapters and 22 verified survival steps:
    - `craft_stone_sword`: Tillverka ett stensvärd (`HAS_ITEM` `minecraft:stone_sword`, count: 1)
    - `gather_food`: Skaffa mat (`HAS_EDIBLE_ITEM`, count: 1)
    - `gather_wool`: Samla ull (`HAS_ITEM_TAG` `minecraft:wool`, count: 3)
-   - `craft_bed`: Tillverka en säng (`HAS_ITEM_TAG` `minecraft:beds`, count: 1)
+   - `craft_bed`: Tillverka en säng (`HAS_ITEM_TAG` `minecraft:beds`, count: 1, optional: true)
 4. **Trygg bas & förvaring** (`ch4_trygg_bas`):
    - `craft_chest`: Bygg en kista (`HAS_ITEM` `minecraft:chest`, count: 1)
    - `craft_furnace`: Tillverka en ugn (`HAS_ITEM` `minecraft:furnace`, count: 1)
@@ -105,4 +105,26 @@ Each step is dynamically evaluated into one of 6 states:
   - Single-pane responsive mode in `COMPACT` mode.
 - **Home Tab Objective Integration**:
   - The "Nästa uppgift" card in the Home tab dynamically reflects the active step from `GuideEngine`.
+  - When all required steps are complete, the card displays the dedicated "NYBÖRJARGUIDEN KLAR" state.
   - `[Öppna Guide]` and `[Vad ska jag göra?]` route directly to the active guide step.
+
+---
+
+## 6. Content Validation Tiers
+
+Guide progression and content are validated across three distinct tiers:
+
+1. **Schema Validated (Build & Load Time)**:
+   - Manifest and Guide JSON schema version checked (`SUPPORTED_SCHEMA_VERSION = 1`).
+   - Prerequisite graph acyclicity verified via cycle detection DFS.
+   - Chapter ID and step ID uniqueness enforced.
+   - Superseded-by cross-references verified.
+   - Condition types and structures validated (unknown condition types safely rejected).
+
+2. **Registry Validated (Runtime / Initialization)**:
+   - Item IDs validated against Minecraft 26.1.2 vanilla registries (`BuiltInRegistries.ITEM`).
+   - Tag identifiers validated as valid resource locations.
+   - Minecraft version compatibility verified against `testedMinecraftVersions` (sets `GuideLoadStatus.INCOMPATIBLE` if mismatched).
+
+3. **Gameplay Reviewed**:
+   - Tutorial clarity, step ordering, Swedish copy readability, and difficulty curve verified in actual Minecraft survival gameplay.

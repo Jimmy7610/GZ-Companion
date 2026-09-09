@@ -23,6 +23,8 @@ public class GuideLoader {
     private static final String DEFAULT_MANIFEST_PATH = "/assets/gzcompanion/guides/manifest.json";
     private static final String DEFAULT_GUIDES_DIR = "/assets/gzcompanion/guides/";
 
+    public static final int SUPPORTED_SCHEMA_VERSION = 1;
+
     public record LoadResult(GuideManifest manifest, List<GuideDefinition> guides, List<String> warnings, List<String> errors) {
         public boolean isSuccess() {
             return errors.isEmpty() && !guides.isEmpty();
@@ -43,7 +45,11 @@ public class GuideLoader {
             return new LoadResult(null, Collections.emptyList(), warnings, errors);
         }
 
-        GuideManifest manifest = parseManifest(manifestJson, warnings);
+        GuideManifest manifest = parseManifest(manifestJson, warnings, errors);
+        if (manifest == null || !errors.isEmpty()) {
+            return new LoadResult(manifest, Collections.emptyList(), warnings, errors);
+        }
+
         List<GuideDefinition> guides = new ArrayList<>();
 
         for (GuideHeader header : manifest.guides()) {
@@ -69,8 +75,22 @@ public class GuideLoader {
         return new LoadResult(manifest, guides, warnings, errors);
     }
 
-    public GuideManifest parseManifest(JsonObject json, List<String> warnings) {
-        int schemaVersion = json.has("schemaVersion") ? json.get("schemaVersion").getAsInt() : 1;
+    public GuideManifest parseManifest(JsonObject json, List<String> warnings, List<String> errors) {
+        if (!json.has("schemaVersion")) {
+            errors.add("Manifest saknar obligatoriskt fält 'schemaVersion'");
+            return null;
+        }
+
+        int schemaVersion = json.get("schemaVersion").getAsInt();
+        if (schemaVersion <= 0) {
+            errors.add("Ogiltig manifest schemaVersion: " + schemaVersion + " (måste vara > 0)");
+            return null;
+        }
+        if (schemaVersion > SUPPORTED_SCHEMA_VERSION) {
+            errors.add("Stöds ej: manifest schemaVersion " + schemaVersion + " (stödd version: " + SUPPORTED_SCHEMA_VERSION + ")");
+            return null;
+        }
+
         String contentVersion = getString(json, "contentVersion", "2026.09.09.1");
         String locale = getString(json, "locale", "sv-SE");
 
@@ -99,7 +119,21 @@ public class GuideLoader {
     }
 
     public GuideDefinition parseGuide(JsonObject json, GuideHeader header, List<String> warnings, List<String> errors) {
-        int schemaVersion = json.has("schemaVersion") ? json.get("schemaVersion").getAsInt() : 1;
+        if (!json.has("schemaVersion")) {
+            errors.add("Guide-fil saknar obligatoriskt fält 'schemaVersion'");
+            return null;
+        }
+
+        int schemaVersion = json.get("schemaVersion").getAsInt();
+        if (schemaVersion <= 0) {
+            errors.add("Ogiltig guide schemaVersion: " + schemaVersion + " (måste vara > 0)");
+            return null;
+        }
+        if (schemaVersion > SUPPORTED_SCHEMA_VERSION) {
+            errors.add("Stöds ej: guide schemaVersion " + schemaVersion + " (stödd version: " + SUPPORTED_SCHEMA_VERSION + ")");
+            return null;
+        }
+
         String id = getString(json, "id", header != null ? header.id() : "");
         String title = getString(json, "title", header != null ? header.title() : "");
         String desc = getString(json, "description", header != null ? header.description() : "");
@@ -121,7 +155,10 @@ public class GuideLoader {
         if (json.has("steps") && json.get("steps").isJsonArray()) {
             for (JsonElement stEl : json.getAsJsonArray("steps")) {
                 if (stEl.isJsonObject()) {
-                    steps.add(parseStep(stEl.getAsJsonObject(), steps.size() + 1, warnings));
+                    GuideStep parsedStep = parseStep(stEl.getAsJsonObject(), steps.size() + 1, warnings, errors);
+                    if (parsedStep != null) {
+                        steps.add(parsedStep);
+                    }
                 }
             }
         }
@@ -129,7 +166,7 @@ public class GuideLoader {
         return new GuideDefinition(schemaVersion, id, title, desc, chapters, steps);
     }
 
-    private GuideStep parseStep(JsonObject obj, int defaultOrder, List<String> warnings) {
+    private GuideStep parseStep(JsonObject obj, int defaultOrder, List<String> warnings, List<String> errors) {
         String id = getString(obj, "id", "");
         String chapterId = getString(obj, "chapterId", "");
         int order = obj.has("order") ? obj.get("order").getAsInt() : defaultOrder;
@@ -160,11 +197,22 @@ public class GuideLoader {
         if (obj.has("conditions") && obj.get("conditions").isJsonArray()) {
             for (JsonElement el : obj.getAsJsonArray("conditions")) {
                 if (el.isJsonObject()) {
-                    conditions.add(parseCondition(el.getAsJsonObject()));
+                    GuideCondition cond = parseCondition(el.getAsJsonObject(), errors);
+                    if (cond != null) {
+                        conditions.add(cond);
+                    }
                 }
             }
         } else if (obj.has("condition") && obj.get("condition").isJsonObject()) {
-            conditions.add(parseCondition(obj.getAsJsonObject("condition")));
+            GuideCondition cond = parseCondition(obj.getAsJsonObject("condition"), errors);
+            if (cond != null) {
+                conditions.add(cond);
+            }
+        }
+
+        if (conditions.isEmpty() && (obj.has("conditions") || obj.has("condition"))) {
+            // Specified conditions failed to parse
+            return null;
         }
 
         if (conditions.isEmpty()) {
@@ -174,13 +222,19 @@ public class GuideLoader {
         return new GuideStep(id, chapterId, order, title, summary, desc, why, tip, warning, prerequisites, optional, manualAllowed, conditions, supersededBy);
     }
 
-    private GuideCondition parseCondition(JsonObject obj) {
-        String typeStr = getString(obj, "type", "MANUAL");
+    private GuideCondition parseCondition(JsonObject obj, List<String> errors) {
+        String typeStr = getString(obj, "type", null);
+        if (typeStr == null || typeStr.isBlank()) {
+            errors.add("Villkor saknar typ (type)");
+            return null;
+        }
+
         GuideConditionType type;
         try {
             type = GuideConditionType.valueOf(typeStr.trim().toUpperCase());
         } catch (IllegalArgumentException e) {
-            type = GuideConditionType.MANUAL;
+            errors.add("Okänd eller ogiltig villkorstyp: '" + typeStr + "'");
+            return null;
         }
 
         String itemId = getString(obj, "itemId", null);
@@ -199,7 +253,10 @@ public class GuideLoader {
         if (obj.has("subConditions") && obj.get("subConditions").isJsonArray()) {
             for (JsonElement el : obj.getAsJsonArray("subConditions")) {
                 if (el.isJsonObject()) {
-                    subConditions.add(parseCondition(el.getAsJsonObject()));
+                    GuideCondition sub = parseCondition(el.getAsJsonObject(), errors);
+                    if (sub != null) {
+                        subConditions.add(sub);
+                    }
                 }
             }
         }
