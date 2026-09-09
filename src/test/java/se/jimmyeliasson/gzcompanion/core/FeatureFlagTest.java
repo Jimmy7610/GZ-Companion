@@ -72,4 +72,23 @@ class FeatureFlagTest {
         manager.setGuideStatusSupplier(() -> se.jimmyeliasson.gzcompanion.guide.model.GuideLoadStatus.INCOMPATIBLE);
         assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.GUIDE));
     }
+
+    @Test
+    @DisplayName("Should reflect dynamic ChestManagerStatus in Kistor module status, leaving other modules unaffected")
+    void testDynamicChestManagerStatus() {
+        FeatureManager manager = new FeatureManager();
+
+        manager.setChestManagerStatusSupplier(() -> se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus.LOADED);
+        assertEquals(ModuleStatus.AVAILABLE, manager.getModuleStatus(TabType.KISTOR));
+
+        manager.setChestManagerStatusSupplier(() -> se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus.UNAVAILABLE);
+        assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.KISTOR));
+
+        manager.setChestManagerStatusSupplier(() -> se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus.ERROR);
+        assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.KISTOR));
+
+        // Unrelated modules must remain unaffected by Chest Manager status.
+        assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.SETTLEMENT));
+        assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.MARKETWATCH));
+    }
 }

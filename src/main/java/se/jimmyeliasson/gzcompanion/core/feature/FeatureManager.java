@@ -1,5 +1,6 @@
 package se.jimmyeliasson.gzcompanion.core.feature;
 
+import se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideLoadStatus;
 import se.jimmyeliasson.gzcompanion.ui.TabType;
 
@@ -14,6 +15,7 @@ import java.util.function.Supplier;
 public class FeatureManager {
     private final Map<FeatureFlag, Boolean> flagStates = new EnumMap<>(FeatureFlag.class);
     private Supplier<GuideLoadStatus> guideStatusSupplier = () -> GuideLoadStatus.LOADED;
+    private Supplier<ChestManagerStatus> chestManagerStatusSupplier = () -> ChestManagerStatus.UNAVAILABLE;
 
     public FeatureManager() {
         resetToDefaults();
@@ -40,6 +42,16 @@ public class FeatureManager {
 
     public GuideLoadStatus getGuideLoadStatus() {
         return guideStatusSupplier != null ? guideStatusSupplier.get() : GuideLoadStatus.UNAVAILABLE;
+    }
+
+    public void setChestManagerStatusSupplier(Supplier<ChestManagerStatus> supplier) {
+        if (supplier != null) {
+            this.chestManagerStatusSupplier = supplier;
+        }
+    }
+
+    public ChestManagerStatus getChestManagerStatus() {
+        return chestManagerStatusSupplier != null ? chestManagerStatusSupplier.get() : ChestManagerStatus.UNAVAILABLE;
     }
 
     public void setFeatureState(FeatureFlag flag, boolean enabled) {
@@ -75,7 +87,7 @@ public class FeatureManager {
             case HEM -> ModuleStatus.AVAILABLE;
             case GUIDE -> (getGuideLoadStatus() == GuideLoadStatus.LOADED) ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case CRAFTING -> ModuleStatus.COMING_SOON;
-            case KISTOR -> ModuleStatus.COMING_SOON;
+            case KISTOR -> getChestManagerStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case SETTLEMENT -> ModuleStatus.COMING_SOON;
             case BYGGPLANER -> ModuleStatus.COMING_SOON;
             case MARKETWATCH -> ModuleStatus.COMING_SOON;

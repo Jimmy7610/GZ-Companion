@@ -24,6 +24,12 @@ se.jimmyeliasson.gzcompanion
 │   ├── condition/                # Pure condition evaluators
 │   ├── model/                    # Immutable guide definitions & records
 │   └── progress/                 # Local progress storage & atomic file writes
+├── chest/
+│   ├── ChestManager.java         # "Last known contents" index & capture session state machine
+│   ├── bridge/                   # MinecraftChestCaptureAdapter + ChestCaptureController (the ONLY
+│   │                              # place touching Minecraft menu/block/screen classes)
+│   ├── model/                    # StoredContainer, StorageKind, StoragePosition (no MC types)
+│   └── storage/                  # JsonChestIndexStore & versioned chest-index.json schema
 ├── minecraft/
 │   ├── MinecraftBridge.java      # Runtime abstraction interface
 │   └── VanillaMinecraftBridge.java # Minecraft client API caller
@@ -53,6 +59,7 @@ se.jimmyeliasson.gzcompanion
     └── tabs/
         ├── HomeTabComponent.java # Home dashboard
         ├── GuideTabComponent.java# Interactive 2-pane guide tab
+        ├── KistorTabComponent.java # Searchable 2-pane Chest Manager tab
         └── PlaceholderTabComponent.java # Placeholder sections
 ```
 
@@ -70,16 +77,27 @@ graph TD
     D --> G[CompatibilityService]
     D --> H[StorageManager]
     D --> J[GuideEngine]
+    D --> M[ChestManager]
     F --> I[gamezone-pack/*.json]
     J --> K[guide-content/*.json]
     J --> L[config/gzcompanion/guide-progress.json]
+    M --> N[config/gzcompanion/chest-index.json]
+    N2[ChestCaptureController: UseBlockCallback + ScreenEvents] --> M
     G --> C
     E --> C
 ```
+
+`ChestCaptureController` is the only place that registers Fabric client hooks for the Chest
+Manager (`UseBlockCallback` for the physical block interaction, `ScreenEvents` for the opened
+storage screen lifecycle). It translates real Minecraft state into plain domain calls on
+`ChestManager` via `MinecraftChestCaptureAdapter` — no Minecraft menu/block/screen types leak
+into `chest.model` or `chest.storage`. See [Chest Manager](CHEST-MANAGER.md) for the full capture
+lifecycle and fair-play boundary.
 
 ---
 
 ## 4. Graceful Degradation Strategy
 - If a specific Rule Pack module fails to parse or is missing from classpath, `RulePackLoader` records a warning and instantiates an empty fallback collection for that module.
 - `CompatibilityService` flags that individual module with `UNVERIFIED` or `WARNING`, while keeping the rest of the mod fully operational.
+- If `chest-index.json` cannot be read, `ChestManager` reports `ChestManagerStatus.ERROR`, the Kistor tab shows a controlled error state, and the rest of the mod (Guide, Home, etc.) remains fully operational.
 - The UI displays explicit status badges instead of failing silently or guessing server behavior.

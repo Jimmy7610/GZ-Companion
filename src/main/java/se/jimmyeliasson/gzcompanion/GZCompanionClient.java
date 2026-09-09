@@ -4,6 +4,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import se.jimmyeliasson.gzcompanion.chest.bridge.ChestCaptureController;
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.guide.GuideScheduler;
@@ -35,6 +36,10 @@ public class GZCompanionClient implements ClientModInitializer {
 
         // 3. Register background guide evaluation tick scheduler
         ClientTickEvents.END_CLIENT_TICK.register(guideScheduler::onClientTick);
+
+        // 4. Register fair-play opened-storage capture hooks for the Chest Manager
+        ChestCaptureController.register(session.getChestManager());
+        LOGGER.info(session.getChestManager().getDiagnostics(session.getCurrentStorageContext()).toSafeString());
 
         LOGGER.info("{} initialized successfully.", CompanionConstants.MOD_NAME);
     }

@@ -17,7 +17,7 @@ Minecraft servers with custom economies, claims, rules, and commands can be over
 ### Persona B: "The Builder & Organizer" (Byggaren)
 - **Profile**: An established player managing base chests, resources, and claims.
 - **Pain Points**: Forgetting in which chest specific materials were stored, calculating block requirements.
-- **How GZ Companion Helps**: Chest indexing (legitimate opened containers only) and future building planning tools.
+- **How GZ Companion Helps**: The Kistor tab indexes "senast känt innehåll" (last known contents) for every chest, barrel, shulker box, hopper, dispenser, and dropper the player has personally opened — searchable by item, ID, or coordinates — plus future building planning tools. See [Chest Manager](CHEST-MANAGER.md).
 
 ---
 
@@ -41,7 +41,7 @@ Minecraft servers with custom economies, claims, rules, and commands can be over
 | Feature Category | In Scope | Strictly Out of Scope |
 | :--- | :--- | :--- |
 | **Guides** | Step-by-step beginner guides, command tips | Server cheat guides, exploit explanations |
-| **Chests** | Indexing chests opened by the player | Remote scanning, wall-penetrating container radar |
+| **Chests** | Indexing "senast känt innehåll" for chests/barrels/shulker boxes/hoppers/dispensers/droppers the player physically opened | Remote scanning, wall-penetrating container radar, Ender Chests, unopened container reads, claiming cached data is live |
 | **Economy** | Offline price guides, balance display | Market manipulation bots, automated auction sniping |
 | **Settlements** | Claim size calculators, requirement checklists | Automated claiming bots, griefing radars |
 | **Combat/Movement** | Death risk advice, safe zone reminders | Auto-totem, killaura, fly, speed, auto-sprint |

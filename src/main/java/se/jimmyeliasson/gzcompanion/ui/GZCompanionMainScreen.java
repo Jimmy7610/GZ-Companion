@@ -3,6 +3,7 @@ package se.jimmyeliasson.gzcompanion.ui;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
@@ -13,6 +14,7 @@ import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 import se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.HomeTabComponent;
+import se.jimmyeliasson.gzcompanion.ui.tabs.KistorTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.PlaceholderTabComponent;
 
 /**
@@ -23,6 +25,7 @@ public class GZCompanionMainScreen extends Screen {
     private TabType activeTab = TabType.HEM;
     private final HomeTabComponent homeTab = new HomeTabComponent();
     private final se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent guideTab = new se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent();
+    private final KistorTabComponent kistorTab = new KistorTabComponent();
     private final PlaceholderTabComponent placeholderTab = new PlaceholderTabComponent();
 
     private MainScreenLayout layout;
@@ -42,6 +45,10 @@ public class GZCompanionMainScreen extends Screen {
 
     public GuideTabComponent getGuideTab() {
         return guideTab;
+    }
+
+    public KistorTabComponent getKistorTab() {
+        return kistorTab;
     }
 
     public void openGuideStep(String stepId) {
@@ -125,6 +132,8 @@ public class GZCompanionMainScreen extends Screen {
             homeTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else if (activeTab == TabType.GUIDE) {
             guideTab.render(extractor, font, contentRect, mouseX, mouseY, this);
+        } else if (activeTab == TabType.KISTOR) {
+            kistorTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else {
             placeholderTab.render(extractor, font, contentRect, mouseX, mouseY, activeTab, this);
         }
@@ -170,6 +179,10 @@ public class GZCompanionMainScreen extends Screen {
                 if (guideTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
                 }
+            } else if (activeTab == TabType.KISTOR) {
+                if (kistorTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
+                    return true;
+                }
             } else {
                 if (placeholderTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
@@ -186,6 +199,10 @@ public class GZCompanionMainScreen extends Screen {
             if (guideTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
+        } else if (activeTab == TabType.KISTOR) {
+            if (kistorTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+                return true;
+            }
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
@@ -193,11 +210,42 @@ public class GZCompanionMainScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int keyCode = event.key();
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE || keyCode == GLFW.GLFW_KEY_G) {
+
+        // G always closes the Companion, matching established M1 behavior.
+        if (keyCode == GLFW.GLFW_KEY_G) {
             this.onClose();
             return true;
         }
+
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            // ESC closes the Companion, unless the Kistor search field is actively consuming
+            // the escape as an editing action (unfocusing itself) first.
+            if (activeTab == TabType.KISTOR && kistorTab.isSearchFocused()) {
+                if (kistorTab.keyPressed(event)) {
+                    return true;
+                }
+            }
+            this.onClose();
+            return true;
+        }
+
+        if (activeTab == TabType.KISTOR) {
+            if (kistorTab.keyPressed(event)) {
+                return true;
+            }
+        }
+
         return super.keyPressed(event);
+    }
+
+    @Override
+    public boolean charTyped(CharacterEvent event) {
+        if (activeTab == TabType.KISTOR) {
+            if (kistorTab.charTyped(event)) {
+                return true;
+            }
+        }
+        return super.charTyped(event);
     }
 
     public void setActiveTab(TabType tab) {

@@ -49,6 +49,13 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Interactive 2-Pane Guide UI**: Left chapter/step navigator and right detail pane with live condition evidence, tip callouts, manual toggles, and reset confirmation dialog.
 - **Home Dashboard Objective Integration**: "Nästa uppgift" automatically syncs with the active guide step.
 
+### Milestone 3 — Chest Manager (Kistor) *(pending human gameplay QA)*
+- **"Senast känt innehåll" (Last Known Contents)**: Indexes ONLY storage the player has personally and legitimately opened — never live, never scanned. See [Chest Manager](docs/CHEST-MANAGER.md) for the full fair-play boundary.
+- **Real Opened-Storage Capture**: A physical block right-click plus a correlated, matching menu open together start a capture session; the visible snapshot updates while the screen is open and is finalized once on close.
+- **Explicit Storage Allow-List**: Chest, Trapped Chest, Barrel, placed Shulker Box, Hopper, Dispenser, and Dropper — verified against actual Minecraft 26.1.2 block/menu classes. Everything else (furnaces, anvils, Ender Chests, plugin GUIs) is explicitly excluded.
+- **Searchable Local Index**: Search by item, item ID, coordinates, or storage type across your own already-opened storage — never a world search.
+- **Context & Dimension Isolated**: Reuses the Guide Engine's world/server identity rules; the same coordinates in a different world, server, or dimension are always separate entries.
+
 ---
 
 ## 🚀 Building from Source
@@ -78,6 +85,7 @@ The compiled mod JAR will be located at:
 
 - [Product Bible](docs/PRODUCT-BIBLE.md): Vision, user personas, and design boundaries.
 - [Architecture](docs/ARCHITECTURE.md): Structural layout and layer isolation.
+- [Chest Manager](docs/CHEST-MANAGER.md): Fair-play boundary, capture lifecycle, and persistence for the Kistor module.
 - [Design System](docs/design/DESIGN-SYSTEM.md): Authoritative UI palette, components, and styling.
 - [GameZone Rule Pack](docs/GAMEZONE-RULE-PACK.md): Data schema, versioning, and verification specification.
 - [Roadmap](docs/ROADMAP.md): Milestones M1 through M10 with Definitions of Done.

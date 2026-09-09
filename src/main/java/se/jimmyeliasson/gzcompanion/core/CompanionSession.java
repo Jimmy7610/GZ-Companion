@@ -1,5 +1,8 @@
 package se.jimmyeliasson.gzcompanion.core;
 
+import se.jimmyeliasson.gzcompanion.chest.ChestManager;
+import se.jimmyeliasson.gzcompanion.chest.bridge.MinecraftChestCaptureAdapter;
+import se.jimmyeliasson.gzcompanion.chest.storage.JsonChestIndexStore;
 import se.jimmyeliasson.gzcompanion.core.feature.FeatureManager;
 import se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityResult;
 import se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityService;
@@ -29,6 +32,7 @@ public class CompanionSession {
     private final StorageManager storageManager;
     private final CompatibilityService compatibilityService;
     private final GuideEngine guideEngine;
+    private final ChestManager chestManager;
     private RulePack activeRulePack;
     private CompatibilityResult compatibilityResult;
 
@@ -41,6 +45,9 @@ public class CompanionSession {
         Path configDir = Paths.get(".").resolve("config").resolve("gzcompanion");
         JsonGuideProgressStore progressStore = new JsonGuideProgressStore(configDir.resolve("guide-progress.json"));
         this.guideEngine = new GuideEngine(new GuideLoader(), progressStore, new MinecraftGuideSnapshotProvider());
+
+        this.chestManager = new ChestManager(new JsonChestIndexStore(configDir.resolve("chest-index.json")));
+        this.chestManager.setDisplayNameResolver(MinecraftChestCaptureAdapter::resolveItemDisplayName);
 
         init();
     }
@@ -60,6 +67,10 @@ public class CompanionSession {
         
         guideEngine.initialize();
         featureManager.setGuideStatusSupplier(guideEngine::getLoadStatus);
+
+        chestManager.initialize();
+        featureManager.setChestManagerStatusSupplier(chestManager::getStatus);
+
         refreshCompatibility();
     }
 
@@ -96,6 +107,18 @@ public class CompanionSession {
 
     public GuideContext getCurrentGuideContext() {
         return bridge.getGuideContext();
+    }
+
+    public ChestManager getChestManager() {
+        return chestManager;
+    }
+
+    /**
+     * The isolated storage-index context key for the player's current world/server, reusing the
+     * same profile/world/server identity semantics as {@link GuideContext}.
+     */
+    public String getCurrentStorageContext() {
+        return getCurrentGuideContext().getStorageKey();
     }
 
     public void evaluateGuide() {

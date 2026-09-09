@@ -10,9 +10,9 @@
 - **Scope**: Data-driven beginner guide engine with 5 chapters and 22 survival steps, live inventory condition evaluation (items, tags, food), progression inference (`supersededBy`), dynamic keybinding token resolution, local-first progress storage (`guide-progress.json`), responsive 2-pane UI with reset confirmation, and Home dashboard objective synchronization.
 - **Definition of Done**: Builds on JDK 25 and Fabric 26.1.2, passes 100% unit tests, validates guide content schemas and acyclic prerequisite graphs, accurately tracks inventory evidence without network calls, and synchronizes dynamic next steps with the Home tab.
 
-### M3 — Chest Manager (Fair-Play)
-- **Scope**: Indexing chest inventories legitimately opened by the player, search by item name, tag, or coordinates.
-- **Definition of Done**: Local container snapshot storage; zero wall-scanning or packet probing.
+### M3 — Chest Manager (Fair-Play) — *implemented, pending human gameplay QA*
+- **Scope**: Indexing chest/barrel/shulker box/hopper/dispenser/dropper inventories legitimately opened by the player, search by item name, item ID, or coordinates.
+- **Definition of Done**: Local container snapshot storage keyed by a stable context/dimension/position/kind identity; zero wall-scanning or packet probing; a physical block interaction must correlate with a compatible opened menu before anything is indexed. See [Chest Manager](CHEST-MANAGER.md) for full detail and the required manual gameplay QA sequence — this milestone is not considered complete until that sequence has been run and confirmed in real gameplay.
 
 ### M4 — GameZone Knowledge Base
 - **Scope**: Searchable command catalog, Swedish crafting overrides, custom item lore database.
