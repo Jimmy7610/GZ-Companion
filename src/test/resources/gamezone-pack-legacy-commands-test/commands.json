@@ -1,0 +1,11 @@
+{
+  "categories": [
+    {
+      "id": "test",
+      "commands": [
+        { "command": "/test-no-status", "description": "Missing status field entirely." },
+        { "command": "/test-verified", "description": "Explicit VERIFIED status.", "status": "VERIFIED" }
+      ]
+    }
+  ]
+}

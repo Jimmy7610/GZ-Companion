@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "recipes": [
+    {
+      "id": "test-too-large",
+      "outputItemId": "minecraft:diamond_block",
+      "kind": "SHAPED",
+      "source": "GAMEZONE_ADDITION",
+      "width": 4,
+      "height": 4,
+      "grid": [
+        {}, {}, {}, {},
+        {}, {}, {}, {},
+        {}, {}, {}, {},
+        {}, {}, {}, {}
+      ]
+    }
+  ]
+}

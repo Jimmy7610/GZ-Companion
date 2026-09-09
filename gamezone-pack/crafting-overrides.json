@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
-  "description": "GameZone specific crafting recipe overrides.",
+  "schemaVersion": 1,
+  "description": "GameZone-specific crafting recipe additions/replacements/disables. The official GameZone Wiki (checked 2026-09-10, including the Produktion section) does not document any GameZone-specific crafting-table recipe overrides at this time - this file intentionally lists none. See docs/KNOWLEDGE-BASE.md.",
   "recipes": []
 }

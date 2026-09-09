@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "categories": [],
+  "commands": [
+    { "id": "", "primaryCommand": "/foo", "syntax": "/foo" },
+    { "primaryCommand": "/bar", "syntax": "/bar" }
+  ]
+}

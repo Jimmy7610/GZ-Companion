@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "recipes": [
+    {
+      "id": "test-shaped-3x3",
+      "outputItemId": "minecraft:diamond_block",
+      "outputCount": 1,
+      "kind": "SHAPED",
+      "source": "GAMEZONE_ADDITION",
+      "width": 3,
+      "height": 3,
+      "grid": [
+        { "itemIds": ["minecraft:diamond"] }, { "itemIds": ["minecraft:diamond"] }, { "itemIds": ["minecraft:diamond"] },
+        { "itemIds": ["minecraft:diamond"] }, { "itemIds": ["minecraft:diamond"] }, { "itemIds": ["minecraft:diamond"] },
+        { "itemIds": ["minecraft:diamond"] }, { "itemIds": ["minecraft:diamond"] }, { "itemIds": ["minecraft:diamond"] }
+      ]
+    }
+  ]
+}

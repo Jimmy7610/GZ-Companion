@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0.0",
+  "profile": "gamezone",
+  "packVersion": "test",
+  "name": "Legacy Command Fallback Test Pack",
+  "author": "Test",
+  "compatibleCompanionVersions": ">=0.1.0-alpha.1",
+  "testedMinecraftVersions": ["26.1.2"],
+  "targetHost": "play.gamezonemc.se",
+  "verification": { "source": "Test", "lastVerified": "2026-09-10", "status": "UNVERIFIED" },
+  "modules": {}
+}

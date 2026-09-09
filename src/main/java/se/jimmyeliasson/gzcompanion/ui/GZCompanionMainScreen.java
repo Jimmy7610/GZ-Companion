@@ -12,6 +12,8 @@ import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.ui.layout.MainScreenLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
+import se.jimmyeliasson.gzcompanion.ui.tabs.CommandsTabComponent;
+import se.jimmyeliasson.gzcompanion.ui.tabs.CraftingTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.HomeTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.KistorTabComponent;
@@ -26,6 +28,8 @@ public class GZCompanionMainScreen extends Screen {
     private final HomeTabComponent homeTab = new HomeTabComponent();
     private final se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent guideTab = new se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent();
     private final KistorTabComponent kistorTab = new KistorTabComponent();
+    private final CommandsTabComponent commandsTab = new CommandsTabComponent();
+    private final CraftingTabComponent craftingTab = new CraftingTabComponent();
     private final PlaceholderTabComponent placeholderTab = new PlaceholderTabComponent();
 
     private MainScreenLayout layout;
@@ -134,6 +138,10 @@ public class GZCompanionMainScreen extends Screen {
             guideTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else if (activeTab == TabType.KISTOR) {
             kistorTab.render(extractor, font, contentRect, mouseX, mouseY, this);
+        } else if (activeTab == TabType.KOMMANDON) {
+            commandsTab.render(extractor, font, contentRect, mouseX, mouseY, this);
+        } else if (activeTab == TabType.CRAFTING) {
+            craftingTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else {
             placeholderTab.render(extractor, font, contentRect, mouseX, mouseY, activeTab, this);
         }
@@ -183,6 +191,14 @@ public class GZCompanionMainScreen extends Screen {
                 if (kistorTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
                 }
+            } else if (activeTab == TabType.KOMMANDON) {
+                if (commandsTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
+                    return true;
+                }
+            } else if (activeTab == TabType.CRAFTING) {
+                if (craftingTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
+                    return true;
+                }
             } else {
                 if (placeholderTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
@@ -203,18 +219,45 @@ public class GZCompanionMainScreen extends Screen {
             if (kistorTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
+        } else if (activeTab == TabType.KOMMANDON) {
+            if (commandsTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+                return true;
+            }
+        } else if (activeTab == TabType.CRAFTING) {
+            if (craftingTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+                return true;
+            }
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    /**
+     * The active tab's text-input contract, if it has one. Kept as a per-call lookup (rather
+     * than a generic tab-component interface) so this generalization stays scoped to the G/key/
+     * char routing that used to hardcode {@code TabType.KISTOR} - not a wider tab refactor.
+     */
+    private TextInputHandler activeTextInputHandler() {
+        if (activeTab == TabType.KISTOR) {
+            return kistorTab;
+        }
+        if (activeTab == TabType.KOMMANDON) {
+            return commandsTab;
+        }
+        if (activeTab == TabType.CRAFTING) {
+            return craftingTab;
+        }
+        return null;
     }
 
     @Override
     public boolean keyPressed(KeyEvent event) {
         int keyCode = event.key();
+        TextInputHandler textInput = activeTextInputHandler();
 
-        // While a legitimate Companion text input (Kistor search or the local label editor) is
-        // focused, G must type into it rather than close the Companion. charTyped still inserts
+        // While a legitimate Companion text input (a tab's search field or a local label editor)
+        // is focused, G must type into it rather than close the Companion. charTyped still inserts
         // the character normally; only this global close action is suppressed.
-        boolean textInputFocused = activeTab == TabType.KISTOR && kistorTab.isTextInputFocused();
+        boolean textInputFocused = textInput != null && textInput.isTextInputFocused();
 
         if (keyCode == GLFW.GLFW_KEY_G && !textInputFocused) {
             this.onClose();
@@ -223,10 +266,8 @@ public class GZCompanionMainScreen extends Screen {
 
         // Give the active tab's own input handling (label-edit cancel/save, search unfocus, etc.)
         // first refusal on every key while it has something focused.
-        if (activeTab == TabType.KISTOR) {
-            if (kistorTab.keyPressed(event)) {
-                return true;
-            }
+        if (textInput != null && textInput.keyPressed(event)) {
+            return true;
         }
 
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
@@ -239,10 +280,9 @@ public class GZCompanionMainScreen extends Screen {
 
     @Override
     public boolean charTyped(CharacterEvent event) {
-        if (activeTab == TabType.KISTOR) {
-            if (kistorTab.charTyped(event)) {
-                return true;
-            }
+        TextInputHandler textInput = activeTextInputHandler();
+        if (textInput != null && textInput.charTyped(event)) {
+            return true;
         }
         return super.charTyped(event);
     }

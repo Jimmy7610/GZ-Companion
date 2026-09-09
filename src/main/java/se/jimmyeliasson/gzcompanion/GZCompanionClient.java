@@ -41,6 +41,18 @@ public class GZCompanionClient implements ClientModInitializer {
         ChestCaptureController.register(session.getChestManager());
         LOGGER.info(session.getChestManager().getDiagnostics(session.getCurrentStorageContext()).toSafeString());
 
+        // 5. Report the three independently-loaded M4 knowledge modules
+        LOGGER.info("Kommandon: {} ({} kommandon, {} kategorier)",
+                session.getCommandCatalogStatus().getDisplayName(),
+                session.getCommandCatalog().size(),
+                session.getCommandCatalog().categoriesInUse().size());
+        LOGGER.info("Crafting-overstyrningar: {} ({} recept)",
+                session.getCraftingKnowledgeStatus().getDisplayName(),
+                session.getCraftingKnowledgeBase().size());
+        LOGGER.info("GameZone-föremål: {} ({} föremål)",
+                session.getItemKnowledgeStatus().getDisplayName(),
+                session.getItemKnowledgeBase().size());
+
         LOGGER.info("{} initialized successfully.", CompanionConstants.MOD_NAME);
     }
 }

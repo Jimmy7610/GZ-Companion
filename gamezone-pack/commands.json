@@ -1,5 +1,550 @@
 {
-  "schemaVersion": "1.0.0",
-  "description": "Schema definition and placeholder for server commands. Server-specific commands require live verification before activation.",
-  "categories": []
+  "schemaVersion": 1,
+  "description": "GameZone player-facing commands, sourced from the official GameZone Wiki. Every entry's verification block cites the exact page and date checked - see docs/KNOWLEDGE-BASE.md for the authoring workflow.",
+  "categories": [
+    { "id": "allmant", "displayName": "Allmänt", "sortOrder": 10 },
+    { "id": "settlement", "displayName": "Settlement", "sortOrder": 20 },
+    { "id": "ekonomi", "displayName": "Ekonomi", "sortOrder": 30 },
+    { "id": "foretag", "displayName": "Företag & Handel", "sortOrder": 40 },
+    { "id": "byggnader", "displayName": "Byggnader", "sortOrder": 50 },
+    { "id": "territorium", "displayName": "Territorium", "sortOrder": 60 },
+    { "id": "socialt", "displayName": "Socialt", "sortOrder": 70 },
+    { "id": "admin", "displayName": "Admin", "sortOrder": 80 }
+  ],
+  "commands": [
+    { "id": "gz_menu", "primaryCommand": "/gz menu", "aliases": [], "syntax": "/gz menu",
+      "description": "Öppnar GameZones huvudmeny.",
+      "categoryId": "allmant", "keywords": ["meny", "huvudmeny", "gz"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "level", "primaryCommand": "/level", "aliases": [], "syntax": "/level",
+      "description": "Visar din nuvarande Character Level, total Character XP, progress mot nästa level och nästa förmåga som går att låsa upp.",
+      "categoryId": "allmant", "keywords": ["xp", "level", "character", "förmåga"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "daily", "primaryCommand": "/daily", "aliases": ["/gz daily"], "syntax": "/daily",
+      "description": "Öppnar Daily Rewards där du kan hämta dagens Coins och ett slumpmässigt item. Belöningarna ökar från dag 1 till den stora jackpot-belöningen på dag 7.",
+      "categoryId": "allmant", "keywords": ["daily", "belöning", "coins", "reward"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "discord", "primaryCommand": "/discord", "aliases": [], "syntax": "/discord",
+      "description": "Ger dig en verifieringskod som används för att koppla ditt Minecraftkonto till Discord. När du fått koden skriver du /verify <kod> på GameZones Discord. Kopplingen används bland annat för settlementroller och privata settlementkanaler.",
+      "categoryId": "allmant", "keywords": ["discord", "koppla", "verify"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "twitch", "primaryCommand": "/twitch", "aliases": [], "syntax": "/twitch <Twitch-namn>",
+      "description": "Länkar ditt Twitchkonto till din Minecraftspelare. Titta sedan på en registrerad GameZone-streamer för att få 2 000 GZ Coins per 10 minuter, upp till 60 000 per timme och 300 000 per dygn.",
+      "categoryId": "allmant", "keywords": ["twitch", "stream", "coins"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "spawn", "primaryCommand": "/spawn", "aliases": [], "syntax": "/spawn",
+      "description": "Teleporterar dig till serverns spawn när du befinner dig i ditt eget settlement. Vid spawn kan du ringa i klockan på fontänen för att teleporteras hem igen - till settlementets egna hemteleport om en satts med /settlement setspawn, annars till settlementets registrerade centrum.",
+      "categoryId": "allmant", "keywords": ["teleport", "hem", "spawn"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_overview", "primaryCommand": "/settlements", "aliases": ["/settlement menu"], "syntax": "/settlements",
+      "description": "Visar översikten över ditt settlement.",
+      "categoryId": "settlement", "keywords": ["settlement", "översikt"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_info", "primaryCommand": "/settlement info", "aliases": [], "syntax": "/settlement info",
+      "description": "Visar information om ditt settlement.",
+      "categoryId": "settlement", "keywords": ["settlement", "info"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_members", "primaryCommand": "/settlement members", "aliases": [], "syntax": "/settlement members",
+      "description": "Visar medlemslistan för ditt settlement.",
+      "categoryId": "settlement", "keywords": ["settlement", "medlemmar"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_upgrade", "primaryCommand": "/settlement upgrade", "aliases": [], "syntax": "/settlement upgrade",
+      "description": "Öppnar uppgraderingsalternativ för ditt settlement.",
+      "categoryId": "settlement", "keywords": ["settlement", "uppgradera", "level"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_treasury", "primaryCommand": "/settlement treasury", "aliases": [], "syntax": "/settlement treasury",
+      "description": "Visar settlementets stadskassa.",
+      "categoryId": "settlement", "keywords": ["settlement", "stadskassa", "coins"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_create", "primaryCommand": "/settlement create", "aliases": [], "syntax": "/settlement create <namn>",
+      "description": "Skapar ett nytt settlement med angivet namn.",
+      "categoryId": "settlement", "keywords": ["settlement", "skapa", "namn"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_join", "primaryCommand": "/settlement join", "aliases": [], "syntax": "/settlement join <settlement>",
+      "description": "Går med i angivet settlement.",
+      "categoryId": "settlement", "keywords": ["settlement", "gå med", "join"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_leave", "primaryCommand": "/settlement leave", "aliases": [], "syntax": "/settlement leave",
+      "description": "Lämnar ditt nuvarande settlement.",
+      "categoryId": "settlement", "keywords": ["settlement", "lämna"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_kick", "primaryCommand": "/settlement kick", "aliases": [], "syntax": "/settlement kick <spelare>",
+      "description": "Sparkar ut en spelare ur settlementet.",
+      "categoryId": "settlement", "keywords": ["settlement", "sparka", "kick"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_lord", "primaryCommand": "/settlement lord", "aliases": [], "syntax": "/settlement lord <spelare>",
+      "description": "Utser en medlem till Lord. Ett settlement kan ha maximalt två Lords samtidigt, utöver settlementets King.",
+      "categoryId": "settlement", "keywords": ["settlement", "lord"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_transfer", "primaryCommand": "/settlement transfer", "aliases": [], "syntax": "/settlement transfer <spelare>",
+      "description": "Överför King-rollen till en av settlementets Lords.",
+      "categoryId": "settlement", "keywords": ["settlement", "king", "överför"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_rename", "primaryCommand": "/settlement rename", "aliases": [], "syntax": "/settlement rename <nytt namn>",
+      "description": "Byter namn på settlementet.",
+      "categoryId": "settlement", "keywords": ["settlement", "namnbyte"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_tax", "primaryCommand": "/settlement tax", "aliases": [], "syntax": "/settlement tax <procent>",
+      "description": "Ställer in settlementets skattesats i procent.",
+      "categoryId": "settlement", "keywords": ["settlement", "skatt", "tax"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_setspawn", "primaryCommand": "/settlement setspawn", "aliases": [], "syntax": "/settlement setspawn",
+      "description": "Sparar platsen där du står som settlementets hemteleport. Platsen måste ligga inom settlementets eget territorium. Om ingen egen spawn har satts används settlementets registrerade centrum.",
+      "categoryId": "settlement", "keywords": ["settlement", "spawn", "hemteleport"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_pos1", "primaryCommand": "/settlement pos1", "aliases": [], "syntax": "/settlement pos1",
+      "description": "Markerar det första hörnet av en invånarplot inom settlementets territorium.",
+      "categoryId": "settlement", "keywords": ["settlement", "plot", "invånarplot"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_pos2", "primaryCommand": "/settlement pos2", "aliases": [], "syntax": "/settlement pos2",
+      "description": "Markerar det andra hörnet av en invånarplot inom settlementets territorium.",
+      "categoryId": "settlement", "keywords": ["settlement", "plot", "invånarplot"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_assign", "primaryCommand": "/settlement assign", "aliases": [], "syntax": "/settlement assign <spelare>",
+      "description": "Tilldelar den markerade invånarplotten till en invånare, som får ensamrätt att bygga, riva och hantera kistor inom plotten.",
+      "categoryId": "settlement", "keywords": ["settlement", "plot", "tilldela"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_government_status", "primaryCommand": "/settlement government status", "aliases": [], "syntax": "/settlement government status",
+      "description": "Visar settlementets nuvarande styrelseform.",
+      "categoryId": "settlement", "keywords": ["settlement", "government", "styrelse"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_government_democracy", "primaryCommand": "/settlement government democracy", "aliases": [], "syntax": "/settlement government democracy",
+      "description": "Ändrar settlementets styrelseform till demokrati. Alla settlements börjar som diktatur.",
+      "categoryId": "settlement", "keywords": ["settlement", "government", "demokrati"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_government_election_start", "primaryCommand": "/settlement government election start", "aliases": [], "syntax": "/settlement government election start",
+      "description": "Startar ett King-val i ett settlement med demokrati. Ett val pågår i 24 timmar och följs av 7 dagars cooldown.",
+      "categoryId": "settlement", "keywords": ["settlement", "val", "election", "king"], "examples": [], "requirements": "Aktiv invånare",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_government_election_vote", "primaryCommand": "/settlement government election vote", "aliases": [], "syntax": "/settlement government election vote <spelare>",
+      "description": "Röstar på en kandidat i ett pågående King-val.",
+      "categoryId": "settlement", "keywords": ["settlement", "val", "election", "rösta"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_government_referendum_start", "primaryCommand": "/settlement government referendum start", "aliases": [], "syntax": "/settlement government referendum start",
+      "description": "Startar en folkomröstning i settlementet.",
+      "categoryId": "settlement", "keywords": ["settlement", "referendum", "folkomröstning"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_government_referendum_vote_yes", "primaryCommand": "/settlement government referendum vote yes", "aliases": [], "syntax": "/settlement government referendum vote yes",
+      "description": "Röstar ja i en pågående folkomröstning.",
+      "categoryId": "settlement", "keywords": ["settlement", "referendum", "rösta", "ja"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_government_referendum_vote_no", "primaryCommand": "/settlement government referendum vote no", "aliases": [], "syntax": "/settlement government referendum vote no",
+      "description": "Röstar nej i en pågående folkomröstning.",
+      "categoryId": "settlement", "keywords": ["settlement", "referendum", "rösta", "nej"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_policy_list", "primaryCommand": "/settlement policy list", "aliases": [], "syntax": "/settlement policy list",
+      "description": "Visar tillgängliga policies för settlementet.",
+      "categoryId": "settlement", "keywords": ["settlement", "policy"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_policy_active", "primaryCommand": "/settlement policy active", "aliases": [], "syntax": "/settlement policy active",
+      "description": "Visar aktiva policies och upplåsta policyplatser för settlementet.",
+      "categoryId": "settlement", "keywords": ["settlement", "policy", "aktiv"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_policy_activate", "primaryCommand": "/settlement policy activate", "aliases": [], "syntax": "/settlement policy activate <policy>",
+      "description": "Aktiverar en policy. Fler policyplatser låses upp vid settlement level 5 och 15. Bland policies finns bland annat Open Borders, Supplier, Banking Management och Item Maniac.",
+      "categoryId": "settlement", "keywords": ["settlement", "policy", "aktivera"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_policy_deactivate", "primaryCommand": "/settlement policy deactivate", "aliases": [], "syntax": "/settlement policy deactivate <policy>",
+      "description": "Avaktiverar en policy.",
+      "categoryId": "settlement", "keywords": ["settlement", "policy", "avaktivera"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_deposit", "primaryCommand": "/settlement deposit", "aliases": [], "syntax": "/settlement deposit <belopp>",
+      "description": "Sätter in Coins från ditt eget saldo i stadskassan. Alla aktiva settlementmedlemmar kan använda kommandot.",
+      "categoryId": "settlement", "keywords": ["settlement", "stadskassa", "deposit", "coins"], "examples": [], "requirements": "Aktiv settlementmedlem",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_withdraw", "primaryCommand": "/settlement withdraw", "aliases": [], "syntax": "/settlement withdraw <belopp>",
+      "description": "Tar ut Coins från stadskassan till Kings eget saldo. En avgift på 2 procent tillkommer.",
+      "categoryId": "settlement", "keywords": ["settlement", "stadskassa", "withdraw", "coins"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_send", "primaryCommand": "/settlement send", "aliases": [], "syntax": "/settlement send <spelare> <belopp>",
+      "description": "Skickar Coins från stadskassan till en aktiv invånare i samma settlement. En avgift på 2 procent tillkommer.",
+      "categoryId": "settlement", "keywords": ["settlement", "stadskassa", "send", "coins"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_war_declare", "primaryCommand": "/settlement war declare", "aliases": [], "syntax": "/settlement war declare <settlement>",
+      "description": "Skickar en krigsförklaring mot ett annat settlement. Om allianser påverkar förklaringen visar systemet först vilka settlements som dras in.",
+      "categoryId": "settlement", "keywords": ["settlement", "krig", "war", "förklaring"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_war_declare_confirm", "primaryCommand": "/settlement war declare confirm", "aliases": [], "syntax": "/settlement war declare <settlement> confirm",
+      "description": "Bekräftar en krigsförklaring, inklusive vilka allierade settlements som dras in.",
+      "categoryId": "settlement", "keywords": ["settlement", "krig", "war", "bekräfta"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_war_accept", "primaryCommand": "/settlement war accept", "aliases": [], "syntax": "/settlement war accept",
+      "description": "Accepterar en inkommande krigsförklaring.",
+      "categoryId": "settlement", "keywords": ["settlement", "krig", "war", "acceptera"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_war_decline", "primaryCommand": "/settlement war decline", "aliases": [], "syntax": "/settlement war decline",
+      "description": "Avböjer en inkommande krigsförklaring.",
+      "categoryId": "settlement", "keywords": ["settlement", "krig", "war", "avböj"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_war_cancel", "primaryCommand": "/settlement war cancel", "aliases": [], "syntax": "/settlement war cancel",
+      "description": "Avbryter en pågående krigsförklaring.",
+      "categoryId": "settlement", "keywords": ["settlement", "krig", "war", "avbryt"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_war_status", "primaryCommand": "/settlement war status", "aliases": [], "syntax": "/settlement war status",
+      "description": "Visar status för settlementets pågående krig.",
+      "categoryId": "settlement", "keywords": ["settlement", "krig", "war", "status"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_war_peace", "primaryCommand": "/settlement war peace", "aliases": [], "syntax": "/settlement war peace",
+      "description": "Föreslår fred i ett pågående krig.",
+      "categoryId": "settlement", "keywords": ["settlement", "krig", "war", "fred", "peace"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_war_peace_cancel", "primaryCommand": "/settlement war peace cancel", "aliases": [], "syntax": "/settlement war peace cancel",
+      "description": "Avbryter ett fredsförslag.",
+      "categoryId": "settlement", "keywords": ["settlement", "krig", "war", "fred", "avbryt"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_war_surrender", "primaryCommand": "/settlement war surrender", "aliases": [], "syntax": "/settlement war surrender",
+      "description": "Ger upp i ett pågående krig.",
+      "categoryId": "settlement", "keywords": ["settlement", "krig", "war", "surrender", "ge upp"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_alliance_invite", "primaryCommand": "/settlement alliance invite", "aliases": [], "syntax": "/settlement alliance invite <settlement>",
+      "description": "Bjuder in ett annat settlement till en allians.",
+      "categoryId": "settlement", "keywords": ["settlement", "allians", "alliance", "invite"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_alliance_accept", "primaryCommand": "/settlement alliance accept", "aliases": [], "syntax": "/settlement alliance accept <settlement>",
+      "description": "Accepterar en inkommande allians-inbjudan. Direkta allierade dras automatiskt in på samma sida när ett krig accepteras.",
+      "categoryId": "settlement", "keywords": ["settlement", "allians", "alliance", "acceptera"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_alliance_decline", "primaryCommand": "/settlement alliance decline", "aliases": [], "syntax": "/settlement alliance decline <settlement>",
+      "description": "Avböjer en inkommande allians-inbjudan.",
+      "categoryId": "settlement", "keywords": ["settlement", "allians", "alliance", "avböj"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_alliance_cancel", "primaryCommand": "/settlement alliance cancel", "aliases": [], "syntax": "/settlement alliance cancel <settlement>",
+      "description": "Avbryter en skickad allians-inbjudan.",
+      "categoryId": "settlement", "keywords": ["settlement", "allians", "alliance", "avbryt"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_alliance_leave", "primaryCommand": "/settlement alliance leave", "aliases": [], "syntax": "/settlement alliance leave <settlement>",
+      "description": "Lämnar en allians.",
+      "categoryId": "settlement", "keywords": ["settlement", "allians", "alliance", "lämna"], "examples": [], "requirements": "King",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_alliance_status", "primaryCommand": "/settlement alliance status", "aliases": [], "syntax": "/settlement alliance status",
+      "description": "Visar settlementets nuvarande allianser.",
+      "categoryId": "settlement", "keywords": ["settlement", "allians", "alliance", "status"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_inventory_register", "primaryCommand": "/settlement inventory register", "aliases": [], "syntax": "/settlement inventory register",
+      "description": "Registrerar en kista som en del av settlementets inventory-system.",
+      "categoryId": "settlement", "keywords": ["settlement", "inventory", "kista"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_inventory_remove", "primaryCommand": "/settlement inventory remove", "aliases": [], "syntax": "/settlement inventory remove",
+      "description": "Avregistrerar en kista från settlementets inventory-system.",
+      "categoryId": "settlement", "keywords": ["settlement", "inventory", "kista"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "settlement_inventory_list", "primaryCommand": "/settlement inventory list", "aliases": [], "syntax": "/settlement inventory list",
+      "description": "Visar registrerade kistor i settlementets inventory-system.",
+      "categoryId": "settlement", "keywords": ["settlement", "inventory", "kista", "lista"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "market", "primaryCommand": "/market", "aliases": ["/marketwatch"], "syntax": "/market [<item>]",
+      "description": "Öppnar MarketWatch. Med ett angivet item visas upp till tre billigaste aktiva butiker som har itemet i lager.",
+      "categoryId": "ekonomi", "keywords": ["market", "marketwatch", "pris", "handel"], "examples": ["/market beef", "/market oak_log"], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "market_kop", "primaryCommand": "/market köp", "aliases": [], "syntax": "/market köp <antal> <item> <maxpris per styck>",
+      "description": "Skapar en köpannons för ett item till angivet maxpris per styck. En köpannons gäller i 6 timmar, och ett företag kan skapa högst en ny köpannons var sjätte timme.",
+      "categoryId": "ekonomi", "keywords": ["market", "köp", "annons"], "examples": [], "requirements": "Företag",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "market_annonser", "primaryCommand": "/market annonser", "aliases": [], "syntax": "/market annonser",
+      "description": "Visar alla aktiva köpannonser.",
+      "categoryId": "ekonomi", "keywords": ["market", "annonser"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "contracts", "primaryCommand": "/contracts", "aliases": [], "syntax": "/contracts",
+      "description": "Öppnar settlementets fem Rikskontrakt för den aktuella veckan. Settlementet måste vara minst Level 3. Ett kontrakt kan vara aktivt åt gången. Leveranser görs i de globala Rikskistorna i The Capitol.",
+      "categoryId": "ekonomi", "keywords": ["rikskontrakt", "contracts", "leverans"], "examples": [], "requirements": "Settlement level 3+",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_menu", "primaryCommand": "/company", "aliases": [], "syntax": "/company",
+      "description": "Öppnar företagsöversikten.",
+      "categoryId": "foretag", "keywords": ["company", "företag"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_create", "primaryCommand": "/company create", "aliases": [], "syntax": "/company create <företagsnamn>",
+      "description": "Skapar ett nytt företag.",
+      "categoryId": "foretag", "keywords": ["company", "företag", "skapa"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_rename", "primaryCommand": "/company rename", "aliases": ["/company namnbyte"], "syntax": "/company rename <nytt namn>",
+      "description": "Byter namn på företaget.",
+      "categoryId": "foretag", "keywords": ["company", "företag", "namnbyte"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_members", "primaryCommand": "/company members", "aliases": [], "syntax": "/company members",
+      "description": "Visar företagets medlemslista.",
+      "categoryId": "foretag", "keywords": ["company", "företag", "medlemmar"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_kick", "primaryCommand": "/company kick", "aliases": [], "syntax": "/company kick <spelare>",
+      "description": "Sparkar ut en medlem ur företaget.",
+      "categoryId": "foretag", "keywords": ["company", "företag", "sparka"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_license", "primaryCommand": "/company license", "aliases": [], "syntax": "/company license",
+      "description": "Visar eller hanterar företagets licens.",
+      "categoryId": "foretag", "keywords": ["company", "företag", "licens"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_leave", "primaryCommand": "/company leave", "aliases": [], "syntax": "/company leave",
+      "description": "Lämnar företaget.",
+      "categoryId": "foretag", "keywords": ["company", "företag", "lämna"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_salary", "primaryCommand": "/company salary", "aliases": [], "syntax": "/company salary <spelare> <procent>",
+      "description": "Ställer in lönandel för en anställd.",
+      "categoryId": "foretag", "keywords": ["company", "företag", "lön", "salary"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_salaries", "primaryCommand": "/company salaries", "aliases": [], "syntax": "/company salaries",
+      "description": "Visar löneandelar för företagets anställda.",
+      "categoryId": "foretag", "keywords": ["company", "företag", "lön", "salaries"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_chest_register", "primaryCommand": "/company chest register", "aliases": [], "syntax": "/company chest register <pris>",
+      "description": "Registrerar en kista som företagsbutik med angivet pris.",
+      "categoryId": "foretag", "keywords": ["company", "kista", "chest", "register", "butik"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_chest_info", "primaryCommand": "/company chest info", "aliases": [], "syntax": "/company chest info",
+      "description": "Visar information om en registrerad företagskista.",
+      "categoryId": "foretag", "keywords": ["company", "kista", "chest", "info"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_chest_pause", "primaryCommand": "/company chest pause", "aliases": [], "syntax": "/company chest pause",
+      "description": "Pausar försäljningen från en registrerad företagskista.",
+      "categoryId": "foretag", "keywords": ["company", "kista", "chest", "pause"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_chest_resume", "primaryCommand": "/company chest resume", "aliases": [], "syntax": "/company chest resume",
+      "description": "Återupptar försäljningen från en registrerad företagskista.",
+      "categoryId": "foretag", "keywords": ["company", "kista", "chest", "resume"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_chest_remove", "primaryCommand": "/company chest remove", "aliases": [], "syntax": "/company chest remove",
+      "description": "Avregistrerar en företagskista.",
+      "categoryId": "foretag", "keywords": ["company", "kista", "chest", "remove"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_chests", "primaryCommand": "/company chests", "aliases": [], "syntax": "/company chests",
+      "description": "Visar företagets registrerade kistor.",
+      "categoryId": "foretag", "keywords": ["company", "kista", "chests", "lista"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_add_manager", "primaryCommand": "/company add manager", "aliases": [], "syntax": "/company add manager <spelare>",
+      "description": "Utser en spelare till manager i företaget.",
+      "categoryId": "foretag", "keywords": ["company", "manager"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_trade_list", "primaryCommand": "/company trade list", "aliases": [], "syntax": "/company trade list",
+      "description": "Visar företagets handelspartners. Finns också i /gz menu under Company → Handelspartners.",
+      "categoryId": "foretag", "keywords": ["company", "handel", "trade", "handelspartner"], "examples": [], "requirements": "Owner eller Manager",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_trade_request", "primaryCommand": "/company trade request", "aliases": [], "syntax": "/company trade request <företag>",
+      "description": "Skickar en handelsförfrågan till ett annat företag.",
+      "categoryId": "foretag", "keywords": ["company", "handel", "trade", "request"], "examples": [], "requirements": "Owner eller Manager",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_trade_accept", "primaryCommand": "/company trade accept", "aliases": [], "syntax": "/company trade accept <företag>",
+      "description": "Accepterar en inkommande handelsförfrågan.",
+      "categoryId": "foretag", "keywords": ["company", "handel", "trade", "accept"], "examples": [], "requirements": "Owner eller Manager",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "company_trade_remove", "primaryCommand": "/company trade remove", "aliases": [], "syntax": "/company trade remove <företag>",
+      "description": "Avslutar ett aktivt handelspartnerskap. En cooldown på 24 timmar gäller innan en ny partner kan väljas.",
+      "categoryId": "foretag", "keywords": ["company", "handel", "trade", "remove", "cooldown"], "examples": [], "requirements": "Owner eller Manager",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "shoppingplot_buy", "primaryCommand": "/shoppingplot buy", "aliases": [], "syntax": "/shoppingplot buy",
+      "description": "Köper en Shopping Plot.",
+      "categoryId": "foretag", "keywords": ["shoppingplot", "köp", "plot"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "shoppingplot_sell", "primaryCommand": "/shoppingplot sell", "aliases": [], "syntax": "/shoppingplot sell",
+      "description": "Säljer en ägd Shopping Plot.",
+      "categoryId": "foretag", "keywords": ["shoppingplot", "sälj", "plot"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "shoppingplot_info", "primaryCommand": "/shoppingplot info", "aliases": [], "syntax": "/shoppingplot info",
+      "description": "Visar information om en Shopping Plot.",
+      "categoryId": "foretag", "keywords": ["shoppingplot", "info", "plot"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "shoppingplot_rent", "primaryCommand": "/shoppingplot rent", "aliases": [], "syntax": "/shoppingplot rent <företagsägare> <procent>",
+      "description": "Hyr ut en Shopping Plot till ett företag mot en procentandel. En separat dygnshyra dras från företagskontot varje dag klockan 18:00. Misslyckas betalningen dras dubbel hyra nästa dag; misslyckas även den sägs plotten upp.",
+      "categoryId": "foretag", "keywords": ["shoppingplot", "hyra", "rent", "plot"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "shoppingplot_unrent", "primaryCommand": "/shoppingplot unrent", "aliases": [], "syntax": "/shoppingplot unrent <spelare>",
+      "description": "Avslutar en pågående uthyrning av en Shopping Plot.",
+      "categoryId": "foretag", "keywords": ["shoppingplot", "unrent", "plot"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "shoppingplot_tenants", "primaryCommand": "/shoppingplot tenants", "aliases": [], "syntax": "/shoppingplot tenants",
+      "description": "Visar aktuella hyresgäster för en Shopping Plot.",
+      "categoryId": "foretag", "keywords": ["shoppingplot", "tenants", "hyresgäst"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "building_info", "primaryCommand": "/building info", "aliases": [], "syntax": "/building info",
+      "description": "Visar information om en settlementbyggnad. Bygglicenser köps i /gz menu → Settlements → Byggnader.",
+      "categoryId": "byggnader", "keywords": ["building", "byggnad", "info"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "building_place", "primaryCommand": "/building place", "aliases": [], "syntax": "/building place <byggnad>",
+      "description": "Placerar en köpt byggnadslicens fysiskt i världen.",
+      "categoryId": "byggnader", "keywords": ["building", "byggnad", "place", "placera"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "building_status", "primaryCommand": "/building status", "aliases": [], "syntax": "/building status",
+      "description": "Visar status för en placerad byggnad.",
+      "categoryId": "byggnader", "keywords": ["building", "byggnad", "status"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "building_complete", "primaryCommand": "/building complete", "aliases": [], "syntax": "/building complete",
+      "description": "Färdigställer en byggnad som är redo.",
+      "categoryId": "byggnader", "keywords": ["building", "byggnad", "complete", "färdigställ"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "building_cancel", "primaryCommand": "/building cancel", "aliases": [], "syntax": "/building cancel",
+      "description": "Avbryter placeringen av en byggnad.",
+      "categoryId": "byggnader", "keywords": ["building", "byggnad", "cancel", "avbryt"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "building_outline", "primaryCommand": "/building outline", "aliases": [], "syntax": "/building outline",
+      "description": "Visar konturen för en byggnads placering.",
+      "categoryId": "byggnader", "keywords": ["building", "byggnad", "outline", "kontur"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "building_revalidate", "primaryCommand": "/building revalidate", "aliases": [], "syntax": "/building revalidate <byggnad>",
+      "description": "Kontrollerar om en byggnads placering fortfarande är giltig.",
+      "categoryId": "byggnader", "keywords": ["building", "byggnad", "revalidate"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "building_relocate", "primaryCommand": "/building relocate", "aliases": [], "syntax": "/building relocate <byggnad>",
+      "description": "Startar flytt av en byggnad.",
+      "categoryId": "byggnader", "keywords": ["building", "byggnad", "relocate", "flytta"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "building_relocate_confirm", "primaryCommand": "/building relocate confirm", "aliases": [], "syntax": "/building relocate <byggnad> confirm",
+      "description": "Bekräftar flytten av en byggnad.",
+      "categoryId": "byggnader", "keywords": ["building", "byggnad", "relocate", "bekräfta"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "building_relocate_cancel", "primaryCommand": "/building relocate cancel", "aliases": [], "syntax": "/building relocate cancel <byggnad>",
+      "description": "Avbryter en pågående flytt av en byggnad.",
+      "categoryId": "byggnader", "keywords": ["building", "byggnad", "relocate", "avbryt"], "examples": [], "requirements": "King eller Lord",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "territory_mark", "primaryCommand": "/territory mark", "aliases": [], "syntax": "/territory mark",
+      "description": "Markerar ett hörn för settlementets territorium.",
+      "categoryId": "territorium", "keywords": ["territory", "territorium", "mark"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "territory_preview", "primaryCommand": "/territory preview", "aliases": [], "syntax": "/territory preview",
+      "description": "Förhandsgranskar settlementets territorium.",
+      "categoryId": "territorium", "keywords": ["territory", "territorium", "preview"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "territory_buy", "primaryCommand": "/territory buy", "aliases": [], "syntax": "/territory buy",
+      "description": "Köper territorium för settlementet.",
+      "categoryId": "territorium", "keywords": ["territory", "territorium", "köp"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "territory_clear", "primaryCommand": "/territory clear", "aliases": [], "syntax": "/territory clear",
+      "description": "Rensar en territoriemarkering.",
+      "categoryId": "territorium", "keywords": ["territory", "territorium", "clear", "rensa"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "duel_challenge", "primaryCommand": "/duel", "aliases": [], "syntax": "/duel <spelare>",
+      "description": "Utmanar en spelare på duell.",
+      "categoryId": "socialt", "keywords": ["duel", "duell", "utmana"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "duel_accept", "primaryCommand": "/duel accept", "aliases": [], "syntax": "/duel accept",
+      "description": "Accepterar en inkommande duellutmaning.",
+      "categoryId": "socialt", "keywords": ["duel", "duell", "acceptera"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "duel_deny", "primaryCommand": "/duel deny", "aliases": [], "syntax": "/duel deny",
+      "description": "Avböjer en inkommande duellutmaning.",
+      "categoryId": "socialt", "keywords": ["duel", "duell", "avböj", "deny"], "examples": [], "requirements": null,
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "road_create", "primaryCommand": "/road create", "aliases": [], "syntax": "/road create <namn>",
+      "description": "Skapar en ny riksväg med angivet namn. Riksvägar markeras och färdigställs av serverns admins - vanliga spelare behöver inte använda dessa kommandon.",
+      "categoryId": "admin", "keywords": ["road", "riksväg", "admin"], "examples": [], "requirements": "Admin",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "road_setpoint", "primaryCommand": "/road setpoint", "aliases": [], "syntax": "/road setpoint",
+      "description": "Lägger till en vägpunkt för den riksväg som skapas. Kan användas flera gånger för att låta vägen följa svängar.",
+      "categoryId": "admin", "keywords": ["road", "riksväg", "setpoint", "admin"], "examples": [], "requirements": "Admin",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "road_complete", "primaryCommand": "/road complete", "aliases": [], "syntax": "/road complete",
+      "description": "Färdigställer och registrerar riksvägens sträcka.",
+      "categoryId": "admin", "keywords": ["road", "riksväg", "complete", "admin"], "examples": [], "requirements": "Admin",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "road_cancel", "primaryCommand": "/road cancel", "aliases": [], "syntax": "/road cancel",
+      "description": "Avbryter skapandet av en riksväg.",
+      "categoryId": "admin", "keywords": ["road", "riksväg", "cancel", "admin"], "examples": [], "requirements": "Admin",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } },
+
+    { "id": "road_list", "primaryCommand": "/road list", "aliases": [], "syntax": "/road list",
+      "description": "Visar registrerade riksvägar.",
+      "categoryId": "admin", "keywords": ["road", "riksväg", "list", "admin"], "examples": [], "requirements": "Admin",
+      "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Kommandon", "sourceReference": "https://www.gamezonemc.se/wiki/commands/kommandon", "lastVerified": "2026-09-10" } }
+  ]
 }

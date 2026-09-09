@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "recipes": [
+    {
+      "id": "test-mismatched",
+      "outputItemId": "minecraft:diamond_block",
+      "kind": "SHAPED",
+      "source": "GAMEZONE_ADDITION",
+      "width": 3,
+      "height": 3,
+      "grid": [
+        { "itemIds": ["minecraft:diamond"] }, { "itemIds": ["minecraft:diamond"] }
+      ]
+    }
+  ]
+}

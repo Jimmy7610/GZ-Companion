@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    { "id": "minimal", "displayName": "Minimal Item" }
+  ]
+}

@@ -10,13 +10,13 @@
 - **Scope**: Data-driven beginner guide engine with 5 chapters and 22 survival steps, live inventory condition evaluation (items, tags, food), progression inference (`supersededBy`), dynamic keybinding token resolution, local-first progress storage (`guide-progress.json`), responsive 2-pane UI with reset confirmation, and Home dashboard objective synchronization.
 - **Definition of Done**: Builds on JDK 25 and Fabric 26.1.2, passes 100% unit tests, validates guide content schemas and acyclic prerequisite graphs, accurately tracks inventory evidence without network calls, and synchronizes dynamic next steps with the Home tab.
 
-### M3 — Chest Manager (Fair-Play) — *implemented, pending human gameplay QA*
-- **Scope**: Indexing chest/barrel/shulker box/hopper/dispenser/dropper inventories legitimately opened by the player, search by item name, item ID, or coordinates.
-- **Definition of Done**: Local container snapshot storage keyed by a stable context/dimension/position/kind identity; zero wall-scanning or packet probing; a physical block interaction must correlate with a compatible opened menu before anything is indexed. See [Chest Manager](CHEST-MANAGER.md) for full detail and the required manual gameplay QA sequence — this milestone is not considered complete until that sequence has been run and confirmed in real gameplay.
+### M3 — Chest Manager (Fair-Play) — *Completed*
+- **Scope**: Indexing chest/barrel/shulker box/hopper/dispenser/dropper inventories legitimately opened by the player, search/filter/sort by item name, item ID, label, or coordinates, local labels, and copy-coordinates.
+- **Definition of Done**: Local container snapshot storage keyed by a stable context/dimension/position/kind identity; zero wall-scanning or packet probing; a physical block interaction must correlate with a compatible opened menu before anything is indexed. See [Chest Manager](CHEST-MANAGER.md) for full detail. Confirmed via manual gameplay QA.
 
-### M4 — GameZone Knowledge Base
-- **Scope**: Searchable command catalog, Swedish crafting overrides, custom item lore database.
-- **Definition of Done**: Functional "Kommandon" and "Crafting" tabs driven by Rule Pack data.
+### M4 — GameZone Knowledge Base — *Implemented, pending human gameplay QA*
+- **Scope**: Searchable command catalog (Kommandon tab) and a Crafting tab combining legitimately-unlocked client/server-synced recipes, documented GameZone crafting overrides, and the 50-relic GameZone item registry — all sourced from the official GameZone Wiki. See [Knowledge Base](KNOWLEDGE-BASE.md) for the full architecture, verification model, and sourcing policy.
+- **Definition of Done**: Functional "Kommandon" and "Crafting" tabs driven entirely by Rule Pack data (`commands.json`, `crafting-overrides.json`, `item-overrides.json`), each fact carrying explicit verification metadata; zero runtime network access; zero automation of commands or crafting. Pending final human gameplay QA in-game.
 
 ### M5 — GameZone Adapter & Chat Engine
 - **Scope**: Client-side chat event parsing (balance, settlement invites, whispers) with user feedback toasts.

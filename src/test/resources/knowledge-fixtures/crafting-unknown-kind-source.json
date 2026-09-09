@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "recipes": [
+    {
+      "id": "test-unknown-kind",
+      "outputItemId": "minecraft:gzcompanion_test_item",
+      "kind": "TOTALLY_MADE_UP",
+      "source": "GAMEZONE_ADDITION",
+      "ingredients": [{ "itemIds": ["minecraft:stick"] }]
+    },
+    {
+      "id": "test-unknown-source",
+      "outputItemId": "minecraft:gzcompanion_test_item",
+      "kind": "SHAPELESS",
+      "source": "VANILLA",
+      "ingredients": [{ "itemIds": ["minecraft:stick"] }]
+    }
+  ]
+}

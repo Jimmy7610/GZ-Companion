@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    { "id": "item1", "displayName": "Item One", "lore": ["Line one", { "nested": "object" }, "Line two"] }
+  ]
+}

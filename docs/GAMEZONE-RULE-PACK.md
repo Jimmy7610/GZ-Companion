@@ -59,3 +59,32 @@ Verification status strictly separates **technical compatibility** from **live s
 
 ## 4. Single Source of Truth
 All GameZone-specific knowledge lives in the declarative JSON files within `gamezone-pack/`. The Java runtime does not hardcode server assumptions.
+
+---
+
+## 5. M4 Knowledge Modules (`commands.json`, `crafting-overrides.json`, `item-overrides.json`)
+
+Starting with Milestone 4, these three files are loaded by dedicated readers in `se.jimmyeliasson.gzcompanion.knowledge.*`
+(`CommandKnowledgeLoader`, `CraftingKnowledgeLoader`, `ItemKnowledgeLoader`) — **not** by `RulePackLoader` and **not**
+gated by `manifest.json`'s per-module `status` field. Each file declares its own numeric `schemaVersion` (currently `1`)
+understood only by its own loader. The `manifest.json` entries for these three files are legacy bookkeeping left over
+from the M1 schema and carry no effect on the M4 modules; `RulePackLoader.parseCommands()` still exists for backward
+compatibility but expects the older nested `categories[].commands[]` shape and returns nothing for the M4 files' flat
+`categories[]` + `commands[]` shape — the two paths do not collide.
+
+Every fact-bearing entry in these three files carries a `verification` block:
+
+```json
+"verification": {
+  "status": "VERIFIED",
+  "sourceName": "GameZone Wiki — Alla 50 reliker",
+  "sourceReference": "https://www.gamezonemc.se/wiki/relics/relikregister",
+  "lastVerified": "2026-09-10"
+}
+```
+
+`status` is one of `VERIFIED`, `UNVERIFIED`, `STALE`, or `UNKNOWN` (`se.jimmyeliasson.gzcompanion.knowledge.common.VerificationStatus`)
+— deliberately distinct from the `CompatibilityStatus` enum used elsewhere in this document, which answers a different
+question ("is this file/module schema-valid") rather than "has this specific fact been confirmed against an official
+source." `VERIFIED` is only honored when `sourceName` and `lastVerified` are both present — see
+[Knowledge Base](KNOWLEDGE-BASE.md) for the full sourcing policy and schema reference.

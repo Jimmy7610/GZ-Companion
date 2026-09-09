@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "recipes": [
+    {
+      "id": "test-empty-shapeless",
+      "outputItemId": "minecraft:gzcompanion_test_item",
+      "kind": "SHAPELESS",
+      "source": "GAMEZONE_ADDITION",
+      "ingredients": []
+    }
+  ]
+}

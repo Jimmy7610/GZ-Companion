@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "categories": [],
+  "commands": [
+    { "id": "cmd1", "primaryCommand": "/settlement info", "aliases": ["/si"], "syntax": "/settlement info" },
+    { "id": "cmd2", "primaryCommand": "/second-command", "aliases": ["/si"], "syntax": "/second-command" }
+  ]
+}

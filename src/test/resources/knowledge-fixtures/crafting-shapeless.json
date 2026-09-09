@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "recipes": [
+    {
+      "id": "test-shapeless",
+      "outputItemId": "minecraft:gzcompanion_test_item",
+      "outputCount": 4,
+      "kind": "SHAPELESS",
+      "source": "GAMEZONE_ADDITION",
+      "notes": "Test fixture recipe, not a real GameZone fact.",
+      "ingredients": [
+        { "itemIds": ["minecraft:stick"] },
+        { "tag": "minecraft:planks" }
+      ]
+    }
+  ]
+}

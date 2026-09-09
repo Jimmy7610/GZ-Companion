@@ -13,6 +13,14 @@ import se.jimmyeliasson.gzcompanion.guide.GuideLoader;
 import se.jimmyeliasson.gzcompanion.guide.bridge.MinecraftGuideSnapshotProvider;
 import se.jimmyeliasson.gzcompanion.guide.progress.GuideContext;
 import se.jimmyeliasson.gzcompanion.guide.progress.JsonGuideProgressStore;
+import se.jimmyeliasson.gzcompanion.knowledge.commands.CommandCatalog;
+import se.jimmyeliasson.gzcompanion.knowledge.commands.CommandKnowledgeLoader;
+import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeLoadResult;
+import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeModuleStatus;
+import se.jimmyeliasson.gzcompanion.knowledge.crafting.CraftingKnowledgeBase;
+import se.jimmyeliasson.gzcompanion.knowledge.crafting.CraftingKnowledgeLoader;
+import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeBase;
+import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeLoader;
 import se.jimmyeliasson.gzcompanion.minecraft.MinecraftBridge;
 import se.jimmyeliasson.gzcompanion.minecraft.VanillaMinecraftBridge;
 import se.jimmyeliasson.gzcompanion.profile.ServerProfile;
@@ -35,6 +43,13 @@ public class CompanionSession {
     private final ChestManager chestManager;
     private RulePack activeRulePack;
     private CompatibilityResult compatibilityResult;
+
+    private CommandCatalog commandCatalog = CommandCatalog.empty();
+    private KnowledgeModuleStatus commandCatalogStatus = KnowledgeModuleStatus.UNAVAILABLE;
+    private CraftingKnowledgeBase craftingKnowledgeBase = CraftingKnowledgeBase.empty();
+    private KnowledgeModuleStatus craftingKnowledgeStatus = KnowledgeModuleStatus.UNAVAILABLE;
+    private ItemKnowledgeBase itemKnowledgeBase = ItemKnowledgeBase.empty();
+    private KnowledgeModuleStatus itemKnowledgeStatus = KnowledgeModuleStatus.UNAVAILABLE;
 
     private CompanionSession() {
         this.bridge = new VanillaMinecraftBridge();
@@ -71,7 +86,56 @@ public class CompanionSession {
         chestManager.initialize();
         featureManager.setChestManagerStatusSupplier(chestManager::getStatus);
 
+        loadKnowledgeModules();
+        featureManager.setCommandCatalogStatusSupplier(() -> commandCatalogStatus);
+        featureManager.setCraftingKnowledgeStatusSupplier(() -> craftingKnowledgeStatus);
+        featureManager.setItemKnowledgeStatusSupplier(() -> itemKnowledgeStatus);
+
         refreshCompatibility();
+    }
+
+    /**
+     * Loads the three M4 knowledge modules independently - a failure in one (missing resource,
+     * malformed JSON, unsupported schema) must never prevent the other two from loading, and
+     * must never affect Guide/Kistor. Each loader already fails closed internally; this wraps
+     * that in an extra defensive try/catch so a truly unexpected exception here still can't take
+     * the whole session down.
+     */
+    private void loadKnowledgeModules() {
+        try {
+            KnowledgeLoadResult<CommandCatalog> result = new CommandKnowledgeLoader().load();
+            this.commandCatalog = result.data() != null ? result.data() : CommandCatalog.empty();
+            this.commandCatalogStatus = toModuleStatus(result.outcome());
+        } catch (Exception e) {
+            this.commandCatalog = CommandCatalog.empty();
+            this.commandCatalogStatus = KnowledgeModuleStatus.ERROR;
+        }
+
+        try {
+            KnowledgeLoadResult<CraftingKnowledgeBase> result = new CraftingKnowledgeLoader().load();
+            this.craftingKnowledgeBase = result.data() != null ? result.data() : CraftingKnowledgeBase.empty();
+            this.craftingKnowledgeStatus = toModuleStatus(result.outcome());
+        } catch (Exception e) {
+            this.craftingKnowledgeBase = CraftingKnowledgeBase.empty();
+            this.craftingKnowledgeStatus = KnowledgeModuleStatus.ERROR;
+        }
+
+        try {
+            KnowledgeLoadResult<ItemKnowledgeBase> result = new ItemKnowledgeLoader().load();
+            this.itemKnowledgeBase = result.data() != null ? result.data() : ItemKnowledgeBase.empty();
+            this.itemKnowledgeStatus = toModuleStatus(result.outcome());
+        } catch (Exception e) {
+            this.itemKnowledgeBase = ItemKnowledgeBase.empty();
+            this.itemKnowledgeStatus = KnowledgeModuleStatus.ERROR;
+        }
+    }
+
+    private static KnowledgeModuleStatus toModuleStatus(KnowledgeLoadResult.Outcome outcome) {
+        return switch (outcome) {
+            case LOADED -> KnowledgeModuleStatus.LOADED;
+            case INCOMPATIBLE_SCHEMA -> KnowledgeModuleStatus.INCOMPATIBLE;
+            case ERROR -> KnowledgeModuleStatus.ERROR;
+        };
     }
 
     public void refreshCompatibility() {
@@ -111,6 +175,30 @@ public class CompanionSession {
 
     public ChestManager getChestManager() {
         return chestManager;
+    }
+
+    public CommandCatalog getCommandCatalog() {
+        return commandCatalog;
+    }
+
+    public KnowledgeModuleStatus getCommandCatalogStatus() {
+        return commandCatalogStatus;
+    }
+
+    public CraftingKnowledgeBase getCraftingKnowledgeBase() {
+        return craftingKnowledgeBase;
+    }
+
+    public KnowledgeModuleStatus getCraftingKnowledgeStatus() {
+        return craftingKnowledgeStatus;
+    }
+
+    public ItemKnowledgeBase getItemKnowledgeBase() {
+        return itemKnowledgeBase;
+    }
+
+    public KnowledgeModuleStatus getItemKnowledgeStatus() {
+        return itemKnowledgeStatus;
     }
 
     /**

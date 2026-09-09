@@ -2,6 +2,7 @@ package se.jimmyeliasson.gzcompanion.core.feature;
 
 import se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideLoadStatus;
+import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeModuleStatus;
 import se.jimmyeliasson.gzcompanion.ui.TabType;
 
 import java.util.EnumMap;
@@ -16,6 +17,9 @@ public class FeatureManager {
     private final Map<FeatureFlag, Boolean> flagStates = new EnumMap<>(FeatureFlag.class);
     private Supplier<GuideLoadStatus> guideStatusSupplier = () -> GuideLoadStatus.LOADED;
     private Supplier<ChestManagerStatus> chestManagerStatusSupplier = () -> ChestManagerStatus.UNAVAILABLE;
+    private Supplier<KnowledgeModuleStatus> commandCatalogStatusSupplier = () -> KnowledgeModuleStatus.UNAVAILABLE;
+    private Supplier<KnowledgeModuleStatus> craftingKnowledgeStatusSupplier = () -> KnowledgeModuleStatus.UNAVAILABLE;
+    private Supplier<KnowledgeModuleStatus> itemKnowledgeStatusSupplier = () -> KnowledgeModuleStatus.UNAVAILABLE;
 
     public FeatureManager() {
         resetToDefaults();
@@ -54,6 +58,36 @@ public class FeatureManager {
         return chestManagerStatusSupplier != null ? chestManagerStatusSupplier.get() : ChestManagerStatus.UNAVAILABLE;
     }
 
+    public void setCommandCatalogStatusSupplier(Supplier<KnowledgeModuleStatus> supplier) {
+        if (supplier != null) {
+            this.commandCatalogStatusSupplier = supplier;
+        }
+    }
+
+    public KnowledgeModuleStatus getCommandCatalogStatus() {
+        return commandCatalogStatusSupplier != null ? commandCatalogStatusSupplier.get() : KnowledgeModuleStatus.UNAVAILABLE;
+    }
+
+    public void setCraftingKnowledgeStatusSupplier(Supplier<KnowledgeModuleStatus> supplier) {
+        if (supplier != null) {
+            this.craftingKnowledgeStatusSupplier = supplier;
+        }
+    }
+
+    public KnowledgeModuleStatus getCraftingKnowledgeStatus() {
+        return craftingKnowledgeStatusSupplier != null ? craftingKnowledgeStatusSupplier.get() : KnowledgeModuleStatus.UNAVAILABLE;
+    }
+
+    public void setItemKnowledgeStatusSupplier(Supplier<KnowledgeModuleStatus> supplier) {
+        if (supplier != null) {
+            this.itemKnowledgeStatusSupplier = supplier;
+        }
+    }
+
+    public KnowledgeModuleStatus getItemKnowledgeStatus() {
+        return itemKnowledgeStatusSupplier != null ? itemKnowledgeStatusSupplier.get() : KnowledgeModuleStatus.UNAVAILABLE;
+    }
+
     public void setFeatureState(FeatureFlag flag, boolean enabled) {
         if (flag != null) {
             flagStates.put(flag, enabled);
@@ -86,12 +120,13 @@ public class FeatureManager {
         return switch (tab) {
             case HEM -> ModuleStatus.AVAILABLE;
             case GUIDE -> (getGuideLoadStatus() == GuideLoadStatus.LOADED) ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
-            case CRAFTING -> ModuleStatus.COMING_SOON;
+            case CRAFTING -> (getCraftingKnowledgeStatus().isAvailable() || getItemKnowledgeStatus().isAvailable())
+                    ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case KISTOR -> getChestManagerStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case SETTLEMENT -> ModuleStatus.COMING_SOON;
             case BYGGPLANER -> ModuleStatus.COMING_SOON;
             case MARKETWATCH -> ModuleStatus.COMING_SOON;
-            case KOMMANDON -> ModuleStatus.COMING_SOON;
+            case KOMMANDON -> getCommandCatalogStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case INSTALLNINGAR -> ModuleStatus.COMING_SOON;
         };
     }

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "categories": [],
+  "commands": [
+    { "id": "dup", "primaryCommand": "/first", "syntax": "/first" },
+    { "id": "dup", "primaryCommand": "/second", "syntax": "/second" }
+  ]
+}

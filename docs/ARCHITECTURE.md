@@ -42,6 +42,14 @@ se.jimmyeliasson.gzcompanion
 │   ├── RulePackManifest.java     # Version & verification metadata
 │   ├── RulePackLoader.java       # Resilient JSON parser
 │   └── model/                    # Commands, guides, world rules
+├── knowledge/                     # M4: GameZone command/crafting/item knowledge (see KNOWLEDGE-BASE.md)
+│   ├── common/                   # VerificationStatus/Metadata, KnowledgeModuleStatus, KnowledgeLoadResult
+│   ├── commands/                 # CommandCatalog, CommandKnowledgeLoader (commands.json)
+│   ├── crafting/
+│   │   ├── CraftingKnowledgeBase.java, CraftingKnowledgeLoader.java  # crafting-overrides.json
+│   │   ├── ClientRecipeSnapshot.java  # runtime-observed, NEVER "Vanilla", no VerificationMetadata
+│   │   └── bridge/MinecraftRecipeDisplayAdapter.java  # ONLY place touching MC recipe/item classes
+│   └── items/                    # ItemKnowledgeBase, ItemKnowledgeLoader (item-overrides.json - relics)
 ├── diagnostics/
 │   ├── CompatibilityStatus.java  # Semantic status codes & colors
 │   ├── ModuleReport.java         # Per-module diagnostic record
@@ -57,10 +65,13 @@ se.jimmyeliasson.gzcompanion
     ├── TabType.java              # 9 navigation section definitions
     ├── GZCompanionMainScreen.java# Main container dialog screen
     ├── layout/                   # Responsive geometry & typography
+    ├── TextInputHandler.java     # Shared focus/keyPressed/charTyped contract for tabs with a text input
     └── tabs/
         ├── HomeTabComponent.java # Home dashboard
         ├── GuideTabComponent.java# Interactive 2-pane guide tab
         ├── KistorTabComponent.java # Searchable 2-pane Chest Manager tab
+        ├── CommandsTabComponent.java # Searchable Kommandon tab (implements TextInputHandler)
+        ├── CraftingTabComponent.java # Crafting tab: recipes + GameZone items (implements TextInputHandler)
         └── PlaceholderTabComponent.java # Placeholder sections
 ```
 
@@ -79,14 +90,25 @@ graph TD
     D --> H[StorageManager]
     D --> J[GuideEngine]
     D --> M[ChestManager]
+    D --> P[CommandCatalog]
+    D --> Q[CraftingKnowledgeBase]
+    D --> R[ItemKnowledgeBase]
     F --> I[gamezone-pack/*.json]
     J --> K[guide-content/*.json]
     J --> L[config/gzcompanion/guide-progress.json]
     M --> N[config/gzcompanion/chest-index.json]
     N2[ChestCaptureController: UseBlockCallback + ScreenEvents] --> M
+    P --> I
+    Q --> I
+    R --> I
     G --> C
     E --> C
 ```
+
+The Crafting tab additionally reads `MinecraftRecipeDisplayAdapter.readClientRecipeBook()` directly at
+render time (via `LocalPlayer.getRecipeBook()`) — this is runtime-observed, client/server-synced data,
+never routed through `CraftingKnowledgeBase` and never treated as a Rule Pack fact (no `VerificationMetadata`,
+never labeled "Vanilla" — see [Knowledge Base](KNOWLEDGE-BASE.md)).
 
 `ChestCaptureController` is the only place that registers Fabric client hooks for the Chest
 Manager (`UseBlockCallback` for the physical block interaction, `ScreenEvents` for the opened
@@ -101,4 +123,5 @@ lifecycle and fair-play boundary.
 - If a specific Rule Pack module fails to parse or is missing from classpath, `RulePackLoader` records a warning and instantiates an empty fallback collection for that module.
 - `CompatibilityService` flags that individual module with `UNVERIFIED` or `WARNING`, while keeping the rest of the mod fully operational.
 - If `chest-index.json` cannot be read, `ChestManager` reports `ChestManagerStatus.ERROR`, the Kistor tab shows a controlled error state, and the rest of the mod (Guide, Home, etc.) remains fully operational.
+- Each of the three M4 knowledge modules (`CommandCatalog`, `CraftingKnowledgeBase`, `ItemKnowledgeBase`) is loaded independently in its own try/catch in `CompanionSession.loadKnowledgeModules()` and reports its own `KnowledgeModuleStatus` (LOADED/UNAVAILABLE/ERROR/INCOMPATIBLE) — a malformed `item-overrides.json` never affects `commands.json`, `crafting-overrides.json`, Guide, or Kistor, and vice versa. `KnowledgeModuleStatus` is intentionally new and scoped to `knowledge.*`; it does not replace or merge with the already-approved `GuideLoadStatus`/`ChestManagerStatus`.
 - The UI displays explicit status badges instead of failing silently or guessing server behavior.

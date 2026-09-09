@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    { "id": "dup", "displayName": "First" },
+    { "id": "dup", "displayName": "Second" }
+  ]
+}

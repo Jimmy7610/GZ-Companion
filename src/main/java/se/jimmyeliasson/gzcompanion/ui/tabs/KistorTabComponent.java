@@ -17,6 +17,7 @@ import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
+import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
 import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
 import se.jimmyeliasson.gzcompanion.ui.layout.KistorLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
@@ -31,7 +32,7 @@ import java.util.List;
  * storage the player has personally and legitimately opened, showing "senast känt innehåll"
  * (last known contents) — never presented as live/current state.
  */
-public class KistorTabComponent {
+public class KistorTabComponent implements TextInputHandler {
     private static final int MAX_SEARCH_LENGTH = 48;
     private static final int MAX_LABEL_LENGTH = 32;
 

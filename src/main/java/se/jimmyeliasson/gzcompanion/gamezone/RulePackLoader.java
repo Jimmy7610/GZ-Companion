@@ -118,7 +118,11 @@ public class RulePackLoader {
                             String c = getString(cmd, "command", "");
                             String d = getString(cmd, "description", "");
                             String p = getString(cmd, "permission", "ALL");
-                            CompatibilityStatus s = parseStatus(getString(cmd, "status", "VERIFIED"));
+                            // A missing/malformed status must never silently become VERIFIED - that
+                            // would let an edited data file assert a fact as confirmed without anyone
+                            // actually confirming it. Default to UNVERIFIED, matching parseStatus's own
+                            // UNKNOWN fallback for truly unparseable values.
+                            CompatibilityStatus s = parseStatus(getString(cmd, "status", "UNVERIFIED"));
                             list.add(new CommandDefinition(c, d, p, s));
                         }
                     }

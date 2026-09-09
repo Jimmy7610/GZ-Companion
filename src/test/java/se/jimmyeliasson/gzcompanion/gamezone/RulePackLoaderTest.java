@@ -59,4 +59,23 @@ class RulePackLoaderTest {
         assertNotNull(pack.parsers(), "Parsers list must not be null");
         assertTrue(pack.parsers().isEmpty(), "Parsers list should be empty pending live server verification");
     }
+
+    @Test
+    @DisplayName("Legacy nested-category command parsing must never default a missing status to VERIFIED")
+    void testLegacyCommandMissingStatusDefaultsToUnverified() {
+        RulePack pack = loader.loadFromPrefix("/gamezone-pack-legacy-commands-test/");
+        assertEquals(2, pack.commands().size());
+
+        var noStatus = pack.commands().stream()
+                .filter(c -> c.command().equals("/test-no-status"))
+                .findFirst().orElseThrow();
+        assertEquals(CompatibilityStatus.UNVERIFIED, noStatus.status(),
+                "A command with no status field must never be silently treated as VERIFIED");
+
+        var explicitVerified = pack.commands().stream()
+                .filter(c -> c.command().equals("/test-verified"))
+                .findFirst().orElseThrow();
+        assertEquals(CompatibilityStatus.VERIFIED, explicitVerified.status(),
+                "An explicit VERIFIED status in the data must still be honored");
+    }
 }

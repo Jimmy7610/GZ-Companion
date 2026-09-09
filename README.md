@@ -49,7 +49,7 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Interactive 2-Pane Guide UI**: Left chapter/step navigator and right detail pane with live condition evidence, tip callouts, manual toggles, and reset confirmation dialog.
 - **Home Dashboard Objective Integration**: "Nästa uppgift" automatically syncs with the active guide step.
 
-### Milestone 3 — Chest Manager (Kistor) *(pending human gameplay QA)*
+### Milestone 3 — Chest Manager (Kistor)
 - **"Senast känt innehåll" (Last Known Contents)**: Indexes ONLY storage the player has personally and legitimately opened — never live, never scanned. See [Chest Manager](docs/CHEST-MANAGER.md) for the full fair-play boundary.
 - **Real Opened-Storage Capture**: A physical block right-click plus a correlated, matching menu open together start a capture session; the visible snapshot updates while the screen is open and is finalized once on close.
 - **Explicit Storage Allow-List**: Chest, Trapped Chest, Barrel, placed Shulker Box, Hopper, Dispenser, and Dropper — verified against actual Minecraft 26.1.2 block/menu classes. Everything else (furnaces, anvils, Ender Chests, plugin GUIs) is explicitly excluded.
@@ -57,6 +57,13 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Local Custom Labels & Copy Coordinates**: Name a chest "Gruvbas" locally, and copy its coordinates to the clipboard — both pure local conveniences, never written to a sign, chat, or a server command.
 - **Explicit `StorageShape`**: Single, double, or unknown-shape chests are shown honestly and distinctly — never guessed.
 - **Context & Dimension Isolated**: Reuses the Guide Engine's world/server identity rules; the same coordinates in a different world, server, or dimension are always separate entries.
+
+### Milestone 4 — GameZone Knowledge Base *(pending human gameplay QA)*
+- **Kommandon Tab**: A searchable, category-filtered catalog of GameZone commands sourced from the official GameZone Wiki, each with a verification badge and a "Kopiera kommando" clipboard action — never auto-sent, never auto-typed into chat.
+- **Crafting Tab**: Legitimately-unlocked client/server-synced crafting-table recipes read from your own Minecraft recipe book, shown alongside any documented GameZone crafting overrides (none exist on the wiki today) and the 50-relic GameZone item registry — switchable via an Alla/Recept/GameZone-föremål filter.
+- **Explicit Verification Model**: Every GameZone fact carries a `VerificationStatus` (Verifierad/Overifierad/Inaktuell/Okänd) plus its exact source page and the date it was checked — see [Knowledge Base](docs/KNOWLEDGE-BASE.md) for the full sourcing policy.
+- **Never "Vanilla"**: Recipes read from your own recipe book are labeled "Tillgängligt Minecraft-recept" (client/server-synced), kept structurally and visually distinct from hand-verified GameZone Rule Pack facts.
+- **Zero Automation, Zero Runtime Network Access**: The GameZone Wiki is a build-time authoring source only — the shipped mod never fetches it, never crafts automatically, and never modifies or intercepts any recipe.
 
 ---
 

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "categories": [
+    { "id": "real-category", "displayName": "Real Category", "sortOrder": 1 }
+  ],
+  "commands": [
+    { "id": "cmd1", "primaryCommand": "/foo", "syntax": "/foo", "categoryId": "nonexistent-category" }
+  ]
+}
