@@ -126,6 +126,10 @@ public class GuideEngine {
         return loadStatus;
     }
 
+    public boolean isGuideLoaded() {
+        return loadStatus == GuideLoadStatus.LOADED && !guides.isEmpty();
+    }
+
     public GuideManifest getManifest() {
         return manifest;
     }
@@ -198,6 +202,9 @@ public class GuideEngine {
      * Periodic or forced progression evaluation.
      */
     public boolean evaluate(GuideContext context, boolean force) {
+        if (loadStatus != GuideLoadStatus.LOADED) {
+            return false;
+        }
         if (context == null || snapshotProvider == null) {
             return false;
         }
@@ -433,6 +440,7 @@ public class GuideEngine {
      * @return true if completion was recorded, false if rejected.
      */
     public boolean markStepCompleted(GuideContext context, String stepId, boolean manual) {
+        if (loadStatus != GuideLoadStatus.LOADED) return false;
         if (context == null || stepId == null) return false;
 
         GuideStep step = stepIndex.get(stepId);
@@ -468,6 +476,7 @@ public class GuideEngine {
     }
 
     public boolean undoStepCompletion(GuideContext context, String stepId) {
+        if (loadStatus != GuideLoadStatus.LOADED) return false;
         if (context == null || stepId == null) return false;
 
         String ctxKey = context.getStorageKey();
@@ -489,7 +498,7 @@ public class GuideEngine {
     }
 
     public void resetGuideProgress(GuideContext context) {
-        if (context == null) return;
+        if (loadStatus != GuideLoadStatus.LOADED || context == null) return;
         progressStore.resetContext(context);
         this.progressData = progressStore.load();
         this.lastEvaluatedFingerprint = null;

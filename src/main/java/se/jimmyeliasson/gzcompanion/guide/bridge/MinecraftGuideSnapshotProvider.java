@@ -5,12 +5,12 @@ import net.minecraft.client.Options;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import se.jimmyeliasson.gzcompanion.guide.GuideSupportedTags;
 
 import java.security.MessageDigest;
 import java.util.HashMap;
@@ -21,14 +21,6 @@ import java.util.Map;
  * Only reads legitimate local player inventory and current key mappings.
  */
 public class MinecraftGuideSnapshotProvider implements GuideSnapshotProvider {
-
-    private static final TagKey<Item>[] TRACKED_TAGS = new TagKey[] {
-        ItemTags.LOGS,
-        ItemTags.PLANKS,
-        ItemTags.BEDS,
-        ItemTags.COALS,
-        ItemTags.WOOL
-    };
 
     @Override
     public GuidePlayerSnapshot createSnapshot() {
@@ -67,10 +59,9 @@ public class MinecraftGuideSnapshotProvider implements GuideSnapshotProvider {
                 hasEdibleItem = true;
             }
 
-            for (TagKey<Item> tagKey : TRACKED_TAGS) {
-                if (stack.is(tagKey)) {
-                    String tagStr = tagKey.location().toString();
-                    tagCounts.put(tagStr, tagCounts.getOrDefault(tagStr, 0) + count);
+            for (Map.Entry<String, TagKey<Item>> entry : GuideSupportedTags.getTagMap().entrySet()) {
+                if (stack.is(entry.getValue())) {
+                    tagCounts.put(entry.getKey(), tagCounts.getOrDefault(entry.getKey(), 0) + count);
                 }
             }
         }

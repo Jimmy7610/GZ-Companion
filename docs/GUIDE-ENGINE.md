@@ -119,12 +119,12 @@ Guide progression and content are validated across three distinct tiers:
    - Prerequisite graph acyclicity verified via cycle detection DFS.
    - Chapter ID and step ID uniqueness enforced.
    - Superseded-by cross-references verified.
-   - Condition types and structures validated (unknown condition types safely rejected).
+   - Condition types and structures validated (unknown condition types and malformed types safely rejected).
 
-2. **Registry Validated (Runtime / Initialization)**:
-   - Item IDs validated against Minecraft 26.1.2 vanilla registries (`BuiltInRegistries.ITEM`).
-   - Tag identifiers validated as valid resource locations.
-   - Minecraft version compatibility verified against `testedMinecraftVersions` (sets `GuideLoadStatus.INCOMPATIBLE` if mismatched).
+2. **Registry & Tag Validated (Runtime / Initialization)**:
+   - **Item ID Validation**: Item IDs verified directly against Minecraft 26.1.2 vanilla item registries (`BuiltInRegistries.ITEM`).
+   - **Guide Tag Validation**: Guide inventory tags verified against Guide snapshot-supported Minecraft tags (`GuideSupportedTags`, e.g. `minecraft:logs`, `minecraft:planks`, `minecraft:beds`, `minecraft:coals`, `minecraft:wool`). Unsupported tags are rejected at validation time to guarantee observability.
+   - **Minecraft Version Compatibility**: Verified against `testedMinecraftVersions` (sets `GuideLoadStatus.INCOMPATIBLE` if mismatched).
 
 3. **Gameplay Reviewed**:
    - Tutorial clarity, step ordering, Swedish copy readability, and difficulty curve verified in actual Minecraft survival gameplay.

@@ -165,6 +165,8 @@ public final class GuideValidator {
             case HAS_ITEM_TAG -> {
                 if (condition.tag() == null || condition.tag().isBlank()) {
                     errors.add("Step '" + stepId + "' HAS_ITEM_TAG condition missing tag");
+                } else if (!GuideSupportedTags.isSupported(condition.tag())) {
+                    errors.add("Step '" + stepId + "' HAS_ITEM_TAG references unsupported tag: '" + condition.tag() + "' (supported: " + GuideSupportedTags.getSupportedTagNames() + ")");
                 }
                 if (condition.count() <= 0) {
                     errors.add("Step '" + stepId + "' HAS_ITEM_TAG condition count must be > 0 (found " + condition.count() + ")");
@@ -264,13 +266,8 @@ public final class GuideValidator {
             return;
         }
 
-        try {
-            net.minecraft.resources.Identifier loc = net.minecraft.resources.Identifier.tryParse(tag);
-            if (loc == null) {
-                errors.add("Step '" + stepId + "' tag is unparseable: '" + tag + "'");
-            }
-        } catch (Throwable ignored) {
-            // Standalone unit test environment without loaded registries
+        if (!GuideSupportedTags.isSupported(tag)) {
+            errors.add("Step '" + stepId + "' references unsupported item tag in GuideSupportedTags: '" + tag + "' (supported: " + GuideSupportedTags.getSupportedTagNames() + ")");
         }
     }
 

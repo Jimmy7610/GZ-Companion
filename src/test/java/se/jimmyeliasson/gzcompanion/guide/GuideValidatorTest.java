@@ -67,4 +67,39 @@ class GuideValidatorTest {
         assertFalse(result.isValid());
         assertTrue(result.errors().stream().anyMatch(e -> e.contains("Circular prerequisite")));
     }
+
+    @Test
+    @DisplayName("Should accept supported guide tags defined in GuideSupportedTags")
+    void testSupportedGuideTagAccepted() {
+        GuideChapter chapter = new GuideChapter("ch1", "Chapter 1", 1);
+        GuideStep step = new GuideStep("s1", "ch1", 1, "Logs", "Logs", "Logs", null, null, null,
+                List.of(), false, true, List.of(GuideCondition.hasItemTag("minecraft:logs", 4, "Logs")), List.of());
+
+        GuideDefinition guide = new GuideDefinition(1, "test_guide", "Test Guide", "Desc", List.of(chapter), List.of(step));
+        GuideValidator.ValidationResult result = GuideValidator.validate(guide);
+
+        assertTrue(result.isValid());
+        assertTrue(result.errors().isEmpty());
+
+        GuideValidator.ValidationResult regResult = GuideValidator.validateRegistry(guide);
+        assertTrue(regResult.isValid());
+    }
+
+    @Test
+    @DisplayName("Should reject syntactically valid but unsupported guide tag")
+    void testSyntacticallyValidButUnsupportedGuideTagRejected() {
+        GuideChapter chapter = new GuideChapter("ch1", "Chapter 1", 1);
+        GuideStep step = new GuideStep("s1", "ch1", 1, "Logz", "Logz", "Logz", null, null, null,
+                List.of(), false, true, List.of(GuideCondition.hasItemTag("minecraft:logz", 4, "Logz")), List.of());
+
+        GuideDefinition guide = new GuideDefinition(1, "test_guide", "Test Guide", "Desc", List.of(chapter), List.of(step));
+        GuideValidator.ValidationResult result = GuideValidator.validate(guide);
+
+        assertFalse(result.isValid());
+        assertTrue(result.errors().stream().anyMatch(e -> e.contains("unsupported tag: 'minecraft:logz'")));
+
+        GuideValidator.ValidationResult regResult = GuideValidator.validateRegistry(guide);
+        assertFalse(regResult.isValid());
+        assertTrue(regResult.errors().stream().anyMatch(e -> e.contains("unsupported item tag in GuideSupportedTags: 'minecraft:logz'")));
+    }
 }

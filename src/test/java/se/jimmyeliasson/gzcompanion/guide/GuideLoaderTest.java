@@ -146,9 +146,211 @@ class GuideLoaderTest {
         java.util.List<String> errors = new java.util.ArrayList<>();
         GuideDefinition guide = loader.parseGuide(json, null, warnings, errors);
 
-        assertNotNull(guide);
-        assertTrue(guide.steps().isEmpty(), "Step with invalid condition type must not be loaded");
+        assertNull(guide);
         assertFalse(errors.isEmpty(), "Error must be recorded for unknown condition type");
         assertTrue(errors.stream().anyMatch(e -> e.contains("HAS_ITME")));
+    }
+
+    @Test
+    @DisplayName("Should fail safely when schemaVersion is a non-numeric string or null")
+    void testMalformedNumericSchemaVersionFailsSafely() {
+        GuideLoader loader = new GuideLoader();
+        List<String> warnings = new java.util.ArrayList<>();
+        List<String> errors = new java.util.ArrayList<>();
+
+        // String "banana" instead of integer
+        com.google.gson.JsonObject jsonBanana = new com.google.gson.JsonObject();
+        jsonBanana.addProperty("schemaVersion", "banana");
+        GuideManifest manifest1 = loader.parseManifest(jsonBanana, warnings, errors);
+        assertNull(manifest1);
+        assertFalse(errors.isEmpty());
+
+        // Null schemaVersion
+        errors.clear();
+        com.google.gson.JsonObject jsonNull = new com.google.gson.JsonObject();
+        jsonNull.add("schemaVersion", com.google.gson.JsonNull.INSTANCE);
+        GuideManifest manifest2 = loader.parseManifest(jsonNull, warnings, errors);
+        assertNull(manifest2);
+        assertFalse(errors.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Should fail safely when order or count are malformed strings")
+    void testMalformedNumericFieldsFailSafely() {
+        GuideLoader loader = new GuideLoader();
+        List<String> warnings = new java.util.ArrayList<>();
+        List<String> errors = new java.util.ArrayList<>();
+
+        // Malformed order in chapter
+        com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+        json.addProperty("schemaVersion", 1);
+        json.addProperty("id", "g1");
+        json.addProperty("title", "G1");
+
+        com.google.gson.JsonArray chapters = new com.google.gson.JsonArray();
+        com.google.gson.JsonObject ch = new com.google.gson.JsonObject();
+        ch.addProperty("id", "ch1");
+        ch.addProperty("title", "Chapter 1");
+        ch.addProperty("order", "first"); // Malformed string instead of int
+        chapters.add(ch);
+        json.add("chapters", chapters);
+
+        com.google.gson.JsonArray steps = new com.google.gson.JsonArray();
+        json.add("steps", steps);
+
+        GuideDefinition guide = loader.parseGuide(json, null, warnings, errors);
+        assertNull(guide);
+        assertFalse(errors.isEmpty());
+        assertTrue(errors.stream().anyMatch(e -> e.contains("order")));
+    }
+
+    @Test
+    @DisplayName("Should fail safely when count in condition is a string")
+    void testMalformedCountFailsSafely() {
+        GuideLoader loader = new GuideLoader();
+        List<String> warnings = new java.util.ArrayList<>();
+        List<String> errors = new java.util.ArrayList<>();
+
+        com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+        json.addProperty("schemaVersion", 1);
+        json.addProperty("id", "g1");
+        json.addProperty("title", "G1");
+
+        com.google.gson.JsonArray chapters = new com.google.gson.JsonArray();
+        com.google.gson.JsonObject ch = new com.google.gson.JsonObject();
+        ch.addProperty("id", "ch1");
+        ch.addProperty("title", "Chapter 1");
+        chapters.add(ch);
+        json.add("chapters", chapters);
+
+        com.google.gson.JsonArray steps = new com.google.gson.JsonArray();
+        com.google.gson.JsonObject step = new com.google.gson.JsonObject();
+        step.addProperty("id", "s1");
+        step.addProperty("chapterId", "ch1");
+        step.addProperty("title", "Step 1");
+
+        com.google.gson.JsonObject cond = new com.google.gson.JsonObject();
+        cond.addProperty("type", "HAS_ITEM");
+        cond.addProperty("itemId", "minecraft:stick");
+        cond.addProperty("count", "four"); // Malformed string
+        step.add("condition", cond);
+        steps.add(step);
+        json.add("steps", steps);
+
+        GuideDefinition guide = loader.parseGuide(json, null, warnings, errors);
+        assertNull(guide);
+        assertFalse(errors.isEmpty());
+        assertTrue(errors.stream().anyMatch(e -> e.contains("count")));
+    }
+
+    @Test
+    @DisplayName("Should fail safely when boolean fields are malformed types")
+    void testMalformedBooleanFailsSafely() {
+        GuideLoader loader = new GuideLoader();
+        List<String> warnings = new java.util.ArrayList<>();
+        List<String> errors = new java.util.ArrayList<>();
+
+        com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+        json.addProperty("schemaVersion", 1);
+        json.addProperty("id", "g1");
+        json.addProperty("title", "G1");
+
+        com.google.gson.JsonArray chapters = new com.google.gson.JsonArray();
+        com.google.gson.JsonObject ch = new com.google.gson.JsonObject();
+        ch.addProperty("id", "ch1");
+        ch.addProperty("title", "Chapter 1");
+        chapters.add(ch);
+        json.add("chapters", chapters);
+
+        com.google.gson.JsonArray steps = new com.google.gson.JsonArray();
+        com.google.gson.JsonObject step = new com.google.gson.JsonObject();
+        step.addProperty("id", "s1");
+        step.addProperty("chapterId", "ch1");
+        step.addProperty("title", "Step 1");
+        step.addProperty("optional", "yes"); // "yes" instead of boolean true/false
+        steps.add(step);
+        json.add("steps", steps);
+
+        GuideDefinition guide = loader.parseGuide(json, null, warnings, errors);
+        assertNull(guide);
+        assertFalse(errors.isEmpty());
+        assertTrue(errors.stream().anyMatch(e -> e.contains("optional")));
+    }
+
+    @Test
+    @DisplayName("Should fail safely when array fields are objects or strings")
+    void testMalformedArraysFailSafely() {
+        GuideLoader loader = new GuideLoader();
+        List<String> warnings = new java.util.ArrayList<>();
+        List<String> errors = new java.util.ArrayList<>();
+
+        // testedMinecraftVersions is a string instead of array
+        com.google.gson.JsonObject manifestJson = new com.google.gson.JsonObject();
+        manifestJson.addProperty("schemaVersion", 1);
+        manifestJson.addProperty("testedMinecraftVersions", "26.1.2");
+        com.google.gson.JsonArray guides = new com.google.gson.JsonArray();
+        manifestJson.add("guides", guides);
+
+        GuideManifest manifest = loader.parseManifest(manifestJson, warnings, errors);
+        assertNull(manifest);
+        assertFalse(errors.isEmpty());
+        assertTrue(errors.stream().anyMatch(e -> e.contains("testedMinecraftVersions")));
+
+        // chapters is a string "wrong"
+        errors.clear();
+        com.google.gson.JsonObject guideJson = new com.google.gson.JsonObject();
+        guideJson.addProperty("schemaVersion", 1);
+        guideJson.addProperty("chapters", "wrong");
+        GuideDefinition guide1 = loader.parseGuide(guideJson, null, warnings, errors);
+        assertNull(guide1);
+        assertFalse(errors.isEmpty());
+
+        // steps is an object {}
+        errors.clear();
+        com.google.gson.JsonObject guideJson2 = new com.google.gson.JsonObject();
+        guideJson2.addProperty("schemaVersion", 1);
+        guideJson2.add("chapters", new com.google.gson.JsonArray());
+        guideJson2.add("steps", new com.google.gson.JsonObject());
+        GuideDefinition guide2 = loader.parseGuide(guideJson2, null, warnings, errors);
+        assertNull(guide2);
+        assertFalse(errors.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Should fail safely when nested condition subConditions is not an array")
+    void testMalformedNestedConditionFailsSafely() {
+        GuideLoader loader = new GuideLoader();
+        List<String> warnings = new java.util.ArrayList<>();
+        List<String> errors = new java.util.ArrayList<>();
+
+        com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+        json.addProperty("schemaVersion", 1);
+        json.addProperty("id", "g1");
+        json.addProperty("title", "G1");
+
+        com.google.gson.JsonArray chapters = new com.google.gson.JsonArray();
+        com.google.gson.JsonObject ch = new com.google.gson.JsonObject();
+        ch.addProperty("id", "ch1");
+        ch.addProperty("title", "Chapter 1");
+        chapters.add(ch);
+        json.add("chapters", chapters);
+
+        com.google.gson.JsonArray steps = new com.google.gson.JsonArray();
+        com.google.gson.JsonObject step = new com.google.gson.JsonObject();
+        step.addProperty("id", "s1");
+        step.addProperty("chapterId", "ch1");
+        step.addProperty("title", "Step 1");
+
+        com.google.gson.JsonObject cond = new com.google.gson.JsonObject();
+        cond.addProperty("type", "ALL_OF");
+        cond.addProperty("subConditions", "wrong"); // String instead of array
+        step.add("condition", cond);
+        steps.add(step);
+        json.add("steps", steps);
+
+        GuideDefinition guide = loader.parseGuide(json, null, warnings, errors);
+        assertNull(guide);
+        assertFalse(errors.isEmpty());
+        assertTrue(errors.stream().anyMatch(e -> e.contains("subConditions")));
     }
 }

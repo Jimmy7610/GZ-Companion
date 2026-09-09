@@ -41,6 +41,10 @@ public record GuideCondition(
         return new GuideCondition(GuideConditionType.HAS_ITEM_TAG, null, List.of(), tag, count, description, List.of());
     }
 
+    public static GuideCondition hasItemTag(String tag, int count, String description) {
+        return hasTag(tag, count, description);
+    }
+
     public static GuideCondition hasAnyItem(List<String> itemIds, int count, String description) {
         return new GuideCondition(GuideConditionType.HAS_ANY_ITEM, null, itemIds, null, count, description, List.of());
     }

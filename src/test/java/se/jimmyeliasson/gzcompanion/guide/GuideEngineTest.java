@@ -289,5 +289,89 @@ class GuideEngineTest {
         incompEngine.initialize();
 
         assertEquals(GuideLoadStatus.INCOMPATIBLE, incompEngine.getLoadStatus());
+        assertFalse(incompEngine.isGuideLoaded());
+    }
+
+    @Test
+    @DisplayName("Should strictly reject evaluation and mutations when loadStatus is INCOMPATIBLE")
+    void testEvaluateRejectedWhenIncompatible() {
+        GuideLoader incompatibleLoader = new GuideLoader() {
+            @Override
+            public LoadResult loadBundled() {
+                GuideLoader realLoader = new GuideLoader();
+                LoadResult real = realLoader.loadBundled();
+                GuideManifest incompatibleManifest = new GuideManifest(
+                        real.manifest().schemaVersion(),
+                        real.manifest().contentVersion(),
+                        real.manifest().locale(),
+                        List.of("1.20.1"),
+                        real.manifest().guides()
+                );
+                return new LoadResult(incompatibleManifest, real.guides(), real.warnings(), real.errors());
+            }
+        };
+
+        Path progressPath = tempDir.resolve("incompatible-store.json");
+        JsonGuideProgressStore store = new JsonGuideProgressStore(progressPath);
+        boolean[] snapshotCalled = new boolean[]{false};
+        GuideEngine incompEngine = new GuideEngine(incompatibleLoader, store, () -> {
+            snapshotCalled[0] = true;
+            return GuidePlayerSnapshot.EMPTY;
+        });
+        incompEngine.initialize();
+        assertEquals(GuideLoadStatus.INCOMPATIBLE, incompEngine.getLoadStatus());
+
+        // Evaluation must be rejected immediately without acquiring snapshot
+        boolean evalResult = incompEngine.evaluate(testContext, true);
+        assertFalse(evalResult, "Evaluate must return false when INCOMPATIBLE");
+        assertFalse(snapshotCalled[0], "Snapshot acquisition must not happen when INCOMPATIBLE");
+
+        // Mutations must be rejected
+        assertFalse(incompEngine.markStepCompleted(testContext, "movement_controls", true));
+        assertFalse(incompEngine.undoStepCompletion(testContext, "movement_controls"));
+        assertFalse(java.nio.file.Files.exists(progressPath), "No progress file should be created or mutated");
+    }
+
+    @Test
+    @DisplayName("Should strictly reject evaluation and mutations when loadStatus is ERROR")
+    void testEvaluateRejectedWhenError() {
+        GuideLoader errorLoader = new GuideLoader() {
+            @Override
+            public LoadResult loadBundled() {
+                return new LoadResult(null, List.of(), List.of(), List.of("Critical loader failure"));
+            }
+        };
+
+        Path progressPath = tempDir.resolve("error-store.json");
+        JsonGuideProgressStore store = new JsonGuideProgressStore(progressPath);
+        boolean[] snapshotCalled = new boolean[]{false};
+        GuideEngine errorEngine = new GuideEngine(errorLoader, store, () -> {
+            snapshotCalled[0] = true;
+            return GuidePlayerSnapshot.EMPTY;
+        });
+        errorEngine.initialize();
+        assertEquals(GuideLoadStatus.ERROR, errorEngine.getLoadStatus());
+        assertFalse(errorEngine.isGuideLoaded());
+
+        boolean evalResult = errorEngine.evaluate(testContext, true);
+        assertFalse(evalResult, "Evaluate must return false when ERROR");
+        assertFalse(snapshotCalled[0], "Snapshot acquisition must not happen when ERROR");
+        assertFalse(errorEngine.markStepCompleted(testContext, "movement_controls", true));
+        assertFalse(java.nio.file.Files.exists(progressPath));
+    }
+
+    @Test
+    @DisplayName("Should strictly reject evaluation and mutations when loadStatus is UNAVAILABLE")
+    void testEvaluateRejectedWhenUnavailable() {
+        Path progressPath = tempDir.resolve("unavail-store.json");
+        JsonGuideProgressStore store = new JsonGuideProgressStore(progressPath);
+        // Do not call initialize() -> status remains UNAVAILABLE
+        GuideEngine unavailEngine = new GuideEngine(new GuideLoader(), store, () -> GuidePlayerSnapshot.EMPTY);
+        assertEquals(GuideLoadStatus.UNAVAILABLE, unavailEngine.getLoadStatus());
+        assertFalse(unavailEngine.isGuideLoaded());
+
+        assertFalse(unavailEngine.evaluate(testContext, true));
+        assertFalse(unavailEngine.markStepCompleted(testContext, "movement_controls", true));
+        assertFalse(java.nio.file.Files.exists(progressPath));
     }
 }
