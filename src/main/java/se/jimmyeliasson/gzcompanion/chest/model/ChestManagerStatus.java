@@ -7,7 +7,8 @@ package se.jimmyeliasson.gzcompanion.chest.model;
 public enum ChestManagerStatus {
     LOADED("Laddad", true),
     UNAVAILABLE("Ej tillgänglig", false),
-    ERROR("Fel vid inläsning", false);
+    ERROR("Fel vid inläsning", false),
+    INCOMPATIBLE("Inkompatibelt schema", false);
 
     private final String displayName;
     private final boolean available;

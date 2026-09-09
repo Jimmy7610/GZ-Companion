@@ -49,14 +49,23 @@ session:
    block(s) legitimately open that exact menu Java class. `ChestManager.tryBeginCapture` then
    verifies the pending interaction is recent, in the same context and dimension, AND one of
    those compatible kinds. If any check fails, the pending interaction is discarded and **nothing
-   is indexed.**
-3. **Live capture while open.** Once correlated, `ScreenEvents.afterTick` re-reads only the
-   storage portion of the menu once per client tick. A lightweight fingerprint of the visible
-   slots is computed; if unchanged since the last tick, nothing happens. If changed, the
-   in-memory snapshot is updated. **No disk write happens while the screen is open.**
-4. **Finalize on close.** `ScreenEvents.remove` fires when the screen closes. The last legitimate
-   visible snapshot is finalized and persisted **once**, and only if it actually changed relative
-   to the existing record — then the capture session is cleared.
+   is indexed.** On success, an immediate snapshot is taken right away — the screen is already
+   legitimately open, so this is a legitimate read — instead of waiting for the first tick. This
+   closes a race where a player who closes the screen before the first tick would otherwise leave
+   no legitimate snapshot at all.
+3. **Live capture while open.** `ScreenEvents.afterTick` re-reads only the storage portion of the
+   menu once per client tick. A lightweight fingerprint of the visible slots is computed; if
+   unchanged since the last read, nothing happens. If changed, the in-memory snapshot is updated.
+   **No disk write happens while the screen is open.**
+4. **Finalize on close.** `ScreenEvents.remove` fires when the screen closes. One true final read
+   of the menu is taken while it is still valid and forwarded the same way, so the persisted
+   contents reflect the very last state the player actually saw — never a state from a stale
+   earlier tick. The finalized snapshot is then persisted **exactly once**, updating "senast
+   öppnad" (last opened) even when the contents are unchanged from the existing record. If a
+   capture session somehow never received a single legitimate snapshot (it should not, given the
+   immediate open-time read above), GZ Companion fails closed: no empty record is created, and an
+   existing non-empty record is never overwritten with empty data. Either way, the capture session
+   is then cleared.
 
 ## 3. Physical Interaction Correlation
 
@@ -161,11 +170,22 @@ Path: `config/gzcompanion/chest-index.json`.
 
 - Atomic writes: data is written to a `.tmp` file and moved into place with
   `StandardCopyOption.ATOMIC_MOVE`, exactly like `JsonGuideProgressStore`.
-- Corruption recovery: a file that fails to parse is preserved as
-  `chest-index.json.corrupt.<timestamp>` and the mod continues with an empty index rather than
-  crashing.
-- A `schemaVersion` higher than the version this build understands is safely rejected (treated as
-  empty) rather than partially or incorrectly parsed.
+- Corruption recovery: a file that fails to parse (or fails to load at all) is preserved as
+  `chest-index.json.corrupt.<timestamp>`, the mod continues with an empty index, and
+  `ChestManager` still reports `LOADED` — a malformed file is treated the same as a fresh start,
+  never as a permanent error state.
+- **Incompatible future schema fails closed, without any overwrite risk.** `JsonChestIndexStore`
+  returns a typed `ChestIndexLoadResult` distinguishing `NOT_FOUND` / `LOADED` /
+  `CORRUPT_RECOVERED` (all safe, all result in `ChestManagerStatus.LOADED`) from
+  `INCOMPATIBLE_SCHEMA` (a `schemaVersion` higher than this build understands). On
+  `INCOMPATIBLE_SCHEMA` the file on disk is **never moved, deleted, or overwritten**, and
+  `ChestManager` reports `ChestManagerStatus.INCOMPATIBLE` instead of `LOADED`. Every capture and
+  mutation entry point (`recordPendingInteraction`, `tryBeginCapture`, `updateCaptureSlots`,
+  `endCapture`, `forgetContainer`, `setLabel`) requires `LOADED` status and is a safe no-op
+  otherwise — so an older client can never silently replace or partially overwrite an index file
+  written by a newer version. Only in-memory queries (`getContainers`, `search`, etc.) remain
+  available while incompatible; the Kistor tab shows a controlled "kistindexet är sparat av en
+  nyare version" message, and the rest of GZ Companion (Guide, Home, etc.) is unaffected.
 - Unknown/future JSON fields are tolerated and ignored on read, so a newer version of the file
   written by a future GZ Companion release doesn't break an older one that reads it.
 - Container identity is a **stable key** (context + dimension + canonical anchor position +

@@ -9,6 +9,7 @@ import se.jimmyeliasson.gzcompanion.chest.model.StoragePosition;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainerId;
 import se.jimmyeliasson.gzcompanion.chest.storage.ChestIndexData;
+import se.jimmyeliasson.gzcompanion.chest.storage.ChestIndexLoadResult;
 import se.jimmyeliasson.gzcompanion.chest.storage.ContextContainers;
 import se.jimmyeliasson.gzcompanion.chest.storage.JsonChestIndexStore;
 
@@ -42,13 +43,28 @@ class JsonChestIndexStoreTest {
         store.save(data);
         assertTrue(Files.exists(storePath));
 
-        ChestIndexData reloaded = store.load();
-        StoredContainer reloadedContainer = reloaded.getContext(id.contextStorageKey()).containers().get(id.asStableKey());
+        ChestIndexLoadResult result = store.load();
+        assertEquals(ChestIndexLoadResult.Outcome.LOADED, result.outcome());
+        assertTrue(result.isUsable());
+
+        StoredContainer reloadedContainer = result.data().getContext(id.contextStorageKey()).containers().get(id.asStableKey());
         assertNotNull(reloadedContainer);
         assertEquals("Gruvbas", reloadedContainer.label());
         assertEquals(2, reloadedContainer.slots().size());
         assertEquals(StorageKind.CHEST, reloadedContainer.kind());
         assertEquals(new StoragePosition(120, 64, -32), reloadedContainer.anchor());
+    }
+
+    @Test
+    @DisplayName("Should report NOT_FOUND with an empty, usable index when no file exists yet")
+    void testNotFoundOutcome() {
+        Path storePath = tempDir.resolve("chest-index.json");
+        JsonChestIndexStore store = new JsonChestIndexStore(storePath);
+
+        ChestIndexLoadResult result = store.load();
+        assertEquals(ChestIndexLoadResult.Outcome.NOT_FOUND, result.outcome());
+        assertTrue(result.isUsable());
+        assertTrue(result.data().contexts().isEmpty());
     }
 
     @Test
@@ -70,25 +86,46 @@ class JsonChestIndexStoreTest {
         Files.writeString(storePath, "{ not valid json at all !!!");
 
         JsonChestIndexStore store = new JsonChestIndexStore(storePath);
-        ChestIndexData loaded = store.load();
+        ChestIndexLoadResult result = store.load();
 
-        assertNotNull(loaded);
-        assertTrue(loaded.contexts().isEmpty());
+        assertEquals(ChestIndexLoadResult.Outcome.CORRUPT_RECOVERED, result.outcome());
+        assertTrue(result.isUsable());
+        assertTrue(result.data().contexts().isEmpty());
 
         boolean backupFound = Files.list(tempDir).anyMatch(p -> p.getFileName().toString().contains(".corrupt."));
         assertTrue(backupFound, "Corrupt file should be preserved with a timestamped backup");
     }
 
     @Test
-    @DisplayName("Should safely reject an unsupported future schema version")
+    @DisplayName("Should report INCOMPATIBLE_SCHEMA for an unsupported future schema, as a non-usable outcome")
     void testUnsupportedFutureSchemaRejected() throws IOException {
         Path storePath = tempDir.resolve("chest-index.json");
         Files.writeString(storePath, "{ \"schemaVersion\": 999, \"contexts\": {} }");
 
         JsonChestIndexStore store = new JsonChestIndexStore(storePath);
-        ChestIndexData loaded = store.load();
+        ChestIndexLoadResult result = store.load();
 
-        assertTrue(loaded.contexts().isEmpty(), "An unsupported future schema must load as empty, never crash");
+        assertEquals(ChestIndexLoadResult.Outcome.INCOMPATIBLE_SCHEMA, result.outcome());
+        assertFalse(result.isUsable(), "An incompatible future schema must never be treated as usable/loaded");
+        assertTrue(result.data().contexts().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Should never move, delete, or overwrite a future-schema file on load")
+    void testFutureSchemaFileIsNeverTouched() throws IOException {
+        Path storePath = tempDir.resolve("chest-index.json");
+        String futureContent = "{ \"schemaVersion\": 999, \"contexts\": { \"someFutureShape\": \"unrecognized-by-this-client\" } }";
+        Files.writeString(storePath, futureContent);
+        byte[] originalBytes = Files.readAllBytes(storePath);
+
+        JsonChestIndexStore store = new JsonChestIndexStore(storePath);
+        store.load();
+
+        assertTrue(Files.exists(storePath), "The future-schema file must still exist at its original path");
+        assertArrayEquals(originalBytes, Files.readAllBytes(storePath), "The future-schema file's bytes must be completely untouched");
+
+        boolean noCorruptBackupCreated = Files.list(tempDir).noneMatch(p -> p.getFileName().toString().contains(".corrupt."));
+        assertTrue(noCorruptBackupCreated, "A future schema is not corruption - it must not be backed up or moved");
     }
 
     @Test
@@ -118,9 +155,10 @@ class JsonChestIndexStoreTest {
         Files.writeString(storePath, json);
 
         JsonChestIndexStore store = new JsonChestIndexStore(storePath);
-        ChestIndexData loaded = store.load();
+        ChestIndexLoadResult result = store.load();
 
-        assertEquals(1, loaded.getContext("ctx1").containers().size());
+        assertEquals(ChestIndexLoadResult.Outcome.LOADED, result.outcome());
+        assertEquals(1, result.data().getContext("ctx1").containers().size());
     }
 
     @Test
@@ -140,7 +178,7 @@ class JsonChestIndexStoreTest {
                 .withContext("ctxB", new ContextContainers(Map.of(idB.asStableKey(), containerB)));
         store.save(data);
 
-        ChestIndexData reloaded = store.load();
+        ChestIndexData reloaded = store.load().data();
         assertEquals(1, reloaded.getContext("ctxA").containers().size());
         assertEquals(1, reloaded.getContext("ctxB").containers().size());
         assertTrue(reloaded.getContext("ctxNonExistent").containers().isEmpty());

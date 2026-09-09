@@ -8,6 +8,7 @@ import se.jimmyeliasson.gzcompanion.chest.model.StoragePosition;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainerId;
 import se.jimmyeliasson.gzcompanion.chest.storage.ChestIndexData;
+import se.jimmyeliasson.gzcompanion.chest.storage.ChestIndexLoadResult;
 import se.jimmyeliasson.gzcompanion.chest.storage.ChestIndexStore;
 import se.jimmyeliasson.gzcompanion.chest.storage.ContextContainers;
 
@@ -49,9 +50,30 @@ public class ChestManager {
 
     public void initialize() {
         try {
-            ChestIndexData loaded = store.load();
-            this.indexData = loaded != null ? loaded : ChestIndexData.empty();
-            this.status = ChestManagerStatus.LOADED;
+            ChestIndexLoadResult result = store.load();
+            if (result == null) {
+                this.indexData = ChestIndexData.empty();
+                this.status = ChestManagerStatus.ERROR;
+                return;
+            }
+
+            switch (result.outcome()) {
+                case NOT_FOUND, LOADED, CORRUPT_RECOVERED -> {
+                    this.indexData = result.data();
+                    this.status = ChestManagerStatus.LOADED;
+                }
+                case INCOMPATIBLE_SCHEMA -> {
+                    // Fail closed: never treat an unrecognized future schema as loaded. The file
+                    // on disk is left completely untouched by the store; no capture, mutation, or
+                    // save may occur while in this state (see requireLoaded()).
+                    this.indexData = ChestIndexData.empty();
+                    this.status = ChestManagerStatus.INCOMPATIBLE;
+                }
+                case ERROR -> {
+                    this.indexData = ChestIndexData.empty();
+                    this.status = ChestManagerStatus.ERROR;
+                }
+            }
         } catch (Exception e) {
             this.indexData = ChestIndexData.empty();
             this.status = ChestManagerStatus.ERROR;
@@ -60,6 +82,14 @@ public class ChestManager {
 
     public ChestManagerStatus getStatus() {
         return status;
+    }
+
+    /**
+     * Every capture and mutation entry point requires this. Only in-memory queries against
+     * already-loaded state remain safe (and allowed) while the manager is not LOADED.
+     */
+    private boolean requireLoaded() {
+        return status == ChestManagerStatus.LOADED;
     }
 
     // ------------------------------------------------------------------
@@ -74,6 +104,7 @@ public class ChestManager {
     public void recordPendingInteraction(String contextKey, String dimensionKey, StorageKind kind,
                                           StoragePosition clickedPos, StoragePosition partnerPos,
                                           boolean partnerKnown, long nowMs) {
+        if (!requireLoaded()) return;
         if (contextKey == null || dimensionKey == null || kind == null || clickedPos == null) return;
 
         StoragePosition anchor = clickedPos;
@@ -106,6 +137,8 @@ public class ChestManager {
      * @return true if a capture session began.
      */
     public boolean tryBeginCapture(String contextKey, String dimensionKey, Set<StorageKind> compatibleKinds, long nowMs) {
+        if (!requireLoaded()) return false;
+
         PendingInteraction p = this.pendingInteraction;
         if (p == null) return false;
 
@@ -132,6 +165,7 @@ public class ChestManager {
      * Never writes to disk.
      */
     public void updateCaptureSlots(List<ChestSlotEntry> visibleSlots, long nowMs) {
+        if (!requireLoaded()) return;
         if (activeCapture == null) return;
         List<ChestSlotEntry> safeSlots = visibleSlots != null ? List.copyOf(visibleSlots) : List.of();
         String fingerprint = fingerprint(safeSlots);
@@ -146,33 +180,35 @@ public class ChestManager {
 
     /**
      * Called when the captured storage screen closes. Finalizes and persists the last legitimate
-     * visible snapshot exactly once if it changed relative to the existing record, then clears
-     * the capture session.
+     * visible snapshot exactly once, then clears the capture session.
+     *
+     * <p>Fails closed: if this capture session never received a single legitimate snapshot (see
+     * {@link #updateCaptureSlots}), NOTHING is written — no empty record is created, and an
+     * existing non-empty record is never overwritten with empty data. In normal operation this
+     * should not happen, since the controller takes an immediate snapshot the moment the screen
+     * opens and a final snapshot immediately before calling this method.
+     *
+     * <p>Every session that DID capture at least one legitimate snapshot always persists exactly
+     * once here, even if the final contents are identical to the existing record — this is what
+     * keeps "senast öppnad" (last opened) accurate on every reopen, not just on a content change.
      */
     public void endCapture(long nowMs) {
         ActiveCapture cap = this.activeCapture;
         this.activeCapture = null;
         if (cap == null) return;
+        if (!requireLoaded()) return;
 
-        StoredContainerId id = new StoredContainerId(cap.contextKey, cap.dimensionKey, cap.anchor, cap.kind);
-        List<ChestSlotEntry> finalSlots = cap.hasAnyUpdate ? cap.lastSlots : List.of();
-        String finalFingerprint = cap.hasAnyUpdate ? cap.lastFingerprint : fingerprint(List.of());
-
-        ContextContainers contextContainers = indexData.getContext(cap.contextKey);
-        StoredContainer existing = contextContainers.containers().get(id.asStableKey());
-
-        boolean changed = existing == null || !fingerprint(existing.slots()).equals(finalFingerprint)
-                || existing.partnerUnknown() != !cap.partnerKnown
-                || !Objects.equals(existing.partner(), cap.partner);
-
-        long lastOpenedAtMs = cap.hasAnyUpdate ? cap.lastUpdateAtMs : nowMs;
-        String label = existing != null ? existing.label() : null;
-
-        StoredContainer updated = new StoredContainer(id, label, cap.partner, !cap.partnerKnown, lastOpenedAtMs, finalSlots);
-
-        if (!changed) {
+        if (!cap.hasAnyUpdate) {
+            // No legitimate snapshot was ever captured this session - fail closed.
             return;
         }
+
+        StoredContainerId id = new StoredContainerId(cap.contextKey, cap.dimensionKey, cap.anchor, cap.kind);
+        ContextContainers contextContainers = indexData.getContext(cap.contextKey);
+        StoredContainer existing = contextContainers.containers().get(id.asStableKey());
+        String label = existing != null ? existing.label() : null;
+
+        StoredContainer updated = new StoredContainer(id, label, cap.partner, !cap.partnerKnown, cap.lastUpdateAtMs, cap.lastSlots);
 
         ContextContainers updatedContext = contextContainers.withContainer(updated);
         indexData = indexData.withContext(cap.contextKey, updatedContext);
@@ -285,6 +321,7 @@ public class ChestManager {
      * the actual Minecraft chest/container.
      */
     public boolean forgetContainer(String contextKey, StoredContainerId id) {
+        if (!requireLoaded()) return false;
         if (contextKey == null || id == null) return false;
         ContextContainers contextContainers = indexData.getContext(contextKey);
         if (!contextContainers.containers().containsKey(id.asStableKey())) return false;
@@ -300,6 +337,7 @@ public class ChestManager {
      * server state, commands, or chat — the label exists only inside chest-index.json.
      */
     public boolean setLabel(String contextKey, StoredContainerId id, String label) {
+        if (!requireLoaded()) return false;
         if (contextKey == null || id == null) return false;
         ContextContainers contextContainers = indexData.getContext(contextKey);
         StoredContainer existing = contextContainers.containers().get(id.asStableKey());

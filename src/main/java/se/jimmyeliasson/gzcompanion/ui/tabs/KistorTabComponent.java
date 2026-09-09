@@ -300,6 +300,7 @@ public class KistorTabComponent {
         String msg = switch (status) {
             case ERROR -> "Fel inträffade vid inläsning av kistindexet.";
             case UNAVAILABLE -> "Kistor är inte tillgängligt just nu.";
+            case INCOMPATIBLE -> "Kistindexet är sparat av en nyare version av GZ Companion och kan inte läsas här.";
             case LOADED -> "Laddar...";
         };
         TextUtil.drawCenteredText(extractor, font, msg, bounds.x() + (bounds.width() / 2),

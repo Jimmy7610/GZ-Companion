@@ -49,23 +49,27 @@ public class JsonChestIndexStore implements ChestIndexStore {
     }
 
     @Override
-    public synchronized ChestIndexData load() {
+    public synchronized ChestIndexLoadResult load() {
         if (!Files.exists(filePath)) {
-            return ChestIndexData.empty();
+            return ChestIndexLoadResult.notFound();
         }
 
         try (FileReader reader = new FileReader(filePath.toFile())) {
             JsonElement rootElement = JsonParser.parseReader(reader);
             if (rootElement == null || !rootElement.isJsonObject()) {
-                LOGGER.warn("Chest index file did not contain a JSON object. Returning empty index.");
-                return ChestIndexData.empty();
+                LOGGER.warn("Chest index file did not contain a JSON object. Backing up and starting fresh.");
+                backupCorruptFile();
+                return ChestIndexLoadResult.corruptRecovered();
             }
             JsonObject root = rootElement.getAsJsonObject();
 
             int schemaVersion = root.has("schemaVersion") ? root.get("schemaVersion").getAsInt() : 1;
             if (schemaVersion > ChestIndexData.CURRENT_SCHEMA) {
-                LOGGER.warn("Unsupported future chest index schema version: {}. Returning empty index.", schemaVersion);
-                return ChestIndexData.empty();
+                // Deliberately do NOT move, delete, or overwrite the file: an older client must
+                // never risk data loss against an index written by a newer version.
+                LOGGER.warn("Unsupported future chest index schema version: {} (this build understands up to {}). " +
+                        "Leaving the file untouched; Chest Manager will report INCOMPATIBLE.", schemaVersion, ChestIndexData.CURRENT_SCHEMA);
+                return ChestIndexLoadResult.incompatibleSchema();
             }
 
             Map<String, ContextContainers> contexts = new HashMap<>();
@@ -78,11 +82,11 @@ public class JsonChestIndexStore implements ChestIndexStore {
                 }
             }
 
-            return new ChestIndexData(schemaVersion, contexts);
+            return ChestIndexLoadResult.loaded(new ChestIndexData(schemaVersion, contexts));
         } catch (Exception e) {
             LOGGER.error("Failed to parse chest index file {}. Preserving corrupt file.", filePath, e);
             backupCorruptFile();
-            return ChestIndexData.empty();
+            return ChestIndexLoadResult.corruptRecovered();
         }
     }
 

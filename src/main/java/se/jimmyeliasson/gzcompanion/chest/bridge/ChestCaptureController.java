@@ -33,11 +33,15 @@ import java.util.Set;
  *       handling before any packet is considered) when the player right-clicks a block. If it is
  *       on the storage allow-list, a pending interaction is recorded.</li>
  *   <li>{@link ScreenEvents#AFTER_INIT} fires when a screen opens. If it is a supported storage
- *       menu, we try to correlate it with the pending interaction via {@link ChestManager}.</li>
+ *       menu, we try to correlate it with the pending interaction via {@link ChestManager}. On
+ *       success, an immediate snapshot is taken right away (the screen is already legitimately
+ *       open, so this is legitimate — waiting for the first tick would race a player who closes
+ *       instantly).</li>
  *   <li>While correlated, {@link ScreenEvents#afterTick} re-reads only the storage portion of the
  *       menu once per client tick and forwards it to the manager, which itself decides whether
  *       anything actually changed.</li>
- *   <li>{@link ScreenEvents#remove} finalizes and persists (if changed) exactly once.</li>
+ *   <li>{@link ScreenEvents#remove} takes one true final snapshot while the menu is still valid,
+ *       forwards it, then finalizes and persists exactly once.</li>
  * </ol>
  */
 public final class ChestCaptureController {
@@ -116,12 +120,25 @@ public final class ChestCaptureController {
 
             var playerInventory = client.player.getInventory();
 
+            // Take an immediate snapshot now - the storage screen is already legitimately open,
+            // so this is a legitimate read. Waiting for the next tick would leave a race where a
+            // player who closes the screen before the first tick leaves no snapshot at all.
+            var initialSlots = MinecraftChestCaptureAdapter.extractStorageSlots(menu, playerInventory);
+            manager.updateCaptureSlots(initialSlots, System.currentTimeMillis());
+
             ScreenEvents.afterTick(screen).register((Screen s) -> {
                 var slots = MinecraftChestCaptureAdapter.extractStorageSlots(menu, playerInventory);
                 manager.updateCaptureSlots(slots, System.currentTimeMillis());
             });
 
-            ScreenEvents.remove(screen).register((Screen s) -> manager.endCapture(System.currentTimeMillis()));
+            ScreenEvents.remove(screen).register((Screen s) -> {
+                // Read the menu one true final time while it is still valid, so the persisted
+                // "senast känt innehåll" reflects the last state the player actually saw.
+                var finalSlots = MinecraftChestCaptureAdapter.extractStorageSlots(menu, playerInventory);
+                long now = System.currentTimeMillis();
+                manager.updateCaptureSlots(finalSlots, now);
+                manager.endCapture(now);
+            });
         } catch (Exception ignored) {
             // Defensive: a capture bookkeeping failure must never break the player's screen.
         }

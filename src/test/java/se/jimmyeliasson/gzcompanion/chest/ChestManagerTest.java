@@ -3,13 +3,19 @@ package se.jimmyeliasson.gzcompanion.chest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestSlotEntry;
 import se.jimmyeliasson.gzcompanion.chest.model.StorageKind;
 import se.jimmyeliasson.gzcompanion.chest.model.StoragePosition;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainerId;
+import se.jimmyeliasson.gzcompanion.chest.storage.ChestIndexData;
+import se.jimmyeliasson.gzcompanion.chest.storage.ChestIndexLoadResult;
+import se.jimmyeliasson.gzcompanion.chest.storage.ChestIndexStore;
 import se.jimmyeliasson.gzcompanion.chest.storage.JsonChestIndexStore;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.List;
@@ -277,5 +283,177 @@ class ChestManagerTest {
         assertTrue(manager.forgetContainer(CTX_A, toForget));
         assertEquals(1, manager.getIndexedCount(CTX_A));
         assertFalse(manager.forgetContainer(CTX_A, toForget), "Forgetting an already-removed entry should report false");
+    }
+
+    // ------------------------------------------------------------------
+    // Final capture & data-safety hardening
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("The final updateCaptureSlots call before endCapture wins over earlier calls in the same session")
+    void testFinalSlotUpdateWins() {
+        ChestManager manager = newManager();
+        StoragePosition pos = new StoragePosition(9, 64, 9);
+
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L);
+        // Immediate open-time snapshot.
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:coal", 10)), 1060L);
+        // A tick update.
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:coal", 5), new ChestSlotEntry(1, "minecraft:torch", 3)), 1100L);
+        // The true final read taken right before endCapture.
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:diamond", 1)), 1190L);
+        manager.endCapture(1200L);
+
+        StoredContainer container = manager.getContainers(CTX_A).get(0);
+        assertEquals(1, container.slots().size());
+        assertEquals("minecraft:diamond", container.slots().get(0).itemId());
+        assertEquals(1190L, container.lastOpenedAtMs());
+    }
+
+    @Test
+    @DisplayName("A capture session that never received a single legitimate snapshot creates no record")
+    void testNoUpdateCaptureNeverCreatesEmptyRecord() {
+        ChestManager manager = newManager();
+        StoragePosition pos = new StoragePosition(11, 64, 11);
+
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        assertTrue(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L));
+        // No updateCaptureSlots call at all.
+        manager.endCapture(1100L);
+
+        assertEquals(0, manager.getIndexedCount(CTX_A), "No snapshot was ever taken - nothing should be indexed");
+    }
+
+    @Test
+    @DisplayName("A capture session with no snapshot never wipes an existing non-empty record")
+    void testNoUpdateCaptureNeverWipesExistingRecord() {
+        ChestManager manager = newManager();
+        StoragePosition pos = new StoragePosition(12, 64, 12);
+
+        openAndCloseChest(manager, CTX_A, DIM_OVERWORLD, pos, List.of(new ChestSlotEntry(0, "minecraft:gold_ingot", 7)), 1000L);
+        assertEquals(1, manager.getIndexedCount(CTX_A));
+
+        // A second session correlates and begins, but for some reason never captures a snapshot.
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 5000L);
+        assertTrue(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 5050L));
+        manager.endCapture(5100L);
+
+        assertEquals(1, manager.getIndexedCount(CTX_A), "The existing record must still exist");
+        StoredContainer container = manager.getContainers(CTX_A).get(0);
+        assertEquals(1, container.slots().size());
+        assertEquals(7, container.slots().get(0).count(), "The existing non-empty snapshot must be untouched");
+        assertEquals(1100L, container.lastOpenedAtMs(), "lastOpenedAtMs must not advance when no legitimate snapshot was captured (unchanged from the first session's real snapshot at atMs+100)");
+    }
+
+    @Test
+    @DisplayName("Reopening the same chest with identical contents still updates lastOpenedAtMs and stays one record")
+    void testUnchangedReopenUpdatesLastOpenedAtMs() {
+        ChestManager manager = newManager();
+        StoragePosition pos = new StoragePosition(13, 64, 13);
+        List<ChestSlotEntry> sameSlots = List.of(new ChestSlotEntry(0, "minecraft:emerald", 2));
+
+        openAndCloseChest(manager, CTX_A, DIM_OVERWORLD, pos, sameSlots, 1000L);
+        StoredContainer first = manager.getContainers(CTX_A).get(0);
+        assertEquals(1, manager.getIndexedCount(CTX_A));
+
+        openAndCloseChest(manager, CTX_A, DIM_OVERWORLD, pos, List.of(new ChestSlotEntry(0, "minecraft:emerald", 2)), 5000L);
+
+        assertEquals(1, manager.getIndexedCount(CTX_A), "Reopening the same chest must never duplicate the record");
+        StoredContainer second = manager.getContainers(CTX_A).get(0);
+        assertEquals(second.id().asStableKey(), first.id().asStableKey());
+        assertEquals(1, second.slots().size());
+        assertEquals(2, second.slots().get(0).count());
+        assertTrue(second.lastOpenedAtMs() > first.lastOpenedAtMs(), "lastOpenedAtMs must reflect the second, later opening");
+    }
+
+    // ------------------------------------------------------------------
+    // Schema compatibility & fail-closed status gating
+    // ------------------------------------------------------------------
+
+    /** A fake store returning a fixed load outcome, to simulate INCOMPATIBLE/ERROR without touching disk. */
+    private static final class FixedResultStore implements ChestIndexStore {
+        private final ChestIndexLoadResult result;
+        private boolean saveCalled = false;
+
+        FixedResultStore(ChestIndexLoadResult result) {
+            this.result = result;
+        }
+
+        @Override
+        public ChestIndexLoadResult load() {
+            return result;
+        }
+
+        @Override
+        public void save(ChestIndexData data) {
+            saveCalled = true;
+        }
+    }
+
+    @Test
+    @DisplayName("An incompatible future schema produces ChestManagerStatus.INCOMPATIBLE, not LOADED")
+    void testFutureSchemaProducesIncompatibleStatus() {
+        FixedResultStore store = new FixedResultStore(ChestIndexLoadResult.incompatibleSchema());
+        ChestManager manager = new ChestManager(store);
+        manager.initialize();
+
+        assertEquals(ChestManagerStatus.INCOMPATIBLE, manager.getStatus());
+        assertFalse(manager.getStatus().isAvailable());
+    }
+
+    @Test
+    @DisplayName("Capture and mutation operations are rejected while status is INCOMPATIBLE, and never save")
+    void testCaptureAndMutationRejectedWhileIncompatible() {
+        FixedResultStore store = new FixedResultStore(ChestIndexLoadResult.incompatibleSchema());
+        ChestManager manager = new ChestManager(store);
+        manager.initialize();
+
+        StoragePosition pos = new StoragePosition(0, 0, 0);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        assertFalse(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L),
+                "A pending interaction must not even be recorded, let alone begin a capture, while incompatible");
+
+        assertFalse(manager.forgetContainer(CTX_A, new StoredContainerId(CTX_A, DIM_OVERWORLD, pos, StorageKind.CHEST)));
+        assertFalse(manager.setLabel(CTX_A, new StoredContainerId(CTX_A, DIM_OVERWORLD, pos, StorageKind.CHEST), "label"));
+
+        assertFalse(store.saveCalled, "No save must ever occur while the manager is not LOADED");
+        assertEquals(0, manager.getIndexedCount(CTX_A));
+    }
+
+    @Test
+    @DisplayName("Capture and mutation operations are rejected while status is ERROR")
+    void testCaptureAndMutationRejectedWhileError() {
+        FixedResultStore store = new FixedResultStore(ChestIndexLoadResult.error());
+        ChestManager manager = new ChestManager(store);
+        manager.initialize();
+
+        assertEquals(ChestManagerStatus.ERROR, manager.getStatus());
+
+        StoragePosition pos = new StoragePosition(0, 0, 0);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        assertFalse(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L));
+        assertFalse(store.saveCalled);
+    }
+
+    @Test
+    @DisplayName("A future-schema chest-index.json on disk is never overwritten, and Chest Manager reports INCOMPATIBLE end-to-end")
+    void testFutureSchemaFileNotOverwrittenEndToEnd() throws IOException {
+        Path storePath = tempDir.resolve("chest-index.json");
+        String futureContent = "{ \"schemaVersion\": 999, \"contexts\": {} }";
+        Files.writeString(storePath, futureContent);
+        byte[] originalBytes = Files.readAllBytes(storePath);
+
+        ChestManager manager = new ChestManager(new JsonChestIndexStore(storePath));
+        manager.initialize();
+        assertEquals(ChestManagerStatus.INCOMPATIBLE, manager.getStatus());
+
+        // Attempting to use the manager must not touch the file either.
+        StoragePosition pos = new StoragePosition(1, 2, 3);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L);
+        manager.forgetContainer(CTX_A, new StoredContainerId(CTX_A, DIM_OVERWORLD, pos, StorageKind.CHEST));
+
+        assertArrayEquals(originalBytes, Files.readAllBytes(storePath), "The future-schema file on disk must remain byte-identical");
     }
 }
