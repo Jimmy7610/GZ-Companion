@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class CraftingTabRecipeCacheTest {
 
     private static ClientRecipeSnapshot dummyRecipe() {
-        return new ClientRecipeSnapshot("minecraft:stick", "Stick", 4, RecipeKind.SHAPELESS, 0, 0, List.of());
+        return new ClientRecipeSnapshot("minecraft:stick", "Stick", 4, RecipeKind.SHAPELESS, 0, 0, List.of(), 1);
     }
 
     @Test

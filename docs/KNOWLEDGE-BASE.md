@@ -52,11 +52,14 @@ server, unchecked search snippets, or forum/Reddit speculation. Facts fetched vi
 AI-summarizing tool were re-verified by reading the live rendered page directly before being
 written to the Rule Pack, since a summarizing intermediary can paraphrase or drop detail.
 
-Every GameZone crafting-override and item/relic detail pane in the Crafting tab renders this trail
-directly: the status badge (Verifierad/Overifierad/Inaktuell/Okänd), then "Källa: `<sourceName>`"
-and "Senast kontrollerad: `<lastVerified>`" when a source is present, or an honest "Den här
-informationen har ännu inte bekräftats." line when it isn't. The raw `sourceReference` URL is kept
-in the data for traceability but is deliberately never dumped into the normal UI.
+Every GameZone-sourced detail pane - a Kommandon command, a GameZone crafting-override recipe, or a
+GameZone item/relic - renders the SAME trust trail: the status badge (Verifierad/Overifierad/
+Inaktuell/Okänd), then "Källa: `<sourceName>`" and "Senast kontrollerad: `<lastVerified>`" when a
+source is present, or an honest "Den här informationen har ännu inte bekräftats." line when it
+isn't. The raw `sourceReference` URL is kept in the data for traceability but is deliberately never
+dumped into the normal UI. `CommandsTabComponent` and `CraftingTabComponent` each render their own
+copy of this trail (`renderVerificationTrail`) - intentionally duplicated rather than shared, since
+each is ~15 simple lines and every tab component in this codebase is already self-contained.
 
 Bundled dataset, as of the `2026-09-10` verification pass:
 
@@ -66,8 +69,10 @@ Bundled dataset, as of the `2026-09-10` verification pass:
 - **Crafting overrides** (`crafting-overrides.json`): **0 recipes.** The official GameZone Wiki
   (checked 2026-09-10, including its "Produktion" article) does not document any GameZone-specific
   crafting-table recipe additions, replacements, or disables. The file intentionally ships empty
-  rather than inventing one — the Crafting tab shows "Inget verifierat craftingrecept finns i detta
-  Rule Pack" for this half of its data.
+  rather than inventing one. RECEPT mode's empty-state wording names both of its real sources
+  ("Inga tillgängliga recept hittades i din receptbok, och inga verifierade GameZone-recept finns i
+  detta Rule Pack.") rather than implying the Rule Pack is the only possible source, since the
+  player's own recipe book is shown independently of this file's load status (see §5).
 - **Custom items** (`item-overrides.json`): 50 relics (GZR-0001–GZR-0050), **all 50 VERIFIED**
   against `GameZone Wiki — Alla 50 reliker` (`https://www.gamezonemc.se/wiki/relics/relikregister`).
   `releaseStatus` is `null` for every relic — the wiki only states a general disclaimer that "not
@@ -158,18 +163,34 @@ Three structurally separate identities exist and are never merged:
   alternatives are `IngredientOption(itemId, displayName)` pairs for the same reason.
 - **`GameZoneCraftingEntry`** (`knowledge.crafting`) — a hand-authored, verified-or-not Rule Pack
   fact from `crafting-overrides.json`, always carrying `RecipeKnowledgeSource` +
-  `VerificationMetadata`. Currently empty (see §3). Its ingredient ids have no separately-resolved
-  display name (there's no live registry lookup for hand-authored Rule Pack text) - the id string
-  itself is the label.
+  `VerificationMetadata`. Currently empty (see §3). Its ingredient/output ids have no
+  pre-resolved display name the way a live recipe-book read does - `CraftingTabComponent` resolves
+  one on the fly via `MinecraftRecipeDisplayAdapter.resolveDisplayName(String)` (a cheap local
+  registry lookup, never runtime network access) so this path stays beginner-friendly the moment a
+  real GameZone recipe is eventually added, falling back to the raw id only when it doesn't
+  resolve to a concrete item (e.g. a tag reference).
 - **`CustomItemKnowledge`** (`knowledge.items`) — a Rule Pack fact about a GameZone-specific item
   (the 50 relics), independent of both recipe types above.
 
 The Crafting tab's mode filter (Alla / Recept / GameZone-föremål) reads all three sources but keeps
 them visually and structurally distinct — a recipe or item row's badge/label always states which of
-the three it is. Each mode's "no data" empty state is evaluated independently: RECEPT only looks at
-the crafting side (GameZone overrides + client recipes), GAMEZONE_FOREMAL only at the item side,
-and ALLA only when *both* sides have nothing - a search producing zero results is a separate,
-later check from this true-empty-data check.
+the three it is.
+
+**Client recipes are independent of both Rule Pack modules' load status.** A broken or
+schema-incompatible `crafting-overrides.json` must never hide the player's own legitimately-unlocked
+recipe book - `CraftingTabComponent.hasCraftingSideData(craftingBase, hasClientRecipeCapability)`
+is `true` whenever EITHER the (possibly-null, i.e. failed-to-load) `craftingBase` has entries OR the
+client recipe cache is non-empty. The only mode with no independent fallback is GAMEZONE_FOREMAL
+(item knowledge is a pure Rule Pack fact with no "client-observed" equivalent) -
+`CraftingTabComponent.requiresHardUnavailable(mode, itemKnowledgeAvailable)` is the only case that
+shows a hard-failure screen; RECEPT/ALLA always fall through to the normal entries + empty-state
+path instead.
+
+Each mode's "no data" empty state is evaluated independently: RECEPT only looks at the crafting side
+(GameZone overrides + client recipes), GAMEZONE_FOREMAL only at the item side, and ALLA only when
+*both* sides have nothing - a search producing zero results is a separate, later check from this
+true-empty-data check. Wording for each mode names its actual source(s) rather than implying the
+Rule Pack is the only one (see §3).
 
 ### Recipe book caching
 
@@ -184,10 +205,42 @@ Kistor/Guide already use), or the throttle interval (`ClientRecipeCachePolicy.MI
 ingredient's id/display name, each also indexed with underscores normalized to spaces) is rebuilt
 exactly once per actual refresh, never per keystroke.
 
-Recipe list-selection identity is a `stableKey()` derived purely from a snapshot's own already-
-visible content (output id, kind, dimensions, every slot's ingredient ids in order) — never a list
-index and never an invented server-side identifier - so the currently-selected recipe survives the
-recipe book being re-read and returned in a different order.
+Context-change detection compares `contextKey` with `Objects.equals` and only after the cache has
+initialized once (`recipeCacheInitialized`) - a legitimately-unavailable (`null`) context must
+compare equal to itself across calls rather than looking "changed" on every single render, which
+would otherwise defeat the throttle permanently. A failed or empty recipe-book read is cached for
+the normal throttle window like any other result; it is never a permanently stale state, since the
+next eligible refresh (context change or interval elapsed) reads again normally - no background
+retry, no per-frame retry.
+
+**Recipe identity.** `ClientRecipeSnapshot.stableKey()` is backed by `recipeDisplayId` -
+`RecipeDisplayEntry.id().index()`, a real integer the *server itself* assigns per synced recipe
+(confirmed by decompiling the Minecraft 26.1.2 `RecipeDisplayEntry` record). This is legitimately
+client-visible data, not an invented identifier, and it is stable for the life of the connection -
+`ClientRecipeBook` never reassigns it to an existing recipe. `readClientRecipeBook()` also dedupes
+by this id, since the same `RecipeDisplayEntry` can legitimately appear in more than one
+`RecipeCollection` (recipe-book categories are not guaranteed mutually exclusive) - without this, one
+logical recipe could become two ambiguous rows sharing a key. The full stable key additionally
+includes the output id, `outputCount`, kind, dimensions, and every slot's *sorted* ingredient-id
+alternatives (sorted since the API does not guarantee alternative ordering is stable) as defense in
+depth on top of `recipeDisplayId` - two recipes producing the same output via the same ingredients
+but a different count are already different real recipes with different ids, but the count is
+included explicitly so the key never silently depends on that fact alone. A UI selection keyed on
+this survives the recipe book being re-read and returned in a different order; if the selected
+recipe/command/item no longer exists in the current (possibly search-narrowed) list at all,
+`resolveSelectionAfterListChange(...)` falls back to the first visible result, or clears the
+selection if none remain - never leaving a stale id pointing at nothing.
+
+### Detail scroll clamping
+
+Both `CommandsTabComponent` and `CraftingTabComponent` clamp `detailScrollOffset` to
+`[0, maxDetailScroll]` on every render AND on every scroll-wheel event, where `maxDetailScroll` is
+computed from the *actual* rendered content height of whichever entry is currently selected -
+mirroring each `render*Detail` method's exact pixel increments, using
+`TextUtil.measureWrappedHeightCapped(...)` for every wrapped block so a `maxLines`-truncated
+paragraph is measured the same way it is drawn. Recomputing this fresh on every render (rather than
+caching it) means a mode switch, a search/filter change, a recipe-book refresh, or a compact/normal
+layout transition are all handled automatically - there is no separate cache to invalidate.
 
 ## 6. `TextInputHandler`
 
@@ -225,4 +278,12 @@ is unchanged (verified by the existing `KistorTabInputTest` suite still passing 
   legitimate ingredient alternative shows the first alternative's icon plus a small "+", never
   implying it is the only valid choice. Shapeless ingredient lists remain text (display name,
   not raw id) rather than icon rows, since that list is unbounded in length unlike the fixed 3×3
-  grid.
+  grid. The `fakeItem` call itself is wrapped in a try/catch that falls back to the text label on
+  any exception, so a single malformed/unbakeable item can never take down the whole Companion UI.
+- The pixel-height math behind detail-scroll clamping (`estimate*DetailHeight`,
+  `measureWrappedHeightCapped`) is not unit-tested with a real `Font`, consistent with this
+  codebase's existing boundary - no test anywhere constructs a live `Font` instance, since accurate
+  glyph metrics require a running Minecraft client. Tests instead cover the surrounding
+  null-safety/selection-resolution logic (see `CraftingTabSelectionTest`,
+  `CommandsTabDetailScrollTest`); the height formulas themselves were verified by code review
+  against each `render*Detail` method's exact draw calls.

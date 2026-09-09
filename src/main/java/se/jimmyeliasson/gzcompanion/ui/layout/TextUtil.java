@@ -102,6 +102,23 @@ public final class TextUtil {
     }
 
     /**
+     * Computes the pixel height {@link #drawScaledWrappedText} would actually occupy for this
+     * text, honoring the same {@code maxLines} cap - unlike {@link #measureWrappedHeight}, which
+     * always measures every wrapped line regardless of any rendering cap. Use this (not the
+     * uncapped variant) when computing a detail pane's true scrollable content height, so a
+     * maxLines-truncated block never causes the computed max-scroll to under- or over-shoot what
+     * is actually drawn.
+     */
+    public static int measureWrappedHeightCapped(Font font, String text, int maxPixelWidth, float scale, int maxLines, int lineSpacing) {
+        if (text == null || text.isEmpty() || maxPixelWidth <= 0 || font == null || maxLines <= 0) return 0;
+        List<FormattedCharSequence> lines = splitLines(font, text, maxPixelWidth, scale);
+        if (lines.isEmpty()) return 0;
+        int scaledLineH = (int) Math.ceil(9 * scale);
+        int renderedLines = Math.min(lines.size(), maxLines);
+        return (renderedLines * scaledLineH) + ((renderedLines - 1) * lineSpacing);
+    }
+
+    /**
      * Draws multi-line wrapped text inside a maximum pixel width.
      */
     public static int drawWrappedText(GuiGraphicsExtractor extractor, Font font, String text,

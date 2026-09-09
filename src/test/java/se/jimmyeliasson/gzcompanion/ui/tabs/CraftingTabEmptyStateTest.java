@@ -41,14 +41,19 @@ class CraftingTabEmptyStateTest {
     }
 
     @Test
-    @DisplayName("Each mode has a distinct, honest empty-state message")
+    @DisplayName("Each mode has a distinct, honest empty-state message that names its real source(s)")
     void testEmptyStateMessagesAreDistinctPerMode() {
         String recept = CraftingTabComponent.emptyStateMessage(CraftingTabComponent.Mode.RECEPT);
         String items = CraftingTabComponent.emptyStateMessage(CraftingTabComponent.Mode.GAMEZONE_FOREMAL);
         String all = CraftingTabComponent.emptyStateMessage(CraftingTabComponent.Mode.ALLA);
 
-        assertTrue(recept.toLowerCase().contains("craftingrecept"));
+        // RECEPT mode is genuinely two independent sources (the player's own receptbok AND any
+        // verified GameZone Rule Pack recipes) - the wording must mention both, not imply the
+        // Rule Pack is the only possible source.
+        assertTrue(recept.toLowerCase().contains("receptbok"), "Must mention the player's own recipe book");
+        assertTrue(recept.toLowerCase().contains("gamezone"), "Must also mention the GameZone Rule Pack side");
         assertTrue(items.toLowerCase().contains("föremål"));
+        assertTrue(items.toLowerCase().contains("rule pack"), "Items truly are Rule Pack-only, so it's fine (and correct) to say so");
         assertNotEquals(recept, items);
         assertNotEquals(recept, all);
         assertNotEquals(items, all);

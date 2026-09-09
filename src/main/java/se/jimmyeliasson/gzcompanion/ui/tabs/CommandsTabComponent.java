@@ -11,6 +11,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.commands.CommandCatalog;
 import se.jimmyeliasson.gzcompanion.knowledge.commands.CommandCategory;
 import se.jimmyeliasson.gzcompanion.knowledge.commands.CommandDefinition;
 import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeModuleStatus;
+import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationMetadata;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationStatus;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
@@ -221,19 +222,21 @@ public class CommandsTabComponent implements TextInputHandler {
         extractor.disableScissor();
     }
 
-    private int calculateMaxDetailScroll(Font font, UiRect contentArea, CommandDefinition command) {
+    /** Package-private (not private) so tests can exercise the null-safety branches directly. */
+    int calculateMaxDetailScroll(Font font, UiRect contentArea, CommandDefinition command) {
         if (font == null || contentArea == null || command == null) return 0;
         int maxW = Math.max(10, contentArea.width() - 8);
         int totalH = 4;
         totalH += 11; // primaryCommand heading
-        totalH += TextUtil.measureWrappedHeight(font, command.syntax(), maxW, TypographyScale.SMALL.getScale(), 1) + 9;
-        totalH += TextUtil.measureWrappedHeight(font, command.description(), maxW, TypographyScale.SMALL.getScale(), 4) + 9;
+        totalH += TextUtil.measureWrappedHeightCapped(font, command.syntax(), maxW, TypographyScale.SMALL.getScale(), 2, 1) + 2;
+        totalH += TextUtil.measureWrappedHeightCapped(font, command.description(), maxW, TypographyScale.SMALL.getScale(), 4, 1) + 5;
         if (command.requirements() != null && !command.requirements().isBlank()) totalH += 10;
         if (!command.aliases().isEmpty()) totalH += 10;
         for (String example : command.examples()) {
-            totalH += TextUtil.measureWrappedHeight(font, example, maxW, TypographyScale.SMALL.getScale(), 1) + 2;
+            totalH += TextUtil.measureWrappedHeightCapped(font, example, maxW, TypographyScale.SMALL.getScale(), 1, 1) + 2;
         }
-        totalH += 11; // verification badge row
+        totalH += 3;
+        totalH += estimateVerificationTrailHeight(font, maxW, command.verification());
         return Math.max(0, totalH - contentArea.height());
     }
 
@@ -271,7 +274,7 @@ public class CommandsTabComponent implements TextInputHandler {
         currY += 11;
 
         currY += TextUtil.drawScaledWrappedText(extractor, font, command.syntax(), contentArea.x() + pad, currY, maxW,
-                TypographyScale.SMALL.getScale(), 1, 1, GZTheme.COLOR_TEXT_SECONDARY, false) + 2;
+                TypographyScale.SMALL.getScale(), 2, 1, GZTheme.COLOR_TEXT_SECONDARY, false) + 2;
 
         currY += TextUtil.drawScaledWrappedText(extractor, font, command.description(), contentArea.x() + pad, currY, maxW,
                 TypographyScale.SMALL.getScale(), 4, 1, GZTheme.COLOR_TEXT_PRIMARY, false) + 5;
@@ -294,14 +297,54 @@ public class CommandsTabComponent implements TextInputHandler {
         }
 
         currY += 3;
-        VerificationStatus vs = command.verification().status();
-        String badgeLabel = vs.getDisplayName();
-        int badgeW = TextUtil.scaledWidth(font, badgeLabel, TypographyScale.META.getScale()) + 14;
-        GZTheme.drawBadge(extractor, font, contentArea.x() + pad, currY, badgeLabel, GZTheme.COLOR_TEXT_SECONDARY, vs.getArgbColor());
+        renderVerificationTrail(extractor, font, contentArea.x() + pad, currY, maxW, command.verification());
 
         extractor.disableScissor();
 
         renderActionRow(extractor, font, mouseX, mouseY);
+    }
+
+    /**
+     * Renders the same compact trust trail Crafting/item details use: the status badge, then
+     * "Källa: X" and "Senast kontrollerad: YYYY-MM-DD" when a source is present, or an honest
+     * "not yet confirmed" line when it isn't. The raw {@code sourceReference} URL is deliberately
+     * never shown here - it stays in the data for traceability, not the normal UI. Intentionally
+     * duplicated (not shared) with {@code CraftingTabComponent}'s equivalent - each tab component
+     * in this codebase is already self-contained, and this is ~15 simple lines, not worth a new
+     * shared abstraction for.
+     */
+    private void renderVerificationTrail(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, VerificationMetadata verification) {
+        VerificationStatus status = verification.status();
+        GZTheme.drawBadge(extractor, font, x, y, status.getDisplayName(), GZTheme.COLOR_TEXT_SECONDARY, status.getArgbColor());
+        y += 12;
+
+        if (verification.hasSource()) {
+            TextUtil.drawScaledEllipsizedText(extractor, font, "Källa: " + verification.sourceName(), x, y, maxW,
+                    TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+            y += 9;
+            if (verification.lastVerified() != null) {
+                TextUtil.drawScaledEllipsizedText(extractor, font, "Senast kontrollerad: " + verification.lastVerified(), x, y, maxW,
+                        TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+            }
+        } else {
+            TextUtil.drawScaledWrappedText(extractor, font, "Den här informationen har ännu inte bekräftats.", x, y, maxW,
+                    TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false);
+        }
+    }
+
+    /** Mirrors {@link #renderVerificationTrail}'s exact height increments without drawing anything. */
+    private static int estimateVerificationTrailHeight(Font font, int maxW, VerificationMetadata verification) {
+        int h = 12; // status badge
+        if (verification.hasSource()) {
+            h += 9; // "Källa: ..."
+            if (verification.lastVerified() != null) {
+                h += 9; // "Senast kontrollerad: ..."
+            }
+        } else {
+            h += TextUtil.measureWrappedHeightCapped(font, "Den här informationen har ännu inte bekräftats.", maxW,
+                    TypographyScale.META.getScale(), 2, 1);
+        }
+        return h;
     }
 
     private void renderActionRow(GuiGraphicsExtractor extractor, Font font, int mouseX, int mouseY) {

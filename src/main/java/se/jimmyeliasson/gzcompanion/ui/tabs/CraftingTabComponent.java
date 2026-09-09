@@ -35,6 +35,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
@@ -54,6 +55,7 @@ public class CraftingTabComponent implements TextInputHandler {
     private static final int GRID_CELL_SIZE = 20;
     private static final int GRID_ICON_SIZE = 16;
     private static final int GRID_GAP = 1;
+    private static final int DETAIL_PAD = 5;
 
     /** Package-private (not private) so tests can exercise mode-specific logic directly. */
     enum Mode {
@@ -92,6 +94,8 @@ public class CraftingTabComponent implements TextInputHandler {
     private Map<String, String> searchTextByClientRecipeKey = Map.of();
     private long lastRecipeRefreshAtMs = 0L;
     private String lastRecipeContextKey = null;
+    /** True once a refresh has happened at least once - lets a legitimately-null context key be compared for equality instead of always looking "changed". */
+    private boolean recipeCacheInitialized = false;
 
     private record ListRowHit(UiRect rect, String entryId) {}
 
@@ -121,6 +125,14 @@ public class CraftingTabComponent implements TextInputHandler {
         this.mode = mode;
     }
 
+    void setSelectedEntryIdForTesting(String id) {
+        this.selectedEntryId = id;
+    }
+
+    String getSelectedEntryIdForTesting() {
+        return selectedEntryId;
+    }
+
     List<ClientRecipeSnapshot> getCachedClientRecipesForTesting() {
         return cachedClientRecipes;
     }
@@ -131,10 +143,19 @@ public class CraftingTabComponent implements TextInputHandler {
      * throttle interval elapsed) - never unconditionally. Rebuilds the precomputed search index
      * alongside the cache itself, exactly once per actual refresh, never per keystroke.
      *
+     * <p>Context-change detection uses {@link Objects#equals} rather than a null-check-first
+     * comparison, and only ever fires once the cache has been initialized at least once: if
+     * {@code contextKey} is legitimately unavailable (null) on every call, that must compare equal
+     * to itself and NOT be treated as "changed" on every single render - otherwise the throttle
+     * would be defeated permanently by a persistently-null context. A failed/empty read is cached
+     * for the normal throttle window like any other result - it does not create a permanently
+     * stale state, since the very next eligible refresh (context change or interval elapsed) reads
+     * again normally. There is no background retry and no per-frame retry.
+     *
      * @return true if a refresh actually happened.
      */
     boolean refreshClientRecipesIfNeeded(long nowMs, String contextKey) {
-        boolean contextChanged = lastRecipeContextKey == null || !lastRecipeContextKey.equals(contextKey);
+        boolean contextChanged = recipeCacheInitialized && !Objects.equals(lastRecipeContextKey, contextKey);
         if (!ClientRecipeCachePolicy.shouldRefresh(lastRecipeRefreshAtMs, nowMs, contextChanged)) {
             return false;
         }
@@ -142,7 +163,12 @@ public class CraftingTabComponent implements TextInputHandler {
         this.cachedClientRecipes = fresh != null ? fresh : List.of();
         this.lastRecipeRefreshAtMs = nowMs;
         this.lastRecipeContextKey = contextKey;
+        this.recipeCacheInitialized = true;
         rebuildClientRecipeSearchIndex();
+        // Note: if the previously-selected client recipe no longer exists after this refresh,
+        // render()'s resolveSelectionAfterListChange(...) call (which runs against the freshly
+        // rebuilt entry list right after this method returns) already detects and repairs that -
+        // see Part L in docs/KNOWLEDGE-BASE.md.
         return true;
     }
 
@@ -190,23 +216,23 @@ public class CraftingTabComponent implements TextInputHandler {
         CompanionSession session = CompanionSession.getInstance();
         KnowledgeModuleStatus craftingStatus = session.getCraftingKnowledgeStatus();
         KnowledgeModuleStatus itemStatus = session.getItemKnowledgeStatus();
-        CraftingKnowledgeBase craftingBase = craftingStatus.isAvailable() ? session.getCraftingKnowledgeBase() : null;
-        ItemKnowledgeBase itemBase = itemStatus.isAvailable() ? session.getItemKnowledgeBase() : null;
+        boolean craftingRulePackAvailable = craftingStatus.isAvailable();
+        boolean itemKnowledgeAvailable = itemStatus.isAvailable();
+        CraftingKnowledgeBase craftingBase = craftingRulePackAvailable ? session.getCraftingKnowledgeBase() : null;
+        ItemKnowledgeBase itemBase = itemKnowledgeAvailable ? session.getItemKnowledgeBase() : null;
 
-        // The client's own recipe book is independent of both Rule Pack modules above - a broken
-        // crafting-overrides.json must never hide the player's legitimately-unlocked recipes.
+        // The player's own legitimately-unlocked client/server-synced recipes are a THIRD,
+        // independent data source - they depend on neither crafting-overrides.json nor
+        // item-overrides.json, and a failure in either must never hide them.
         if (mode != Mode.GAMEZONE_FOREMAL) {
             refreshClientRecipesIfNeeded(System.currentTimeMillis(), session.getCurrentStorageContext());
         }
+        boolean hasClientRecipeCapability = !cachedClientRecipes.isEmpty();
 
-        // A true hard-failure screen only applies when NO source at all could possibly serve the
-        // current mode: both Rule Pack modules broken (nothing in this tab can work), or the
-        // item module broken while GameZone-föremål mode has no alternative source.
-        if (!craftingStatus.isAvailable() && !itemStatus.isAvailable()) {
-            drawUnavailableState(extractor, font, bounds, craftingStatus);
-            return;
-        }
-        if (mode == Mode.GAMEZONE_FOREMAL && !itemStatus.isAvailable()) {
+        // A true hard-failure screen only applies to GAMEZONE_FOREMAL, since item knowledge is
+        // the ONLY possible source for that mode - RECEPT/ALLA always have the client recipe book
+        // as an independent fallback and never hard-fail just because a Rule Pack file is broken.
+        if (requiresHardUnavailable(mode, itemKnowledgeAvailable)) {
             drawUnavailableState(extractor, font, bounds, itemStatus);
             return;
         }
@@ -218,18 +244,16 @@ public class CraftingTabComponent implements TextInputHandler {
         renderSearch(extractor, font, layout.searchRect(), layout.clearBtnRect(), mouseX, mouseY);
         renderModeButton(extractor, font, layout.modeBtnRect(), mouseX, mouseY);
 
-        boolean hasCraftingSideData = (craftingBase != null && craftingBase.size() > 0) || !cachedClientRecipes.isEmpty();
+        boolean hasCraftingSideData = hasCraftingSideData(craftingBase, hasClientRecipeCapability);
         boolean hasItemSideData = itemBase != null && itemBase.size() > 0;
         if (!hasDataForMode(mode, hasCraftingSideData, hasItemSideData)) {
             renderEmptyState(extractor, font, contentArea(bounds), emptyStateMessage());
             return;
         }
 
-        if (selectedEntryId == null || entries.stream().noneMatch(e -> e.entryId().equals(selectedEntryId))) {
-            selectedEntryId = entries.isEmpty() ? null : entries.get(0).entryId();
-            if (selectedEntryId == null) {
-                compactShowingDetail = false;
-            }
+        selectedEntryId = resolveSelectionAfterListChange(selectedEntryId, entries);
+        if (selectedEntryId == null) {
+            compactShowingDetail = false;
         }
 
         if (entries.isEmpty()) {
@@ -249,8 +273,43 @@ public class CraftingTabComponent implements TextInputHandler {
         }
     }
 
+    /**
+     * Keeps the current selection if it's still present in the (possibly search/filter-narrowed)
+     * entry list; otherwise falls back to the first currently-visible result, or {@code null} if
+     * there are none. Never leaves {@code selectedEntryId} pointing at an entry that can no longer
+     * render a detail pane - used both after a recipe-book cache refresh and after search/mode
+     * changes narrow the list.
+     */
+    static String resolveSelectionAfterListChange(String currentSelection, List<ListEntry> entries) {
+        if (currentSelection != null && entries.stream().anyMatch(e -> e.entryId().equals(currentSelection))) {
+            return currentSelection;
+        }
+        return entries.isEmpty() ? null : entries.get(0).entryId();
+    }
+
     private String emptyStateMessage() {
         return emptyStateMessage(mode);
+    }
+
+    /**
+     * GAMEZONE_FOREMAL is the ONLY mode with no independent fallback source (item knowledge is a
+     * pure Rule Pack fact - there is no "client-observed" equivalent the way recipes have).
+     * RECEPT/ALLA must never hard-fail just because a Rule Pack file (crafting-overrides.json)
+     * is broken, since the player's own client recipe book is a fully independent third source.
+     */
+    static boolean requiresHardUnavailable(Mode mode, boolean itemKnowledgeAvailable) {
+        return mode == Mode.GAMEZONE_FOREMAL && !itemKnowledgeAvailable;
+    }
+
+    /**
+     * True if there is ANY recipe data to show for RECEPT/ALLA: a loaded (non-null) GameZone
+     * crafting override base with at least one entry, OR the player having at least one
+     * legitimately-unlocked client recipe - independent of whether {@code craftingBase} is
+     * {@code null} (i.e. crafting-overrides.json failed to load). A broken Rule Pack file must
+     * never suppress the client recipe book.
+     */
+    static boolean hasCraftingSideData(CraftingKnowledgeBase craftingBase, boolean hasClientRecipeCapability) {
+        return (craftingBase != null && craftingBase.size() > 0) || hasClientRecipeCapability;
     }
 
     /**
@@ -267,11 +326,16 @@ public class CraftingTabComponent implements TextInputHandler {
         };
     }
 
+    /**
+     * RECEPT/ALLA's crafting side is genuinely two sources (the player's own receptbok AND any
+     * verified GameZone Rule Pack recipes) - the wording must not imply the Rule Pack is the only
+     * possible source, since client recipes are shown independently of it.
+     */
     static String emptyStateMessage(Mode mode) {
         return switch (mode) {
-            case RECEPT -> "Inget verifierat craftingrecept finns i detta Rule Pack.";
+            case RECEPT -> "Inga tillgängliga recept hittades i din receptbok, och inga verifierade GameZone-recept finns i detta Rule Pack.";
             case GAMEZONE_FOREMAL -> "Inga GameZone-föremål är dokumenterade i detta Rule Pack.";
-            case ALLA -> "Inget verifierat craftingrecept eller GameZone-föremål finns i detta Rule Pack.";
+            case ALLA -> "Inga tillgängliga recept eller GameZone-föremål hittades just nu.";
         };
     }
 
@@ -283,7 +347,7 @@ public class CraftingTabComponent implements TextInputHandler {
         if (mode != Mode.GAMEZONE_FOREMAL) {
             if (craftingBase != null) {
                 for (GameZoneCraftingEntry entry : craftingBase.search(searchText)) {
-                    result.add(new ListEntry(EntryKind.GAMEZONE_RECIPE, "gz:" + entry.id(), entry.outputItemId(),
+                    result.add(new ListEntry(EntryKind.GAMEZONE_RECIPE, "gz:" + entry.id(), gameZoneOutputDisplayName(entry),
                             entry.source().getDisplayName(), entry.verification().status().getArgbColor()));
                 }
             }
@@ -424,9 +488,9 @@ public class CraftingTabComponent implements TextInputHandler {
             return;
         }
 
-        int pad = 5;
-        int contentTop = detailRect.y() + (isCompact ? 16 : 4);
-        UiRect contentArea = new UiRect(detailRect.x() + 1, contentTop, detailRect.width() - 2, detailRect.bottom() - contentTop - 1);
+        UiRect contentArea = computeDetailContentArea(detailRect, isCompact);
+        int maxScroll = calculateDetailMaxScroll(font, contentArea, craftingBase, itemBase);
+        this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset, maxScroll));
 
         if (isCompact) {
             UiRect backBtn = layout.backBtnRect();
@@ -439,18 +503,126 @@ public class CraftingTabComponent implements TextInputHandler {
         if (selectedEntryId.startsWith("gz:") && craftingBase != null) {
             String id = selectedEntryId.substring(3);
             craftingBase.entries().stream().filter(e -> e.id().equals(id)).findFirst()
-                    .ifPresent(e -> renderGameZoneRecipeDetail(extractor, font, contentArea, pad, e));
+                    .ifPresent(e -> renderGameZoneRecipeDetail(extractor, font, contentArea, DETAIL_PAD, e));
         } else if (selectedEntryId.startsWith("client:")) {
             String key = selectedEntryId.substring(7);
             cachedClientRecipes.stream().filter(s -> s.stableKey().equals(key)).findFirst()
-                    .ifPresent(s -> renderClientRecipeDetail(extractor, font, contentArea, pad, s));
+                    .ifPresent(s -> renderClientRecipeDetail(extractor, font, contentArea, DETAIL_PAD, s));
         } else if (selectedEntryId.startsWith("item:") && itemBase != null) {
             String id = selectedEntryId.substring(5);
             itemBase.items().stream().filter(i -> i.id().equals(id)).findFirst()
-                    .ifPresent(i -> renderItemDetail(extractor, font, contentArea, pad, i));
+                    .ifPresent(i -> renderItemDetail(extractor, font, contentArea, DETAIL_PAD, i));
         }
 
         extractor.disableScissor();
+    }
+
+    private UiRect computeDetailContentArea(UiRect detailRect, boolean isCompact) {
+        int contentTop = detailRect.y() + (isCompact ? 16 : 4);
+        return new UiRect(detailRect.x() + 1, contentTop, detailRect.width() - 2, detailRect.bottom() - contentTop - 1);
+    }
+
+    /**
+     * Computes the true maximum detail scroll offset for whichever entry is currently selected,
+     * mirroring the exact height increments the corresponding {@code render*Detail} method draws
+     * (via {@link se.jimmyeliasson.gzcompanion.ui.layout.TextUtil#measureWrappedHeightCapped} for
+     * every wrapped block, so a maxLines-truncated paragraph is measured the same way it's drawn).
+     * Returns 0 when nothing is selected, the selected id can't be resolved, or the content fits
+     * without scrolling - never a negative value. Package-private (not private) so tests can
+     * exercise the null-safety branches directly.
+     */
+    int calculateDetailMaxScroll(Font font, UiRect contentArea, CraftingKnowledgeBase craftingBase, ItemKnowledgeBase itemBase) {
+        if (selectedEntryId == null || font == null) return 0;
+        int maxW = contentArea.width() - (DETAIL_PAD * 2);
+
+        int contentHeight;
+        if (selectedEntryId.startsWith("gz:") && craftingBase != null) {
+            String id = selectedEntryId.substring(3);
+            GameZoneCraftingEntry entry = craftingBase.entries().stream().filter(e -> e.id().equals(id)).findFirst().orElse(null);
+            if (entry == null) return 0;
+            contentHeight = estimateGameZoneRecipeDetailHeight(font, maxW, entry);
+        } else if (selectedEntryId.startsWith("client:")) {
+            String key = selectedEntryId.substring(7);
+            ClientRecipeSnapshot snap = cachedClientRecipes.stream().filter(s -> s.stableKey().equals(key)).findFirst().orElse(null);
+            if (snap == null) return 0;
+            contentHeight = estimateClientRecipeDetailHeight(font, maxW, snap);
+        } else if (selectedEntryId.startsWith("item:") && itemBase != null) {
+            String id = selectedEntryId.substring(5);
+            CustomItemKnowledge item = itemBase.items().stream().filter(i -> i.id().equals(id)).findFirst().orElse(null);
+            if (item == null) return 0;
+            contentHeight = estimateItemDetailHeight(font, maxW, item);
+        } else {
+            return 0;
+        }
+        return Math.max(0, contentHeight - contentArea.height());
+    }
+
+    private int estimateGameZoneRecipeDetailHeight(Font font, int maxW, GameZoneCraftingEntry entry) {
+        int h = 11 + 9 + 10; // heading, raw-id meta, source label
+        if (entry.kind() == RecipeKind.SHAPED) {
+            h += (entry.height() * (GRID_CELL_SIZE + GRID_GAP)) + 4;
+        } else {
+            h += 10; // "Formlöst recept" label
+            for (IngredientRef ref : entry.ingredients()) {
+                String line = "- " + String.join(" / ", alternativesOf(ref).stream().map(IngredientOption::displayName).toList());
+                h += TextUtil.measureWrappedHeightCapped(font, line, maxW, TypographyScale.SMALL.getScale(), 1, 1) + 2;
+            }
+        }
+        if (entry.notes() != null && !entry.notes().isBlank()) {
+            h += 4;
+            h += TextUtil.measureWrappedHeightCapped(font, entry.notes(), maxW, TypographyScale.SMALL.getScale(), 3, 1);
+        }
+        h += 6;
+        h += estimateVerificationTrailHeight(font, maxW, entry.verification());
+        return h;
+    }
+
+    private int estimateClientRecipeDetailHeight(Font font, int maxW, ClientRecipeSnapshot snap) {
+        int h = 11 + 9 + 10; // heading, raw-id meta, "Tillgängligt Minecraft-recept..." line
+        if (snap.kind() == RecipeKind.SHAPED) {
+            h += (snap.height() * (GRID_CELL_SIZE + GRID_GAP)) + 4;
+        } else {
+            h += 10; // "Formlöst recept" label
+            for (List<IngredientOption> alts : snap.slotAlternatives()) {
+                String line = "- " + String.join(" / ", alts.stream().map(IngredientOption::displayName).toList());
+                h += TextUtil.measureWrappedHeightCapped(font, line, maxW, TypographyScale.SMALL.getScale(), 1, 1) + 2;
+            }
+        }
+        return h;
+    }
+
+    private int estimateItemDetailHeight(Font font, int maxW, CustomItemKnowledge item) {
+        int h = 11; // heading
+        boolean hasMeta = item.tier() != null || item.culture() != null || item.serial() != null || item.baseMinecraftItemId() != null;
+        if (hasMeta) h += 10;
+        if (item.description() != null && !item.description().isBlank()) {
+            h += TextUtil.measureWrappedHeightCapped(font, item.description(), maxW, TypographyScale.SMALL.getScale(), 3, 1) + 4;
+        }
+        if (!item.enchants().isEmpty()) {
+            String line = "Enchants: " + String.join(", ", item.enchants());
+            h += TextUtil.measureWrappedHeightCapped(font, line, maxW, TypographyScale.SMALL.getScale(), 2, 1) + 2;
+        }
+        if (item.specialEffect() != null && !item.specialEffect().isBlank()) {
+            h += TextUtil.measureWrappedHeightCapped(font, item.specialEffect(), maxW, TypographyScale.SMALL.getScale(), 3, 1) + 4;
+        }
+        h += 4;
+        h += estimateVerificationTrailHeight(font, maxW, item.verification());
+        return h;
+    }
+
+    /** Mirrors {@link #renderVerificationTrail}'s exact height increments without drawing anything. */
+    private static int estimateVerificationTrailHeight(Font font, int maxW, VerificationMetadata verification) {
+        int h = 12; // status badge
+        if (verification.hasSource()) {
+            h += 9; // "Källa: ..."
+            if (verification.lastVerified() != null) {
+                h += 9; // "Senast kontrollerad: ..."
+            }
+        } else {
+            h += TextUtil.measureWrappedHeightCapped(font, "Den här informationen har ännu inte bekräftats.", maxW,
+                    TypographyScale.META.getScale(), 2, 1) + 2;
+        }
+        return h;
     }
 
     private void renderGameZoneRecipeDetail(GuiGraphicsExtractor extractor, Font font, UiRect contentArea, int pad, GameZoneCraftingEntry entry) {
@@ -458,9 +630,13 @@ public class CraftingTabComponent implements TextInputHandler {
         int maxW = contentArea.width() - (pad * 2);
         int x = contentArea.x() + pad;
 
-        TextUtil.drawScaledEllipsizedText(extractor, font, entry.outputItemId() + " x" + entry.outputCount(), x, currY,
+        TextUtil.drawScaledEllipsizedText(extractor, font, gameZoneOutputDisplayName(entry) + " x" + entry.outputCount(), x, currY,
                 maxW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
         currY += 11;
+
+        TextUtil.drawScaledEllipsizedText(extractor, font, entry.outputItemId(), x, currY,
+                maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        currY += 9;
 
         TextUtil.drawScaledEllipsizedText(extractor, font, entry.source().getDisplayName(), x, currY,
                 maxW, TypographyScale.META.getScale(), GZTheme.COLOR_STATUS_YELLOW, false);
@@ -607,14 +783,23 @@ public class CraftingTabComponent implements TextInputHandler {
                 if (!alts.isEmpty()) {
                     IngredientOption representative = alts.get(0);
                     ItemStack stack = MinecraftRecipeDisplayAdapter.resolveDisplayStack(representative.itemId());
+                    boolean iconDrawn = false;
                     if (!stack.isEmpty()) {
-                        int iconX = cell.x() + ((cell.width() - GRID_ICON_SIZE) / 2);
-                        int iconY = cell.y() + ((cell.height() - GRID_ICON_SIZE) / 2);
-                        extractor.fakeItem(stack, iconX, iconY);
-                    } else {
-                        // No concrete item resolvable (a tag reference, or a malformed Rule Pack
-                        // entry) - fall back to text using the real display name when one exists,
-                        // never the raw id alone where a better name is available.
+                        try {
+                            int iconX = cell.x() + ((cell.width() - GRID_ICON_SIZE) / 2);
+                            int iconY = cell.y() + ((cell.height() - GRID_ICON_SIZE) / 2);
+                            extractor.fakeItem(stack, iconX, iconY);
+                            iconDrawn = true;
+                        } catch (Exception ignored) {
+                            // A single malformed/unbakeable item render must never take down the
+                            // whole Companion UI - fall through to the text label below.
+                        }
+                    }
+                    if (!iconDrawn) {
+                        // No concrete item resolvable (a tag reference, a malformed Rule Pack
+                        // entry, or an icon render failure) - fall back to text using the real
+                        // display name when one exists, never the raw id alone where a better
+                        // name is available.
                         TextUtil.drawScaledEllipsizedText(extractor, font, shortItemLabel(representative.displayName()), cell.x() + 2, cell.y() + 6,
                                 cell.width() - 4, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
                     }
@@ -635,14 +820,31 @@ public class CraftingTabComponent implements TextInputHandler {
         return colon >= 0 ? label.substring(colon + 1) : label;
     }
 
-    /** Wraps a GameZone Rule Pack ingredient reference as {@link IngredientOption}s (no separately resolved display name exists for hand-authored Rule Pack data - the id itself is the label). */
+    /**
+     * Wraps a GameZone Rule Pack ingredient reference as {@link IngredientOption}s. Unlike a live
+     * recipe-book read, this hand-authored Rule Pack data only ever has a raw item id string - so
+     * each concrete item id is resolved to its real translated display name via
+     * {@link MinecraftRecipeDisplayAdapter#resolveDisplayName(String)} (a cheap local registry
+     * lookup, no runtime network access), falling back to the raw id only if that id doesn't
+     * resolve to a concrete item. A tag reference has no single honest display name and is always
+     * shown as {@code #minecraft:planks} rather than invented text.
+     */
     private List<IngredientOption> alternativesOf(IngredientRef ref) {
         if (ref == null || ref.isEmpty()) return List.of();
         if (!ref.itemIds().isEmpty()) {
-            return ref.itemIds().stream().map(id -> new IngredientOption(id, id)).toList();
+            return ref.itemIds().stream().map(id -> {
+                String displayName = MinecraftRecipeDisplayAdapter.resolveDisplayName(id);
+                return new IngredientOption(id, displayName != null ? displayName : id);
+            }).toList();
         }
         String tagLabel = "#" + ref.tag();
         return List.of(new IngredientOption(tagLabel, tagLabel));
+    }
+
+    /** Resolves a GameZone crafting entry's output to a real display name, falling back to the raw id if unresolvable. */
+    private String gameZoneOutputDisplayName(GameZoneCraftingEntry entry) {
+        String displayName = MinecraftRecipeDisplayAdapter.resolveDisplayName(entry.outputItemId());
+        return displayName != null ? displayName : entry.outputItemId();
     }
 
     private void drawUnavailableState(GuiGraphicsExtractor extractor, Font font, UiRect bounds, KnowledgeModuleStatus status) {
@@ -719,7 +921,13 @@ public class CraftingTabComponent implements TextInputHandler {
         }
 
         if (layout.detailRect().contains(mouseX, mouseY) && selectedEntryId != null) {
-            this.detailScrollOffset = Math.max(0, detailScrollOffset - (int) (scrollY * 14));
+            CompanionSession session = CompanionSession.getInstance();
+            CraftingKnowledgeBase craftingBase = session.getCraftingKnowledgeStatus().isAvailable() ? session.getCraftingKnowledgeBase() : null;
+            ItemKnowledgeBase itemBase = session.getItemKnowledgeStatus().isAvailable() ? session.getItemKnowledgeBase() : null;
+            Font font = Minecraft.getInstance().font;
+            UiRect contentArea = computeDetailContentArea(layout.detailRect(), layout.isCompact());
+            int maxScroll = calculateDetailMaxScroll(font, contentArea, craftingBase, itemBase);
+            this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset - (int) (scrollY * 14), maxScroll));
             return true;
         }
 

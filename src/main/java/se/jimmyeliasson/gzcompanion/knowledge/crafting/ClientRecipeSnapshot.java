@@ -29,7 +29,8 @@ public record ClientRecipeSnapshot(
     RecipeKind kind,
     int width,
     int height,
-    List<List<IngredientOption>> slotAlternatives
+    List<List<IngredientOption>> slotAlternatives,
+    int recipeDisplayId
 ) {
     public ClientRecipeSnapshot {
         Objects.requireNonNull(outputItemId, "outputItemId");
@@ -42,23 +43,35 @@ public record ClientRecipeSnapshot(
     }
 
     /**
-     * A stable, content-derived identity for this recipe, built purely from properties already
-     * legitimately visible in this snapshot (output, kind, dimensions, and every slot's item ids
-     * in slot order) - never a guessed or invented server-side recipe identifier. Two snapshots
-     * with identical content always produce the same key regardless of their position in a list,
-     * so a UI selection keyed on this survives the recipe book being re-read and reordered.
-     * Two recipes that legitimately differ only by output count or by which of several equally
-     * valid alternative items is listed first still produce distinct keys, since every
-     * alternative's item id is included.
+     * A stable identity for this recipe. The primary, load-bearing component is
+     * {@code recipeDisplayId}, backed by {@code RecipeDisplayEntry.id().index()} - a real,
+     * legitimately client-visible integer the server itself assigns to distinguish each synced
+     * recipe (confirmed by inspecting the Minecraft 26.1.2 {@code RecipeDisplayEntry} record:
+     * {@code id()} returns a {@code RecipeDisplayId} wrapping that integer, kept stable for the
+     * lifetime of the connection - {@code ClientRecipeBook} never reassigns it to an existing
+     * recipe, even though the map backing {@code getCollections()} can otherwise iterate in a
+     * different order after a rebuild). This is NOT an invented or guessed identifier - it is data
+     * the client already legitimately received - and it correctly distinguishes even the rare case
+     * of two different real recipes that happen to render identical output and ingredients, which
+     * a purely content-derived key alone could not.
+     *
+     * <p>The full output (id, count), kind/dimensions, and every slot's sorted ingredient-id
+     * alternatives are appended too - sorted within each slot since ingredient alternative order
+     * is not guaranteed stable by the API, only the identity of the set is. This is defense in
+     * depth on top of {@code recipeDisplayId}, not a replacement for it: two recipes producing the
+     * same output via the same ingredients but a different output count are different real
+     * recipes and therefore already have different {@code recipeDisplayId}s, but the count is
+     * still included explicitly so the key never silently depends on that fact alone. A UI
+     * selection keyed on this survives the recipe book being re-read and returned in a different
+     * order.
      */
     public String stableKey() {
         StringBuilder sb = new StringBuilder();
-        sb.append(outputItemId).append('|').append(kind).append('|').append(width).append('x').append(height);
+        sb.append(recipeDisplayId).append('|').append(outputItemId).append('|').append(outputCount)
+                .append('|').append(kind).append('|').append(width).append('x').append(height);
         for (List<IngredientOption> slot : slotAlternatives) {
-            sb.append('|');
-            for (IngredientOption option : slot) {
-                sb.append(option.itemId()).append(',');
-            }
+            List<String> ids = slot.stream().map(IngredientOption::itemId).sorted().toList();
+            sb.append('|').append(String.join(",", ids));
         }
         return sb.toString();
     }

@@ -19,7 +19,7 @@ class CraftingTabSearchTest {
 
     private static ClientRecipeSnapshot recipeWithIngredient(String outputId, String outputName, String ingredientId, String ingredientName) {
         List<IngredientOption> slot = List.of(new IngredientOption(ingredientId, ingredientName));
-        return new ClientRecipeSnapshot(outputId, outputName, 1, RecipeKind.SHAPED, 1, 1, List.of(slot));
+        return new ClientRecipeSnapshot(outputId, outputName, 1, RecipeKind.SHAPED, 1, 1, List.of(slot), 1);
     }
 
     private static CraftingTabComponent tabWithRecipes(ClientRecipeSnapshot... recipes) {
@@ -113,7 +113,7 @@ class CraftingTabSearchTest {
     @DisplayName("Shapeless recipe data (no width/height, unordered ingredients) survives into the cache untouched")
     void testShapelessDataPreserved() {
         List<IngredientOption> ingredients = List.of(new IngredientOption("minecraft:stick", "Stick"), new IngredientOption("minecraft:coal", "Coal"));
-        ClientRecipeSnapshot snap = new ClientRecipeSnapshot("minecraft:torch", "Torch", 4, RecipeKind.SHAPELESS, 0, 0, List.of(ingredients));
+        ClientRecipeSnapshot snap = new ClientRecipeSnapshot("minecraft:torch", "Torch", 4, RecipeKind.SHAPELESS, 0, 0, List.of(ingredients), 1);
         CraftingTabComponent tab = tabWithRecipes(snap);
 
         ClientRecipeSnapshot cached = tab.getCachedClientRecipesForTesting().get(0);

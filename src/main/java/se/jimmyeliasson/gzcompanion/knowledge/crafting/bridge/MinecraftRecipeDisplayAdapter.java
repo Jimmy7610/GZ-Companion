@@ -59,9 +59,21 @@ public final class MinecraftRecipeDisplayAdapter {
 
             ContextMap context = SlotDisplayContext.fromLevel(client.level);
 
+            // The same RecipeDisplayEntry can legitimately appear in more than one
+            // RecipeCollection (recipe-book tabs/categories are not guaranteed mutually
+            // exclusive) - dedupe by the server's own recipeDisplayId so one logical recipe
+            // never becomes two ambiguous rows sharing one stableKey.
+            java.util.Set<Integer> seenRecipeIds = new java.util.HashSet<>();
             List<ClientRecipeSnapshot> result = new ArrayList<>();
             for (RecipeCollection collection : book.getCollections()) {
                 for (RecipeDisplayEntry entry : collection.getRecipes()) {
+                    int recipeId;
+                    try {
+                        recipeId = entry.id().index();
+                    } catch (Exception ignored) {
+                        continue;
+                    }
+                    if (!seenRecipeIds.add(recipeId)) continue;
                     ClientRecipeSnapshot snapshot = toSnapshot(entry, context);
                     if (snapshot != null) {
                         result.add(snapshot);
@@ -100,6 +112,26 @@ public final class MinecraftRecipeDisplayAdapter {
         }
     }
 
+    /**
+     * Resolves a raw Minecraft item id to its translated display name (e.g. "Oak Planks"), for
+     * hand-authored GameZone Rule Pack recipe data (which only ever has a raw id string, never a
+     * pre-resolved display name the way live recipe-book reads do). Returns {@code null} if the id
+     * doesn't resolve to a concrete item (a bad id, or a tag reference like
+     * {@code #minecraft:planks} which has no single honest display name) - callers should fall
+     * back to showing the raw id/tag text in that case, never a fabricated name. This exists so
+     * the Crafting tab never becomes beginner-hostile the moment a real GameZone crafting override
+     * is added to {@code crafting-overrides.json} - today that file is empty, so this path is
+     * presently unexercised in production but is exercised by tests.
+     */
+    public static String resolveDisplayName(String itemId) {
+        ItemStack stack = resolveDisplayStack(itemId);
+        if (stack.isEmpty()) {
+            return null;
+        }
+        String name = resolveDisplayName(stack);
+        return (name != null && !name.isBlank()) ? name : null;
+    }
+
     private static ClientRecipeSnapshot toSnapshot(RecipeDisplayEntry entry, ContextMap context) {
         try {
             RecipeDisplay display = entry.display();
@@ -112,6 +144,9 @@ public final class MinecraftRecipeDisplayAdapter {
                 return null;
             }
             String outputDisplayName = resolveDisplayName(resultStack);
+            // The server's own synced identifier for this recipe (see ClientRecipeSnapshot.stableKey
+            // javadoc) - real client-visible data, never an invented/guessed id.
+            int recipeDisplayId = entry.id().index();
 
             if (display instanceof ShapedCraftingRecipeDisplay shaped) {
                 List<List<IngredientOption>> slots = new ArrayList<>();
@@ -119,14 +154,14 @@ public final class MinecraftRecipeDisplayAdapter {
                     slots.add(resolveAlternatives(slot, context));
                 }
                 return new ClientRecipeSnapshot(outputId, outputDisplayName, resultStack.getCount(), RecipeKind.SHAPED,
-                        shaped.width(), shaped.height(), slots);
+                        shaped.width(), shaped.height(), slots, recipeDisplayId);
             }
             if (display instanceof ShapelessCraftingRecipeDisplay shapeless) {
                 List<List<IngredientOption>> slots = new ArrayList<>();
                 for (SlotDisplay slot : shapeless.ingredients()) {
                     slots.add(resolveAlternatives(slot, context));
                 }
-                return new ClientRecipeSnapshot(outputId, outputDisplayName, resultStack.getCount(), RecipeKind.SHAPELESS, 0, 0, slots);
+                return new ClientRecipeSnapshot(outputId, outputDisplayName, resultStack.getCount(), RecipeKind.SHAPELESS, 0, 0, slots, recipeDisplayId);
             }
             // Furnace/smithing/stonecutter/other display kinds are out of scope for the
             // crafting-table-focused Crafting tab in this milestone.
