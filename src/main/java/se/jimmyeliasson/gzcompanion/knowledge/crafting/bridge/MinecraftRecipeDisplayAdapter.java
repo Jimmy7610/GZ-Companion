@@ -15,6 +15,7 @@ import net.minecraft.world.item.crafting.display.ShapelessCraftingRecipeDisplay;
 import net.minecraft.world.item.crafting.display.SlotDisplay;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import se.jimmyeliasson.gzcompanion.knowledge.crafting.ClientRecipeSnapshot;
+import se.jimmyeliasson.gzcompanion.knowledge.crafting.IngredientOption;
 import se.jimmyeliasson.gzcompanion.knowledge.crafting.RecipeKind;
 
 import java.util.ArrayList;
@@ -30,6 +31,10 @@ import java.util.List;
  * {@link ClientRecipeSnapshot} for why this is never labeled "Vanilla."
  *
  * <p>Read-only. Never registers, replaces, or intercepts any recipe; never sends a packet.
+ *
+ * <p>Callers MUST NOT invoke {@link #readClientRecipeBook()} on every render frame — it iterates
+ * every unlocked recipe collection and resolves every ingredient's {@code ItemStack}. Throttle
+ * calls via {@code se.jimmyeliasson.gzcompanion.knowledge.crafting.ClientRecipeCachePolicy}.
  */
 public final class MinecraftRecipeDisplayAdapter {
 
@@ -70,6 +75,31 @@ public final class MinecraftRecipeDisplayAdapter {
         }
     }
 
+    /**
+     * Resolves a raw Minecraft item id (e.g. {@code minecraft:oak_planks}) to a renderable,
+     * displayable {@link ItemStack} for the Crafting tab's UI layer. Returns
+     * {@link ItemStack#EMPTY} for any unresolvable/invalid id rather than throwing - a bad or
+     * unknown id must degrade to "no icon," never crash the render pass.
+     */
+    public static ItemStack resolveDisplayStack(String itemId) {
+        try {
+            if (itemId == null || itemId.isBlank()) {
+                return ItemStack.EMPTY;
+            }
+            Identifier id = Identifier.tryParse(itemId);
+            if (id == null) {
+                return ItemStack.EMPTY;
+            }
+            Item item = BuiltInRegistries.ITEM.getOptional(id).orElse(null);
+            if (item == null) {
+                return ItemStack.EMPTY;
+            }
+            return new ItemStack(item);
+        } catch (Exception ignored) {
+            return ItemStack.EMPTY;
+        }
+    }
+
     private static ClientRecipeSnapshot toSnapshot(RecipeDisplayEntry entry, ContextMap context) {
         try {
             RecipeDisplay display = entry.display();
@@ -81,21 +111,22 @@ public final class MinecraftRecipeDisplayAdapter {
             if (outputId.isEmpty()) {
                 return null;
             }
+            String outputDisplayName = resolveDisplayName(resultStack);
 
             if (display instanceof ShapedCraftingRecipeDisplay shaped) {
-                List<List<String>> slots = new ArrayList<>();
+                List<List<IngredientOption>> slots = new ArrayList<>();
                 for (SlotDisplay slot : shaped.ingredients()) {
-                    slots.add(resolveAlternativeIds(slot, context));
+                    slots.add(resolveAlternatives(slot, context));
                 }
-                return new ClientRecipeSnapshot(outputId, resultStack.getCount(), RecipeKind.SHAPED,
+                return new ClientRecipeSnapshot(outputId, outputDisplayName, resultStack.getCount(), RecipeKind.SHAPED,
                         shaped.width(), shaped.height(), slots);
             }
             if (display instanceof ShapelessCraftingRecipeDisplay shapeless) {
-                List<List<String>> slots = new ArrayList<>();
+                List<List<IngredientOption>> slots = new ArrayList<>();
                 for (SlotDisplay slot : shapeless.ingredients()) {
-                    slots.add(resolveAlternativeIds(slot, context));
+                    slots.add(resolveAlternatives(slot, context));
                 }
-                return new ClientRecipeSnapshot(outputId, resultStack.getCount(), RecipeKind.SHAPELESS, 0, 0, slots);
+                return new ClientRecipeSnapshot(outputId, outputDisplayName, resultStack.getCount(), RecipeKind.SHAPELESS, 0, 0, slots);
             }
             // Furnace/smithing/stonecutter/other display kinds are out of scope for the
             // crafting-table-focused Crafting tab in this milestone.
@@ -105,26 +136,36 @@ public final class MinecraftRecipeDisplayAdapter {
         }
     }
 
-    private static List<String> resolveAlternativeIds(SlotDisplay slot, ContextMap context) {
-        List<String> ids = new ArrayList<>();
-        if (slot == null) return ids;
+    private static List<IngredientOption> resolveAlternatives(SlotDisplay slot, ContextMap context) {
+        List<IngredientOption> options = new ArrayList<>();
+        if (slot == null) return options;
         try {
+            List<String> seenIds = new ArrayList<>();
             for (ItemStack stack : slot.resolveForStacks(context)) {
                 if (stack == null || stack.isEmpty()) continue;
                 String id = resolveItemId(stack.getItem());
-                if (!id.isEmpty() && !ids.contains(id)) {
-                    ids.add(id);
-                }
+                if (id.isEmpty() || seenIds.contains(id)) continue;
+                seenIds.add(id);
+                options.add(new IngredientOption(id, resolveDisplayName(stack)));
             }
         } catch (Exception ignored) {
             // Leave as an empty-slot representation rather than propagate a resolution failure.
         }
-        return ids;
+        return options;
     }
 
     private static String resolveItemId(Item item) {
         if (item == null) return "";
         Identifier key = BuiltInRegistries.ITEM.getKey(item);
         return key != null ? key.toString() : "";
+    }
+
+    /** The player's actual translated item name (e.g. "Oak Planks"), resolved once here. */
+    private static String resolveDisplayName(ItemStack stack) {
+        try {
+            return stack.getHoverName().getString();
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 }

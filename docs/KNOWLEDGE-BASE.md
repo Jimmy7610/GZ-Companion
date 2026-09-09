@@ -27,8 +27,10 @@ never affects Guide or Kistor (M2/M3), which remain on their own, separately-app
   compatible while every fact inside it is still UNVERIFIED — the two axes never collapse into one.
 - **`VerificationMetadata`** — `(status, sourceName, sourceReference, lastVerified)`. Its canonical
   constructor enforces a hard trust rule: `VERIFIED` is automatically downgraded to `UNVERIFIED`
-  unless both `sourceName` and `lastVerified` are present. A missing or unparseable raw status
-  string always defaults to `UNVERIFIED`, never `VERIFIED`.
+  unless `sourceName`, `sourceReference`, AND `lastVerified` are ALL present (hardened in the M4
+  post-implementation pass — M4's policy requires an exact canonical source page, not just a
+  named source). A missing or unparseable raw status string always defaults to `UNVERIFIED`,
+  never `VERIFIED`.
 - **`KnowledgeModuleStatus`** — LOADED / UNAVAILABLE / ERROR / INCOMPATIBLE. New and scoped to the
   three `knowledge.*` modules only; does **not** replace `GuideLoadStatus` or `ChestManagerStatus`
   (that would have been a regression-risk refactor with no M4 value).
@@ -49,6 +51,12 @@ Nothing here is marked VERIFIED from model memory, general Minecraft conventions
 server, unchecked search snippets, or forum/Reddit speculation. Facts fetched via an
 AI-summarizing tool were re-verified by reading the live rendered page directly before being
 written to the Rule Pack, since a summarizing intermediary can paraphrase or drop detail.
+
+Every GameZone crafting-override and item/relic detail pane in the Crafting tab renders this trail
+directly: the status badge (Verifierad/Overifierad/Inaktuell/Okänd), then "Källa: `<sourceName>`"
+and "Senast kontrollerad: `<lastVerified>`" when a source is present, or an honest "Den här
+informationen har ännu inte bekräftats." line when it isn't. The raw `sourceReference` URL is kept
+in the data for traceability but is deliberately never dumped into the normal UI.
 
 Bundled dataset, as of the `2026-09-10` verification pass:
 
@@ -144,16 +152,42 @@ Three structurally separate identities exist and are never merged:
   carries **no** `VerificationMetadata` (it isn't a Rule Pack fact) and is always labeled
   **"Tillgängligt Minecraft-recept"** in the UI — never "Vanilla," since the data is
   client/server-synced (recipe unlocks arrive from whichever server the player is connected to),
-  not a static vanilla constant.
+  not a static vanilla constant. Each snapshot carries both `outputItemId` (raw) and
+  `outputDisplayName` (the player's actual translated item name, e.g. "Oak Planks", resolved once
+  by the adapter when the snapshot is built — never per render frame), and each ingredient slot's
+  alternatives are `IngredientOption(itemId, displayName)` pairs for the same reason.
 - **`GameZoneCraftingEntry`** (`knowledge.crafting`) — a hand-authored, verified-or-not Rule Pack
   fact from `crafting-overrides.json`, always carrying `RecipeKnowledgeSource` +
-  `VerificationMetadata`. Currently empty (see §3).
+  `VerificationMetadata`. Currently empty (see §3). Its ingredient ids have no separately-resolved
+  display name (there's no live registry lookup for hand-authored Rule Pack text) - the id string
+  itself is the label.
 - **`CustomItemKnowledge`** (`knowledge.items`) — a Rule Pack fact about a GameZone-specific item
   (the 50 relics), independent of both recipe types above.
 
 The Crafting tab's mode filter (Alla / Recept / GameZone-föremål) reads all three sources but keeps
 them visually and structurally distinct — a recipe or item row's badge/label always states which of
-the three it is.
+the three it is. Each mode's "no data" empty state is evaluated independently: RECEPT only looks at
+the crafting side (GameZone overrides + client recipes), GAMEZONE_FOREMAL only at the item side,
+and ALLA only when *both* sides have nothing - a search producing zero results is a separate,
+later check from this true-empty-data check.
+
+### Recipe book caching
+
+Reading the client's recipe book is real work (iterates every unlocked `RecipeCollection` and
+resolves every ingredient's `ItemStack`), so `CraftingTabComponent` never calls
+`MinecraftRecipeDisplayAdapter.readClientRecipeBook()` on every render frame. Instead it caches the
+result and calls `refreshClientRecipesIfNeeded(nowMs, contextKey)` each render, which only actually
+re-reads the recipe book when `knowledge.crafting.ClientRecipeCachePolicy.shouldRefresh(...)` says
+to: the very first call, a player/world/server context change (reusing the same storage-context key
+Kistor/Guide already use), or the throttle interval (`ClientRecipeCachePolicy.MIN_REFRESH_INTERVAL_MS`,
+1500ms) having elapsed. The precomputed client-recipe search index (display name + raw id + every
+ingredient's id/display name, each also indexed with underscores normalized to spaces) is rebuilt
+exactly once per actual refresh, never per keystroke.
+
+Recipe list-selection identity is a `stableKey()` derived purely from a snapshot's own already-
+visible content (output id, kind, dimensions, every slot's ingredient ids in order) — never a list
+index and never an invented server-side identifier - so the currently-selected recipe survives the
+recipe book being re-read and returned in a different order.
 
 ## 6. `TextInputHandler`
 
@@ -182,7 +216,13 @@ is unchanged (verified by the existing `KistorTabInputTest` suite still passing 
   `baseMinecraftItemId` string only. It does not inspect a held/inventory `ItemStack`'s NBT/data
   components to determine which specific relic (if any) a given real item actually is — that would
   require deeper item-identity work explicitly out of scope for this milestone.
-- Crafting grid slots render as plain labeled text cells, not rendered item icons. No part of this
-  codebase has previously used the item-icon rendering API in a live, tested render pass (Kistor
-  itself shows items as text only); introducing it here untested would have been the kind of
-  fragile, unverified addition M3's "if fragile, don't implement" guidance was written for.
+- Shaped crafting grid cells render real Minecraft item icons via
+  `GuiGraphicsExtractor.fakeItem(ItemStack, x, y)` (confirmed by decompiling the merged Minecraft
+  26.1.2 jar - `fakeItem` is the correct call for a detached, no-owner/no-slot `ItemStack`, exactly
+  this scenario). A cell falls back to a short text label only when an id can't be resolved to a
+  concrete item (an unresolvable tag reference, or a malformed Rule Pack entry) - the fallback
+  always prefers a real display name over a raw id where one exists. A cell with more than one
+  legitimate ingredient alternative shows the first alternative's icon plus a small "+", never
+  implying it is the only valid choice. Shapeless ingredient lists remain text (display name,
+  not raw id) rather than icon rows, since that list is unbounded in length unlike the fixed 3×3
+  grid.

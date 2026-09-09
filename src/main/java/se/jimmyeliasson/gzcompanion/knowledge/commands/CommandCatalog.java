@@ -34,7 +34,8 @@ public final class CommandCatalog {
 
         Map<String, String> searchable = new HashMap<>();
         for (CommandDefinition command : this.commands) {
-            searchable.put(command.id(), buildSearchableText(command));
+            CommandCategory category = categoriesById.getOrDefault(command.categoryId(), CommandCategory.FALLBACK);
+            searchable.put(command.id(), buildSearchableText(command, category));
         }
         this.searchTextByCommandId = Map.copyOf(searchable);
     }
@@ -101,14 +102,25 @@ public final class CommandCatalog {
         return result;
     }
 
-    private static String buildSearchableText(CommandDefinition command) {
+    /**
+     * Includes both the category's raw id (e.g. {@code foretag}) and its resolved, human-facing
+     * displayName (e.g. {@code Företag & Handel}) so a Swedish search term like "handel" finds
+     * every command in that category even when the word appears nowhere else on the command.
+     * Also appends an underscore-to-space normalized copy of the whole text so a Minecraft-id-like
+     * example such as {@code /market oak_log} is still found by searching "oak log".
+     */
+    private static String buildSearchableText(CommandDefinition command, CommandCategory category) {
         StringBuilder sb = new StringBuilder();
         sb.append(command.primaryCommand()).append(' ');
         sb.append(command.syntax()).append(' ');
         sb.append(command.description()).append(' ');
         sb.append(command.categoryId()).append(' ');
+        sb.append(category.displayName()).append(' ');
         for (String alias : command.aliases()) sb.append(alias).append(' ');
         for (String keyword : command.keywords()) sb.append(keyword).append(' ');
-        return sb.toString().toLowerCase(Locale.ROOT);
+        for (String example : command.examples()) sb.append(example).append(' ');
+        String base = sb.toString().toLowerCase(Locale.ROOT);
+        String spaced = base.replace('_', ' ');
+        return spaced.equals(base) ? base : base + ' ' + spaced;
     }
 }

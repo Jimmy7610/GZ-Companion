@@ -6,9 +6,10 @@ package se.jimmyeliasson.gzcompanion.knowledge.common;
  * knowledge type.
  *
  * <p>Enforces a hard trust rule: {@link VerificationStatus#VERIFIED} is never accepted without a
- * non-blank {@code sourceName} and non-blank {@code lastVerified} — an entry claiming VERIFIED
- * without backing it up is automatically downgraded to {@link VerificationStatus#UNVERIFIED}
- * rather than silently trusted. A missing/unparseable status always defaults to
+ * non-blank {@code sourceName}, {@code sourceReference}, AND {@code lastVerified} — an entry
+ * claiming VERIFIED without a full trail (M4's policy requires an exact canonical source page, not
+ * just a source name) is automatically downgraded to {@link VerificationStatus#UNVERIFIED} rather
+ * than silently trusted. A missing/unparseable status always defaults to
  * {@link VerificationStatus#UNVERIFIED}, never {@code VERIFIED}.
  */
 public record VerificationMetadata(
@@ -21,7 +22,7 @@ public record VerificationMetadata(
             new VerificationMetadata(VerificationStatus.UNVERIFIED, null, null, null);
 
     public VerificationMetadata {
-        status = downgradeIfUnsupported(status, sourceName, lastVerified);
+        status = downgradeIfUnsupported(status, sourceName, sourceReference, lastVerified);
         sourceName = blankToNull(sourceName);
         sourceReference = blankToNull(sourceReference);
         lastVerified = blankToNull(lastVerified);
@@ -44,9 +45,9 @@ public record VerificationMetadata(
         return new VerificationMetadata(status, sourceName, sourceReference, lastVerified);
     }
 
-    private static VerificationStatus downgradeIfUnsupported(VerificationStatus status, String sourceName, String lastVerified) {
+    private static VerificationStatus downgradeIfUnsupported(VerificationStatus status, String sourceName, String sourceReference, String lastVerified) {
         VerificationStatus safeStatus = status != null ? status : VerificationStatus.UNVERIFIED;
-        if (safeStatus == VerificationStatus.VERIFIED && (isBlank(sourceName) || isBlank(lastVerified))) {
+        if (safeStatus == VerificationStatus.VERIFIED && (isBlank(sourceName) || isBlank(sourceReference) || isBlank(lastVerified))) {
             return VerificationStatus.UNVERIFIED;
         }
         return safeStatus;

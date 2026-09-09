@@ -103,6 +103,39 @@ class CommandCatalogTest {
     }
 
     @Test
+    @DisplayName("search matches a command by its category's displayName, not just its raw categoryId")
+    void testSearchMatchesCategoryDisplayName() {
+        List<CommandCategory> categories = List.of(
+                new CommandCategory("foretag", "Företag & Handel", 40)
+        );
+        List<CommandDefinition> commands = List.of(
+                cmd("c1", "/company create", "foretag", VerificationStatus.VERIFIED)
+        );
+        CommandCatalog catalog = new CommandCatalog(categories, commands, List.of());
+
+        // Neither of these Swedish words appears in the command's own text/description/keywords -
+        // only in the resolved category displayName.
+        assertEquals(1, catalog.search("företag", null).size());
+        assertEquals(1, catalog.search("handel", null).size());
+        // Case-insensitivity must still hold for the å/ä/ö characters themselves.
+        assertEquals(1, catalog.search("FÖRETAG", null).size());
+        // The raw category id must still be searchable too.
+        assertEquals(1, catalog.search("foretag", null).size());
+    }
+
+    @Test
+    @DisplayName("search matches an example command, and underscore/space forms of an item-like token are interchangeable")
+    void testSearchMatchesExampleWithUnderscoreNormalization() {
+        CommandDefinition market = new CommandDefinition("market", "/market", List.of(), "/market <item>",
+                "Visar marknadspriser.", "ekonomi", List.of(), List.of("/market oak_log"), null,
+                new VerificationMetadata(VerificationStatus.VERIFIED, "Test", "https://example.com", "2026-09-10"));
+        CommandCatalog catalog = new CommandCatalog(List.of(), List.of(market), List.of());
+
+        assertEquals(1, catalog.search("oak_log", null).size());
+        assertEquals(1, catalog.search("oak log", null).size(), "A spaced query must still find an underscored example");
+    }
+
+    @Test
     @DisplayName("search combines a text query and a category filter with AND semantics")
     void testSearchCombinesQueryAndCategory() {
         List<CommandDefinition> commands = List.of(

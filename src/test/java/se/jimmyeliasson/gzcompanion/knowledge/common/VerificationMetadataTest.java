@@ -35,7 +35,21 @@ class VerificationMetadataTest {
     }
 
     @Test
-    @DisplayName("VERIFIED with both a source and a lastVerified date is honored")
+    @DisplayName("VERIFIED with sourceName and lastVerified but no sourceReference is downgraded - M4 requires the exact canonical page")
+    void testVerifiedWithoutSourceReferenceIsDowngraded() {
+        VerificationMetadata meta = new VerificationMetadata(VerificationStatus.VERIFIED, "GameZone Wiki", null, "2026-09-10");
+        assertEquals(VerificationStatus.UNVERIFIED, meta.status());
+    }
+
+    @Test
+    @DisplayName("VERIFIED with a blank (whitespace-only) sourceReference is also downgraded")
+    void testVerifiedWithBlankSourceReferenceIsDowngraded() {
+        VerificationMetadata meta = new VerificationMetadata(VerificationStatus.VERIFIED, "GameZone Wiki", "   ", "2026-09-10");
+        assertEquals(VerificationStatus.UNVERIFIED, meta.status());
+    }
+
+    @Test
+    @DisplayName("VERIFIED with all three of sourceName, sourceReference, and lastVerified is honored")
     void testVerifiedWithFullSourceIsHonored() {
         VerificationMetadata meta = new VerificationMetadata(VerificationStatus.VERIFIED, "GameZone Wiki",
                 "https://www.gamezonemc.se/wiki/commands/kommandon", "2026-09-10");
