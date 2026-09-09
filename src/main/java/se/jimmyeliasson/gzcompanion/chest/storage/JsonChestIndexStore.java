@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestSlotEntry;
 import se.jimmyeliasson.gzcompanion.chest.model.StorageKind;
 import se.jimmyeliasson.gzcompanion.chest.model.StoragePosition;
+import se.jimmyeliasson.gzcompanion.chest.model.StorageShape;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainerId;
 
@@ -63,7 +64,15 @@ public class JsonChestIndexStore implements ChestIndexStore {
             }
             JsonObject root = rootElement.getAsJsonObject();
 
-            int schemaVersion = root.has("schemaVersion") ? root.get("schemaVersion").getAsInt() : 1;
+            int schemaVersion = (root.has("schemaVersion") && !root.get("schemaVersion").isJsonNull())
+                    ? root.get("schemaVersion").getAsInt() : 1;
+            if (schemaVersion < 1) {
+                // A schema version of zero or negative is not a valid past version - it means the
+                // file is malformed/tampered, not merely old. Treat it the same as corruption.
+                LOGGER.warn("Chest index file declares an invalid schemaVersion {}. Backing up and starting fresh.", schemaVersion);
+                backupCorruptFile();
+                return ChestIndexLoadResult.corruptRecovered();
+            }
             if (schemaVersion > ChestIndexData.CURRENT_SCHEMA) {
                 // Deliberately do NOT move, delete, or overwrite the file: an older client must
                 // never risk data loss against an index written by a newer version.
@@ -127,7 +136,7 @@ public class JsonChestIndexStore implements ChestIndexStore {
 
         StoragePosition partner = obj.has("partner") && obj.get("partner").isJsonObject()
                 ? parsePosition(obj.getAsJsonObject("partner")) : null;
-        boolean partnerUnknown = obj.has("partnerUnknown") && obj.get("partnerUnknown").getAsBoolean();
+        StorageShape shape = resolveShape(obj, kind, partner);
 
         String label = obj.has("label") && !obj.get("label").isJsonNull() ? obj.get("label").getAsString() : null;
         long lastOpenedAtMs = obj.has("lastOpenedAtMs") ? obj.get("lastOpenedAtMs").getAsLong() : 0L;
@@ -148,7 +157,47 @@ public class JsonChestIndexStore implements ChestIndexStore {
         }
 
         StoredContainerId id = new StoredContainerId(contextKey, dimensionKey, anchor, kind);
-        return new StoredContainer(id, label, partner, partnerUnknown, lastOpenedAtMs, slots);
+        return new StoredContainer(id, label, partner, shape, lastOpenedAtMs, slots);
+    }
+
+    /**
+     * Resolves the physical {@link StorageShape} of an entry, supporting BOTH the new explicit
+     * {@code "shape"} field and legacy schema-v1 records written before it existed (which only
+     * had {@code "partner"} and a boolean {@code "partnerUnknown"}). Existing data from real
+     * gameplay is never destroyed or rewritten merely because it was loaded once under this
+     * mapping.
+     *
+     * <p>Legacy mapping (conservative, documented):
+     * <ul>
+     *   <li>{@code partner != null} -&gt; {@code DOUBLE}</li>
+     *   <li>{@code partner == null && partnerUnknown == true} -&gt; {@code UNKNOWN}</li>
+     *   <li>{@code partner == null && partnerUnknown == false} -&gt; {@code SINGLE} for a
+     *       chest-family kind, {@code NOT_APPLICABLE} otherwise</li>
+     * </ul>
+     *
+     * <p>An explicit {@code "shape"} value that is present but unparseable (e.g. written by a
+     * future version under a name this build doesn't know) safely falls back to the same legacy
+     * mapping rather than crashing or guessing a specific shape.
+     */
+    private StorageShape resolveShape(JsonObject obj, StorageKind kind, StoragePosition partner) {
+        if (obj.has("shape") && !obj.get("shape").isJsonNull()) {
+            try {
+                return StorageShape.valueOf(obj.get("shape").getAsString());
+            } catch (Exception ignored) {
+                // Fall through to the legacy mapping below.
+            }
+        }
+
+        boolean legacyPartnerUnknown = obj.has("partnerUnknown") && !obj.get("partnerUnknown").isJsonNull()
+                && obj.get("partnerUnknown").getAsBoolean();
+
+        if (partner != null) {
+            return StorageShape.DOUBLE;
+        }
+        if (legacyPartnerUnknown) {
+            return StorageShape.UNKNOWN;
+        }
+        return kind.isChestFamily() ? StorageShape.SINGLE : StorageShape.NOT_APPLICABLE;
     }
 
     private StoragePosition parsePosition(JsonObject posObj) {
@@ -208,7 +257,7 @@ public class JsonChestIndexStore implements ChestIndexStore {
         if (container.partner() != null) {
             obj.add("partner", serializePosition(container.partner()));
         }
-        obj.addProperty("partnerUnknown", container.partnerUnknown());
+        obj.addProperty("shape", container.shape().name());
         obj.addProperty("lastOpenedAtMs", container.lastOpenedAtMs());
 
         JsonArray slotsArr = new JsonArray();

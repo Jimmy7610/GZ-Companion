@@ -1,5 +1,6 @@
 package se.jimmyeliasson.gzcompanion.chest.bridge;
 
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.client.Minecraft;
@@ -16,6 +17,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import se.jimmyeliasson.gzcompanion.chest.ChestManager;
 import se.jimmyeliasson.gzcompanion.chest.model.StorageKind;
 import se.jimmyeliasson.gzcompanion.chest.model.StoragePosition;
+import se.jimmyeliasson.gzcompanion.chest.model.StorageShape;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 
 import java.util.Optional;
@@ -59,6 +61,12 @@ public final class ChestCaptureController {
                 onContainerScreenOpened(manager, client, containerScreen);
             }
         });
+
+        // Leaving a world/server (disconnecting, quitting to title, or joining a different world)
+        // always tears down the client play connection first. Clearing transient capture state
+        // here means a pending interaction or an active capture can never survive into another
+        // world/server context - without ever persisting a guessed or fake final snapshot.
+        ClientPlayConnectionEvents.DISCONNECT.register((listener, client) -> manager.clearTransientCaptureState());
     }
 
     private static void onUseBlock(ChestManager manager, Player player, Level level, BlockHitResult hitResult) {
@@ -78,17 +86,15 @@ public final class ChestCaptureController {
             String dimensionKey = level.dimension().identifier().toString();
             StoragePosition clicked = new StoragePosition(pos.getX(), pos.getY(), pos.getZ());
 
+            StorageShape shape = StorageShape.NOT_APPLICABLE;
             StoragePosition partner = null;
-            boolean partnerKnown = false;
             if (kindOpt.get().isChestFamily()) {
-                Optional<StoragePosition> partnerOpt = MinecraftChestCaptureAdapter.findChestPartner(state, pos);
-                if (partnerOpt.isPresent()) {
-                    partner = partnerOpt.get();
-                    partnerKnown = true;
-                }
+                MinecraftChestCaptureAdapter.ChestShapeReading reading = MinecraftChestCaptureAdapter.resolveChestShape(state, pos);
+                shape = reading.shape();
+                partner = reading.partner();
             }
 
-            manager.recordPendingInteraction(contextKey, dimensionKey, kindOpt.get(), clicked, partner, partnerKnown, System.currentTimeMillis());
+            manager.recordPendingInteraction(contextKey, dimensionKey, kindOpt.get(), clicked, partner, shape, System.currentTimeMillis());
         } catch (Exception ignored) {
             // Never let capture bookkeeping affect the player's actual interaction.
         }

@@ -5,8 +5,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestSlotEntry;
+import se.jimmyeliasson.gzcompanion.chest.model.ChestSortMode;
+import se.jimmyeliasson.gzcompanion.chest.model.ChestTypeFilter;
 import se.jimmyeliasson.gzcompanion.chest.model.StorageKind;
 import se.jimmyeliasson.gzcompanion.chest.model.StoragePosition;
+import se.jimmyeliasson.gzcompanion.chest.model.StorageShape;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainerId;
 import se.jimmyeliasson.gzcompanion.chest.storage.ChestIndexData;
@@ -41,7 +44,7 @@ class ChestManagerTest {
     }
 
     private void openAndCloseChest(ChestManager manager, String context, String dimension, StoragePosition pos, List<ChestSlotEntry> slots, long atMs) {
-        manager.recordPendingInteraction(context, dimension, StorageKind.CHEST, pos, null, false, atMs);
+        manager.recordPendingInteraction(context, dimension, StorageKind.CHEST, pos, null, StorageShape.SINGLE, atMs);
         boolean began = manager.tryBeginCapture(context, dimension, CHEST_MENU_KINDS, atMs + 50);
         assertTrue(began, "Capture should begin for a recent, matching physical interaction");
         manager.updateCaptureSlots(slots, atMs + 100);
@@ -101,14 +104,14 @@ class ChestManagerTest {
         StoragePosition left = new StoragePosition(5, 64, 5);
         StoragePosition right = new StoragePosition(6, 64, 5);
 
-        managerLeftClick.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, left, right, true, 1000L);
+        managerLeftClick.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, left, right, StorageShape.DOUBLE, 1000L);
         assertTrue(managerLeftClick.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L));
         managerLeftClick.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:bread", 1)), 1100L);
         managerLeftClick.endCapture(1200L);
 
         ChestManager managerRightClick = new ChestManager(new JsonChestIndexStore(tempDir.resolve("chest-index-2.json")));
         managerRightClick.initialize();
-        managerRightClick.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, right, left, true, 1000L);
+        managerRightClick.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, right, left, StorageShape.DOUBLE, 1000L);
         assertTrue(managerRightClick.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L));
         managerRightClick.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:bread", 1)), 1100L);
         managerRightClick.endCapture(1200L);
@@ -130,7 +133,7 @@ class ChestManagerTest {
         StoragePosition pos = new StoragePosition(1, 64, 1);
         List<ChestSlotEntry> slots = List.of(new ChestSlotEntry(0, "minecraft:torch", 4));
 
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 1000L);
         manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L);
         manager.updateCaptureSlots(slots, 1100L);
         manager.updateCaptureSlots(slots, 1120L);
@@ -148,7 +151,7 @@ class ChestManagerTest {
         ChestManager manager = newManager();
         StoragePosition pos = new StoragePosition(2, 64, 2);
 
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 1000L);
         manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L);
         manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:coal", 10)), 1100L);
         manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:coal", 3), new ChestSlotEntry(1, "minecraft:iron_ingot", 5)), 1150L);
@@ -175,7 +178,7 @@ class ChestManagerTest {
     @DisplayName("A recent matching physical interaction is accepted")
     void testRecentMatchingInteractionAccepted() {
         ChestManager manager = newManager();
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.BARREL, new StoragePosition(0, 0, 0), null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.BARREL, new StoragePosition(0, 0, 0), null, StorageShape.NOT_APPLICABLE, 1000L);
         assertTrue(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1500L));
     }
 
@@ -183,7 +186,7 @@ class ChestManagerTest {
     @DisplayName("A stale interaction beyond the correlation window is rejected")
     void testStaleInteractionRejected() {
         ChestManager manager = newManager();
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, new StoragePosition(0, 0, 0), null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, new StoragePosition(0, 0, 0), null, StorageShape.SINGLE, 1000L);
         long stale = 1000L + ChestManager.PENDING_INTERACTION_WINDOW_MS + 1;
         assertFalse(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, stale));
     }
@@ -192,7 +195,7 @@ class ChestManagerTest {
     @DisplayName("A dimension mismatch between interaction and menu open is rejected")
     void testDimensionMismatchRejected() {
         ChestManager manager = newManager();
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, new StoragePosition(0, 0, 0), null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, new StoragePosition(0, 0, 0), null, StorageShape.SINGLE, 1000L);
         assertFalse(manager.tryBeginCapture(CTX_A, DIM_NETHER, CHEST_MENU_KINDS, 1050L));
     }
 
@@ -200,7 +203,7 @@ class ChestManagerTest {
     @DisplayName("A context mismatch between interaction and menu open is rejected")
     void testContextMismatchRejected() {
         ChestManager manager = newManager();
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, new StoragePosition(0, 0, 0), null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, new StoragePosition(0, 0, 0), null, StorageShape.SINGLE, 1000L);
         assertFalse(manager.tryBeginCapture(CTX_B, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L));
     }
 
@@ -219,7 +222,7 @@ class ChestManagerTest {
     void testCompatibleMenuWithoutMatchingPhysicalKindRejected() {
         ChestManager manager = newManager();
         // Player clicked a Hopper, but a ChestMenu-family screen opened - kinds don't intersect.
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.HOPPER, new StoragePosition(0, 0, 0), null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.HOPPER, new StoragePosition(0, 0, 0), null, StorageShape.NOT_APPLICABLE, 1000L);
         assertFalse(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L));
         assertEquals(0, manager.getIndexedCount(CTX_A));
     }
@@ -295,7 +298,7 @@ class ChestManagerTest {
         ChestManager manager = newManager();
         StoragePosition pos = new StoragePosition(9, 64, 9);
 
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 1000L);
         manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L);
         // Immediate open-time snapshot.
         manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:coal", 10)), 1060L);
@@ -317,7 +320,7 @@ class ChestManagerTest {
         ChestManager manager = newManager();
         StoragePosition pos = new StoragePosition(11, 64, 11);
 
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 1000L);
         assertTrue(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L));
         // No updateCaptureSlots call at all.
         manager.endCapture(1100L);
@@ -335,7 +338,7 @@ class ChestManagerTest {
         assertEquals(1, manager.getIndexedCount(CTX_A));
 
         // A second session correlates and begins, but for some reason never captures a snapshot.
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 5000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 5000L);
         assertTrue(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 5050L));
         manager.endCapture(5100L);
 
@@ -410,7 +413,7 @@ class ChestManagerTest {
         manager.initialize();
 
         StoragePosition pos = new StoragePosition(0, 0, 0);
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 1000L);
         assertFalse(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L),
                 "A pending interaction must not even be recorded, let alone begin a capture, while incompatible");
 
@@ -431,7 +434,7 @@ class ChestManagerTest {
         assertEquals(ChestManagerStatus.ERROR, manager.getStatus());
 
         StoragePosition pos = new StoragePosition(0, 0, 0);
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 1000L);
         assertFalse(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L));
         assertFalse(store.saveCalled);
     }
@@ -450,10 +453,269 @@ class ChestManagerTest {
 
         // Attempting to use the manager must not touch the file either.
         StoragePosition pos = new StoragePosition(1, 2, 3);
-        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, false, 1000L);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 1000L);
         manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L);
         manager.forgetContainer(CTX_A, new StoredContainerId(CTX_A, DIM_OVERWORLD, pos, StorageKind.CHEST));
 
         assertArrayEquals(originalBytes, Files.readAllBytes(storePath), "The future-schema file on disk must remain byte-identical");
+    }
+
+    // ------------------------------------------------------------------
+    // Storage shape (single / double / unknown / not applicable)
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("A confirmed SINGLE chest never shows ambiguous double-chest text")
+    void testSingleChestShape() {
+        ChestManager manager = newManager();
+        StoragePosition pos = new StoragePosition(20, 64, 20);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 1000L);
+        manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L);
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:dirt", 1)), 1100L);
+        manager.endCapture(1200L);
+
+        StoredContainer container = manager.getContainers(CTX_A).get(0);
+        assertEquals(StorageShape.SINGLE, container.shape());
+        assertNull(container.partner());
+        assertFalse(container.isDoubleWide());
+    }
+
+    @Test
+    @DisplayName("A resolved double chest half records DOUBLE shape and the partner position")
+    void testDoubleChestShape() {
+        ChestManager manager = newManager();
+        StoragePosition left = new StoragePosition(21, 64, 21);
+        StoragePosition right = new StoragePosition(22, 64, 21);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, left, right, StorageShape.DOUBLE, 1000L);
+        manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L);
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:dirt", 1)), 1100L);
+        manager.endCapture(1200L);
+
+        StoredContainer container = manager.getContainers(CTX_A).get(0);
+        assertEquals(StorageShape.DOUBLE, container.shape());
+        assertEquals(right, container.partner());
+        assertTrue(container.isDoubleWide());
+    }
+
+    @Test
+    @DisplayName("A chest-family block whose double/single state cannot be resolved records UNKNOWN, not a guess")
+    void testUnresolvedChestShapeIsUnknownNotSingle() {
+        ChestManager manager = newManager();
+        StoragePosition pos = new StoragePosition(23, 64, 23);
+        // Simulates a LEFT/RIGHT chest half whose partner position could not be determined -
+        // this must NEVER collapse into SINGLE (that would be the exact reported bug).
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.UNKNOWN, 1000L);
+        manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L);
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:dirt", 1)), 1100L);
+        manager.endCapture(1200L);
+
+        StoredContainer container = manager.getContainers(CTX_A).get(0);
+        assertEquals(StorageShape.UNKNOWN, container.shape());
+        assertNull(container.partner());
+        assertNotEquals(StorageShape.SINGLE, container.shape(), "UNKNOWN must never collapse into SINGLE");
+    }
+
+    @Test
+    @DisplayName("Non-chest storage kinds always record NOT_APPLICABLE shape")
+    void testNonChestKindsAreShapeNotApplicable() {
+        ChestManager manager = newManager();
+        StoragePosition pos = new StoragePosition(24, 64, 24);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.BARREL, pos, null, StorageShape.NOT_APPLICABLE, 1000L);
+        manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L);
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:dirt", 1)), 1100L);
+        manager.endCapture(1200L);
+
+        StoredContainer container = manager.getContainers(CTX_A).get(0);
+        assertEquals(StorageShape.NOT_APPLICABLE, container.shape());
+    }
+
+    // ------------------------------------------------------------------
+    // Local labels
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Setting and clearing a local label works and is sanitized")
+    void testSetAndClearLabel() {
+        ChestManager manager = newManager();
+        StoragePosition pos = new StoragePosition(30, 64, 30);
+        openAndCloseChest(manager, CTX_A, DIM_OVERWORLD, pos, List.of(new ChestSlotEntry(0, "minecraft:dirt", 1)), 1000L);
+        StoredContainerId id = manager.getContainers(CTX_A).get(0).id();
+
+        assertTrue(manager.setLabel(CTX_A, id, "  Gruvbas  "));
+        assertEquals("Gruvbas", manager.getContainer(CTX_A, id).orElseThrow().label(), "Label must be trimmed");
+
+        assertTrue(manager.setLabel(CTX_A, id, ""));
+        assertNull(manager.getContainer(CTX_A, id).orElseThrow().label(), "An empty label save must clear the label");
+
+        assertTrue(manager.setLabel(CTX_A, id, "   "));
+        assertNull(manager.getContainer(CTX_A, id).orElseThrow().label(), "A whitespace-only label must also clear the label");
+    }
+
+    @Test
+    @DisplayName("A local label survives a full reload from disk")
+    void testLabelSurvivesReload() {
+        Path storePath = tempDir.resolve("chest-index.json");
+        StoragePosition pos = new StoragePosition(31, 64, 31);
+
+        ChestManager first = new ChestManager(new JsonChestIndexStore(storePath));
+        first.initialize();
+        openAndCloseChest(first, CTX_A, DIM_OVERWORLD, pos, List.of(new ChestSlotEntry(0, "minecraft:iron_ingot", 5)), 1000L);
+        StoredContainerId id = first.getContainers(CTX_A).get(0).id();
+        assertTrue(first.setLabel(CTX_A, id, "Gruvbas"));
+
+        ChestManager second = new ChestManager(new JsonChestIndexStore(storePath));
+        second.initialize();
+        assertEquals("Gruvbas", second.getContainer(CTX_A, id).orElseThrow().label());
+    }
+
+    // ------------------------------------------------------------------
+    // Search / filter / sort
+    // ------------------------------------------------------------------
+
+    private ChestManager buildSearchFixture() {
+        ChestManager manager = newManager();
+        openAndCloseChest(manager, CTX_A, DIM_OVERWORLD, new StoragePosition(1, 64, 1),
+                List.of(new ChestSlotEntry(0, "minecraft:iron_ingot", 32)), 3000L);
+        manager.setLabel(CTX_A, manager.getContainers(CTX_A).stream()
+                .filter(c -> c.anchor().equals(new StoragePosition(1, 64, 1))).findFirst().orElseThrow().id(), "Gruvbas");
+
+        StoragePosition barrelPos = new StoragePosition(2, 64, 2);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.BARREL, barrelPos, null, StorageShape.NOT_APPLICABLE, 2000L);
+        manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 2050L);
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:oak_planks", 64)), 2100L);
+        manager.endCapture(2200L);
+
+        openAndCloseChest(manager, CTX_A, DIM_OVERWORLD, new StoragePosition(3, 64, 3),
+                List.of(new ChestSlotEntry(0, "minecraft:stick", 8)), 1000L);
+        return manager;
+    }
+
+    @Test
+    @DisplayName("An empty query with default filter/sort returns everything, RECENT-first")
+    void testSearchNoQueryReturnsAllRecentFirst() {
+        ChestManager manager = buildSearchFixture();
+        List<StoredContainer> result = manager.search(CTX_A, "", ChestTypeFilter.ALL, ChestSortMode.RECENT);
+        assertEquals(3, result.size());
+        assertEquals(new StoragePosition(1, 64, 1), result.get(0).anchor(), "Most recently opened (3000L) must be first");
+    }
+
+    @Test
+    @DisplayName("A query matching nothing returns an empty list, not an error")
+    void testSearchNoResult() {
+        ChestManager manager = buildSearchFixture();
+        assertTrue(manager.search(CTX_A, "totally_unmatched_query_xyz").isEmpty());
+    }
+
+    @Test
+    @DisplayName("Search matches a local label")
+    void testSearchMatchesLabel() {
+        ChestManager manager = buildSearchFixture();
+        List<StoredContainer> result = manager.search(CTX_A, "gruvbas");
+        assertEquals(1, result.size());
+        assertEquals("Gruvbas", result.get(0).label());
+    }
+
+    @Test
+    @DisplayName("A type filter restricts results to matching storage kinds only")
+    void testTypeFilterRestrictsResults() {
+        ChestManager manager = buildSearchFixture();
+        List<StoredContainer> chestsOnly = manager.search(CTX_A, "", ChestTypeFilter.CHEST, ChestSortMode.RECENT);
+        assertEquals(2, chestsOnly.size());
+        assertTrue(chestsOnly.stream().allMatch(c -> c.kind() == StorageKind.CHEST));
+
+        List<StoredContainer> barrelsOnly = manager.search(CTX_A, "", ChestTypeFilter.BARREL, ChestSortMode.RECENT);
+        assertEquals(1, barrelsOnly.size());
+        assertEquals(StorageKind.BARREL, barrelsOnly.get(0).kind());
+    }
+
+    @Test
+    @DisplayName("A type filter combined with a search query applies both")
+    void testTypeFilterCombinedWithSearch() {
+        ChestManager manager = buildSearchFixture();
+        // "Gruvbas" is a CHEST; filtering to BARREL while searching for it must yield nothing.
+        List<StoredContainer> result = manager.search(CTX_A, "gruvbas", ChestTypeFilter.BARREL, ChestSortMode.RECENT);
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    @DisplayName("NAME sort orders by label-or-type-name, case-insensitive")
+    void testNameSort() {
+        ChestManager manager = buildSearchFixture();
+        List<StoredContainer> result = manager.search(CTX_A, "", ChestTypeFilter.ALL, ChestSortMode.NAME);
+        List<String> names = result.stream().map(c -> c.label() != null ? c.label() : c.kind().getDisplayName()).toList();
+        List<String> sortedCopy = new java.util.ArrayList<>(names);
+        sortedCopy.sort(String.CASE_INSENSITIVE_ORDER);
+        assertEquals(sortedCopy, names, "Results must already be in case-insensitive name order");
+    }
+
+    @Test
+    @DisplayName("TYPE sort groups by storage kind")
+    void testTypeSortGroupsByKind() {
+        ChestManager manager = buildSearchFixture();
+        List<StoredContainer> result = manager.search(CTX_A, "", ChestTypeFilter.ALL, ChestSortMode.TYPE);
+        for (int i = 1; i < result.size(); i++) {
+            assertTrue(result.get(i - 1).kind().name().compareTo(result.get(i).kind().name()) <= 0, "TYPE sort must keep kinds grouped in order");
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Capture cleanup / pending-interaction hygiene
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("clearTransientCaptureState discards a pending interaction without indexing anything")
+    void testClearTransientCaptureStateDiscardsPendingInteraction() {
+        ChestManager manager = newManager();
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, new StoragePosition(0, 0, 0), null, StorageShape.SINGLE, 1000L);
+        manager.clearTransientCaptureState();
+
+        assertFalse(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L), "A cleared pending interaction must not correlate");
+        assertEquals(0, manager.getIndexedCount(CTX_A));
+    }
+
+    @Test
+    @DisplayName("clearTransientCaptureState during an active capture never persists a guessed final snapshot")
+    void testClearTransientCaptureStateDuringActiveCaptureNeverPersists() {
+        ChestManager manager = newManager();
+        StoragePosition pos = new StoragePosition(0, 0, 0);
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 1000L);
+        assertTrue(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L));
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:diamond", 3)), 1100L);
+
+        // Simulates leaving the world/server mid-capture (disconnect) - no final snapshot read.
+        manager.clearTransientCaptureState();
+        assertFalse(manager.isCaptureActive());
+
+        // A subsequent unrelated endCapture call (defensively, in case one still fired) must be a no-op.
+        manager.endCapture(1200L);
+        assertEquals(0, manager.getIndexedCount(CTX_A), "No guessed/fake snapshot must ever be persisted");
+    }
+
+    // ------------------------------------------------------------------
+    // Reopen / update semantics (explicit end-to-end regression)
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Open, move items, close immediately: exactly one record, final contents match state at close, senast öppnad updates")
+    void testOpenMoveItemsCloseImmediatelyEndToEnd() {
+        ChestManager manager = newManager();
+        StoragePosition pos = new StoragePosition(40, 64, 40);
+
+        manager.recordPendingInteraction(CTX_A, DIM_OVERWORLD, StorageKind.CHEST, pos, null, StorageShape.SINGLE, 1000L);
+        assertTrue(manager.tryBeginCapture(CTX_A, DIM_OVERWORLD, CHEST_MENU_KINDS, 1050L));
+        // Immediate open-time snapshot (controller reads right away).
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:iron_ingot", 10)), 1060L);
+        // Player moves items around.
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:iron_ingot", 4), new ChestSlotEntry(1, "minecraft:gold_ingot", 2)), 1090L);
+        // Controller's true final read immediately before endCapture.
+        manager.updateCaptureSlots(List.of(new ChestSlotEntry(0, "minecraft:iron_ingot", 4), new ChestSlotEntry(1, "minecraft:gold_ingot", 2)), 1095L);
+        manager.endCapture(1100L);
+
+        assertEquals(1, manager.getIndexedCount(CTX_A));
+        StoredContainer container = manager.getContainers(CTX_A).get(0);
+        assertEquals(2, container.slots().size());
+        // The final read (1095L) was identical to the previous tick's read and is therefore a
+        // no-op by design - lastOpenedAtMs correctly reflects the last ACTUAL change (1090L).
+        assertEquals(1090L, container.lastOpenedAtMs());
     }
 }

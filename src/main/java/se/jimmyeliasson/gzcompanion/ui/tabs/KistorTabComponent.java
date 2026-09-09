@@ -1,5 +1,6 @@
 package se.jimmyeliasson.gzcompanion.ui.tabs;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.CharacterEvent;
@@ -7,7 +8,9 @@ import net.minecraft.client.input.KeyEvent;
 import org.lwjgl.glfw.GLFW;
 import se.jimmyeliasson.gzcompanion.chest.ChestManager;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus;
-import se.jimmyeliasson.gzcompanion.chest.model.StorageKind;
+import se.jimmyeliasson.gzcompanion.chest.model.ChestSortMode;
+import se.jimmyeliasson.gzcompanion.chest.model.ChestTypeFilter;
+import se.jimmyeliasson.gzcompanion.chest.model.StorageShape;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainerId;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
@@ -20,15 +23,17 @@ import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
- * Renders the Kistor (Chest Manager) tab: a searchable local list of storage the player has
- * personally and legitimately opened, showing "senast känt innehåll" (last known contents) —
- * never presented as live/current state.
+ * Renders the Kistor (Chest Manager) tab: a searchable, filterable, sortable local list of
+ * storage the player has personally and legitimately opened, showing "senast känt innehåll"
+ * (last known contents) — never presented as live/current state.
  */
 public class KistorTabComponent {
     private static final int MAX_SEARCH_LENGTH = 48;
+    private static final int MAX_LABEL_LENGTH = 32;
 
     private String searchText = "";
     private boolean searchFocused = false;
@@ -39,15 +44,27 @@ public class KistorTabComponent {
     private boolean confirmingForget = false;
     private long forgetConfirmExpiry = 0;
 
+    private ChestTypeFilter typeFilter = ChestTypeFilter.ALL;
+    private ChestSortMode sortMode = ChestSortMode.RECENT;
+
+    private boolean labelEditFocused = false;
+    private String labelEditText = "";
+
+    private long copyFeedbackExpiry = 0;
+
     private KistorLayout layout;
     private final List<ListRowHit> listHitTargets = new ArrayList<>();
+    private UiRect labelFieldRect = null;
 
     public record ListRowHit(UiRect rect, StoredContainerId id) {}
 
-    private static final int ROW_H = 22;
-
     public KistorLayout getLayout() {
         return layout;
+    }
+
+    /** True while ANY Companion text input owned by this tab (search or label editor) is focused. */
+    public boolean isTextInputFocused() {
+        return searchFocused || labelEditFocused;
     }
 
     public boolean isSearchFocused() {
@@ -57,6 +74,7 @@ public class KistorTabComponent {
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         this.layout = KistorLayout.calculate(bounds);
         listHitTargets.clear();
+        labelFieldRect = null;
 
         CompanionSession session = CompanionSession.getInstance();
         ChestManager manager = session.getChestManager();
@@ -68,22 +86,30 @@ public class KistorTabComponent {
         }
 
         List<StoredContainer> all = manager.getContainers(contextKey);
-        List<StoredContainer> filtered = manager.search(contextKey, searchText);
+        List<StoredContainer> filtered = manager.search(contextKey, searchText, typeFilter, sortMode);
+        boolean isFiltering = !searchText.isBlank() || typeFilter != ChestTypeFilter.ALL;
 
-        renderHeader(extractor, font, layout.headerRect(), all.size());
-        renderSearch(extractor, font, layout.searchRect(), mouseX, mouseY);
+        renderHeader(extractor, font, layout.headerRect(), all.size(), filtered.size(), isFiltering);
+        renderSearch(extractor, font, layout.searchRect(), layout.clearBtnRect(), mouseX, mouseY);
+        renderControls(extractor, font, layout.filterBtnRect(), layout.sortBtnRect(), mouseX, mouseY);
 
         if (all.isEmpty()) {
-            renderEmptyState(extractor, font, layout.listRect().right() > layout.detailRect().x()
-                    ? new UiRect(bounds.x(), layout.listRect().y(), bounds.width(), layout.listRect().height())
-                    : layout.listRect());
+            renderEmptyState(extractor, font, contentArea(bounds), true);
             return;
         }
 
+        // Deterministic selection upkeep: keep the current selection if it is still visible in
+        // the filtered results; otherwise select the first visible result; otherwise clear it.
         if (selectedId == null || filtered.stream().noneMatch(c -> c.id().equals(selectedId))) {
-            if (!filtered.isEmpty()) {
-                selectedId = filtered.get(0).id();
+            selectedId = filtered.isEmpty() ? null : filtered.get(0).id();
+            if (selectedId == null) {
+                compactShowingDetail = false;
             }
+        }
+
+        if (filtered.isEmpty()) {
+            renderEmptyState(extractor, font, contentArea(bounds), false);
+            return;
         }
 
         if (layout.isCompact()) {
@@ -98,17 +124,22 @@ public class KistorTabComponent {
         }
     }
 
-    private void renderHeader(GuiGraphicsExtractor extractor, Font font, UiRect headerRect, int totalCount) {
+    private UiRect contentArea(UiRect bounds) {
+        return new UiRect(bounds.x(), layout.listRect().y(), bounds.width(),
+                Math.max(10, layout.forgetBtnRect().y() - 4 - layout.listRect().y()));
+    }
+
+    private void renderHeader(GuiGraphicsExtractor extractor, Font font, UiRect headerRect, int totalCount, int filteredCount, boolean isFiltering) {
         GZTheme.drawIcon(extractor, IconId.CHEST, headerRect.x(), headerRect.y() + 1, 10, GZTheme.COLOR_MINT);
         TextUtil.drawScaledText(extractor, font, "Kistor", headerRect.x() + 13, headerRect.y() + 1,
                 TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
 
-        String countLabel = totalCount + " sparade";
+        String countLabel = isFiltering ? (filteredCount + " av " + totalCount) : (totalCount + " sparade");
         int badgeW = TextUtil.scaledWidth(font, countLabel, TypographyScale.META.getScale()) + 14;
         GZTheme.drawBadge(extractor, font, headerRect.right() - badgeW, headerRect.y(), countLabel, GZTheme.COLOR_TEXT_SECONDARY, GZTheme.COLOR_STATUS_GREY);
     }
 
-    private void renderSearch(GuiGraphicsExtractor extractor, Font font, UiRect searchRect, int mouseX, int mouseY) {
+    private void renderSearch(GuiGraphicsExtractor extractor, Font font, UiRect searchRect, UiRect clearBtnRect, int mouseX, int mouseY) {
         int bg = searchFocused ? GZTheme.COLOR_CARD_HOVER : GZTheme.COLOR_CARD_INNER;
         int border = searchFocused ? GZTheme.COLOR_BORDER_EMERALD : GZTheme.COLOR_BORDER_SUBTLE;
         GZTheme.drawCard(extractor, searchRect, bg, border);
@@ -118,16 +149,39 @@ public class KistorTabComponent {
         int maxW = searchRect.width() - 8;
 
         if (searchText.isEmpty() && !searchFocused) {
-            TextUtil.drawScaledEllipsizedText(extractor, font, "Sök föremål eller koordinat...", textX, textY,
+            TextUtil.drawScaledEllipsizedText(extractor, font, "Sök föremål, etikett, typ, dimension eller koordinat...", textX, textY,
                     maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
         } else {
             String shown = searchText + (searchFocused && ((System.currentTimeMillis() / 500) % 2 == 0) ? "_" : "");
             TextUtil.drawScaledEllipsizedText(extractor, font, shown, textX, textY,
                     maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
         }
+
+        if (!searchText.isEmpty()) {
+            boolean hov = clearBtnRect.contains(mouseX, mouseY);
+            GZTheme.drawCard(extractor, clearBtnRect, hov ? GZTheme.COLOR_CARD_HOVER : GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
+            TextUtil.drawCenteredText(extractor, font, "x", clearBtnRect.x() + (clearBtnRect.width() / 2), clearBtnRect.y() + 2,
+                    clearBtnRect.width(), hov ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_MUTED, false);
+        }
     }
 
-    private void renderEmptyState(GuiGraphicsExtractor extractor, Font font, UiRect area) {
+    private void renderControls(GuiGraphicsExtractor extractor, Font font, UiRect filterBtnRect, UiRect sortBtnRect, int mouseX, int mouseY) {
+        boolean filterHov = filterBtnRect.contains(mouseX, mouseY);
+        boolean filterActive = typeFilter != ChestTypeFilter.ALL;
+        String filterLabel = "Typ: " + typeFilter.getDisplayName();
+        GZTheme.drawCard(extractor, filterBtnRect, filterActive ? GZTheme.COLOR_NAV_ACTIVE : (filterHov ? GZTheme.COLOR_NAV_HOVER : GZTheme.COLOR_CARD_INNER),
+                filterActive ? GZTheme.COLOR_BORDER_EMERALD : GZTheme.COLOR_BORDER_SUBTLE);
+        TextUtil.drawScaledEllipsizedText(extractor, font, filterLabel, filterBtnRect.x() + 3, filterBtnRect.y() + 2,
+                filterBtnRect.width() - 6, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+
+        boolean sortHov = sortBtnRect.contains(mouseX, mouseY);
+        String sortLabel = "Sortering: " + sortMode.getDisplayName();
+        GZTheme.drawCard(extractor, sortBtnRect, sortHov ? GZTheme.COLOR_NAV_HOVER : GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
+        TextUtil.drawScaledEllipsizedText(extractor, font, sortLabel, sortBtnRect.x() + 3, sortBtnRect.y() + 2,
+                sortBtnRect.width() - 6, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+    }
+
+    private void renderEmptyState(GuiGraphicsExtractor extractor, Font font, UiRect area, boolean noIndexedStorageAtAll) {
         GZTheme.drawCard(extractor, area, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         int centerX = area.x() + (area.width() / 2);
         int maxW = area.width() - 20;
@@ -135,26 +189,42 @@ public class KistorTabComponent {
 
         GZTheme.drawIcon(extractor, IconId.CHEST, centerX - 8, y, 16, GZTheme.COLOR_MINT);
         y += 20;
-        TextUtil.drawCenteredText(extractor, font, "Du har inga sparade förvaringar ännu.", centerX, y, maxW, GZTheme.COLOR_TEXT_PRIMARY, true);
-        y += 12;
-        y += TextUtil.drawScaledWrappedText(extractor, font,
-                "Öppna en kista, tunna eller annan stödd förvaring så sparar GZ Companion senast känt innehåll automatiskt.",
-                area.x() + 10, y, maxW, TypographyScale.SMALL.getScale(), 3, 1, GZTheme.COLOR_TEXT_SECONDARY, false);
-        y += 6;
-        TextUtil.drawScaledCenteredText(extractor, font, "Inga oöppnade förvaringar skannas.", centerX, y, maxW,
-                TypographyScale.META.getScale(), GZTheme.COLOR_STATUS_GREEN, false);
+
+        if (noIndexedStorageAtAll) {
+            TextUtil.drawCenteredText(extractor, font, "Du har inga sparade förvaringar ännu.", centerX, y, maxW, GZTheme.COLOR_TEXT_PRIMARY, true);
+            y += 12;
+            y += TextUtil.drawScaledWrappedText(extractor, font,
+                    "Öppna en kista, tunna eller annan stödd förvaring så sparar GZ Companion senast känt innehåll automatiskt.",
+                    area.x() + 10, y, maxW, TypographyScale.SMALL.getScale(), 3, 1, GZTheme.COLOR_TEXT_SECONDARY, false);
+            y += 6;
+            TextUtil.drawScaledCenteredText(extractor, font, "Inga oöppnade förvaringar skannas.", centerX, y, maxW,
+                    TypographyScale.META.getScale(), GZTheme.COLOR_STATUS_GREEN, false);
+        } else {
+            TextUtil.drawCenteredText(extractor, font, "Inga sparade förvaringar matchar sökningen.", centerX, y, maxW, GZTheme.COLOR_TEXT_PRIMARY, true);
+        }
     }
 
     public static int calculateMaxListScroll(UiRect listRect, int rowCount) {
-        int totalH = 15 + (rowCount * (ROW_H + 1)) + 4;
+        return calculateMaxListScroll(listRect, rowCount, false);
+    }
+
+    public static int calculateMaxListScroll(UiRect listRect, int rowCount, boolean compact) {
+        int rowH = rowHeight(compact);
+        int totalH = 15 + (rowCount * (rowH + 1)) + 4;
         int visibleH = Math.max(1, listRect.height() - 4);
         return Math.max(0, totalH - visibleH);
+    }
+
+    private static int rowHeight(boolean compact) {
+        return compact ? 22 : 30;
     }
 
     private void renderList(GuiGraphicsExtractor extractor, Font font, UiRect listRect, List<StoredContainer> containers, int mouseX, int mouseY) {
         GZTheme.drawCard(extractor, listRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
 
-        int maxScroll = calculateMaxListScroll(listRect, containers.size());
+        boolean compact = layout.isCompact();
+        int rowH = rowHeight(compact);
+        int maxScroll = calculateMaxListScroll(listRect, containers.size(), compact);
         this.listScrollOffset = Math.max(0, Math.min(listScrollOffset, maxScroll));
 
         extractor.enableScissor(listRect.x() + 1, listRect.y() + 1, listRect.right() - 1, listRect.bottom() - 1);
@@ -164,18 +234,13 @@ public class KistorTabComponent {
                 TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
         currentY += 12;
 
-        if (containers.isEmpty()) {
-            TextUtil.drawScaledText(extractor, font, "Inga träffar.", listRect.x() + 4, currentY,
-                    TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-        }
-
         for (StoredContainer container : containers) {
-            UiRect rowRect = new UiRect(listRect.x() + 2, currentY, listRect.width() - 4, ROW_H);
+            UiRect rowRect = new UiRect(listRect.x() + 2, currentY, listRect.width() - 4, rowH);
             if (rowRect.bottom() >= listRect.y() + 2 && rowRect.y() <= listRect.bottom() - 2) {
                 listHitTargets.add(new ListRowHit(rowRect, container.id()));
             }
 
-            if (currentY + ROW_H >= listRect.y() && currentY <= listRect.bottom()) {
+            if (currentY + rowH >= listRect.y() && currentY <= listRect.bottom()) {
                 boolean isSelected = container.id().equals(selectedId);
                 boolean isHovered = rowRect.contains(mouseX, mouseY);
 
@@ -183,17 +248,23 @@ public class KistorTabComponent {
                 int border = isSelected ? GZTheme.COLOR_BORDER_EMERALD : 0;
                 if (bg != 0) GZTheme.drawCard(extractor, rowRect, bg, border);
 
-                String title = container.kind().getDisplayName() + (container.label() != null ? " · " + container.label() : "");
-                int textTint = isSelected ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_PRIMARY;
-                TextUtil.drawScaledEllipsizedText(extractor, font, title, rowRect.x() + 4, rowRect.y() + 3,
-                        rowRect.width() - 8, TypographyScale.SMALL.getScale(), textTint, isSelected);
+                boolean hasLabel = container.label() != null && !container.label().isBlank();
+                String title = hasLabel ? container.label() : container.kind().getDisplayName();
+                String secondary = hasLabel ? container.kind().getDisplayName() + " · " + container.anchor().toDisplayString()
+                        : container.anchor().toDisplayString();
 
-                String coords = container.anchor().toDisplayString();
-                TextUtil.drawScaledEllipsizedText(extractor, font, coords, rowRect.x() + 4, rowRect.y() + 12,
+                TextUtil.drawScaledEllipsizedText(extractor, font, title, rowRect.x() + 4, rowRect.y() + 3,
+                        rowRect.width() - 8, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, isSelected);
+                TextUtil.drawScaledEllipsizedText(extractor, font, secondary, rowRect.x() + 4, rowRect.y() + 12,
                         rowRect.width() - 8, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+
+                if (!compact) {
+                    TextUtil.drawScaledEllipsizedText(extractor, font, formatRelativeTime(container.lastOpenedAtMs()), rowRect.x() + 4, rowRect.y() + 20,
+                            rowRect.width() - 8, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+                }
             }
 
-            currentY += ROW_H + 1;
+            currentY += rowH + 1;
         }
 
         extractor.disableScissor();
@@ -203,11 +274,24 @@ public class KistorTabComponent {
         if (font == null || contentArea == null || container == null) return 0;
         int maxW = Math.max(10, contentArea.width() - 8);
         int totalH = 4;
-        totalH += 26; // title + coords + last-opened block
+        if (container.label() != null && !container.label().isBlank()) totalH += 11;
+        if (labelEditFocused) totalH += 11;
+        totalH += 10; // type · dimension
+        totalH += 9;  // coordinates
+        if (shapeStatusText(container) != null) totalH += 9;
+        totalH += 12; // senast öppnad
         totalH += 12; // "SENAST KÄNT INNEHÅLL" header
         totalH += Math.max(1, container.aggregatedItems().size()) * 10;
         totalH += TextUtil.measureWrappedHeight(font, "Kan ha ändrats sedan du öppnade förvaringen.", maxW, TypographyScale.META.getScale(), 1) + 10;
         return Math.max(0, totalH - contentArea.height());
+    }
+
+    private String shapeStatusText(StoredContainer container) {
+        return switch (container.shape()) {
+            case DOUBLE -> "Dubbel kista";
+            case UNKNOWN -> container.kind().isChestFamily() ? "(kan vara dubbel)" : null;
+            case SINGLE, NOT_APPLICABLE -> null;
+        };
     }
 
     private void renderDetailPane(GuiGraphicsExtractor extractor, Font font, UiRect detailRect, ChestManager manager,
@@ -222,11 +306,8 @@ public class KistorTabComponent {
         }
 
         int pad = 5;
-        UiRect forgetBtn = layout.forgetBtnRect();
         int contentTop = detailRect.y() + (isCompact ? 16 : 4);
-        int contentBottom = forgetBtn.y() - 3;
-        int contentH = Math.max(1, contentBottom - contentTop);
-        UiRect contentArea = new UiRect(detailRect.x() + 1, contentTop, detailRect.width() - 2, contentH);
+        UiRect contentArea = new UiRect(detailRect.x() + 1, contentTop, detailRect.width() - 2, detailRect.bottom() - contentTop - 1);
 
         int maxScroll = calculateMaxDetailScroll(font, contentArea, container);
         this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset, maxScroll));
@@ -241,27 +322,56 @@ public class KistorTabComponent {
         int currY = contentArea.y() + 2 - detailScrollOffset;
         int maxW = contentArea.width() - (pad * 2);
 
-        String title = container.kind().getDisplayName() + " · " + shortDimensionName(container.dimensionKey())
-                + (container.label() != null ? " · " + container.label() : "");
-        TextUtil.drawScaledEllipsizedText(extractor, font, title, contentArea.x() + pad, currY,
-                maxW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
+        // 1. Local label (if any), or an inline editor while renaming.
+        boolean hasLabel = container.label() != null && !container.label().isBlank();
+        if (labelEditFocused) {
+            UiRect fieldRect = new UiRect(contentArea.x() + pad, currY, maxW, 11);
+            this.labelFieldRect = fieldRect;
+            GZTheme.drawCard(extractor, fieldRect, GZTheme.COLOR_CARD_HOVER, GZTheme.COLOR_BORDER_EMERALD);
+            String shown = labelEditText + (((System.currentTimeMillis() / 500) % 2 == 0) ? "_" : "");
+            TextUtil.drawScaledEllipsizedText(extractor, font, shown, fieldRect.x() + 3, fieldRect.y() + 2,
+                    fieldRect.width() - 6, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
+            currY += 11;
+        } else if (hasLabel) {
+            TextUtil.drawScaledEllipsizedText(extractor, font, container.label(), contentArea.x() + pad, currY,
+                    maxW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
+            currY += 11;
+        }
+
+        // 2. Storage type · dimension
+        String typeLine = container.kind().getDisplayName() + " · " + shortDimensionName(container.dimensionKey());
+        TextUtil.drawScaledEllipsizedText(extractor, font, typeLine, contentArea.x() + pad, currY,
+                maxW, hasLabel || labelEditFocused ? TypographyScale.SMALL.getScale() : TypographyScale.HEADING.getScale(),
+                hasLabel || labelEditFocused ? GZTheme.COLOR_TEXT_SECONDARY : GZTheme.COLOR_TEXT_PRIMARY, !(hasLabel || labelEditFocused));
         currY += 10;
 
-        String coordText = container.anchor().toDisplayString() + (container.isDoubleWide() ? "  (dubbel)"
-                : (container.partnerUnknown() && container.kind().isChestFamily() ? "  (kan vara dubbel)" : ""));
-        TextUtil.drawScaledEllipsizedText(extractor, font, coordText, contentArea.x() + pad, currY,
+        // 3. Coordinates
+        TextUtil.drawScaledEllipsizedText(extractor, font, container.anchor().toDisplayString(), contentArea.x() + pad, currY,
                 maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
         currY += 9;
 
+        // 4. Shape status, only if relevant
+        String shapeText = shapeStatusText(container);
+        if (shapeText != null) {
+            int shapeColor = container.shape() == StorageShape.UNKNOWN ? GZTheme.COLOR_STATUS_YELLOW : GZTheme.COLOR_TEXT_MUTED;
+            TextUtil.drawScaledEllipsizedText(extractor, font, shapeText, contentArea.x() + pad, currY,
+                    maxW, TypographyScale.META.getScale(), shapeColor, false);
+            currY += 9;
+        }
+
+        // 5. Senast öppnad
         TextUtil.drawScaledEllipsizedText(extractor, font, "Senast öppnad: " + formatRelativeTime(container.lastOpenedAtMs()),
                 contentArea.x() + pad, currY, maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
         currY += 12;
 
+        // 6. SENAST KÄNT INNEHÅLL + items
         TextUtil.drawScaledText(extractor, font, "SENAST KÄNT INNEHÅLL", contentArea.x() + pad, currY,
                 TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
         currY += 10;
 
-        List<StoredContainer.AggregatedItem> items = container.aggregatedItems();
+        List<StoredContainer.AggregatedItem> items = new ArrayList<>(container.aggregatedItems());
+        items.sort(Comparator.comparing((StoredContainer.AggregatedItem i) -> manager.itemDisplayName(i.itemId()), String.CASE_INSENSITIVE_ORDER));
+
         if (items.isEmpty()) {
             TextUtil.drawScaledText(extractor, font, "(Tom förvaring senast öppnad)", contentArea.x() + pad, currY,
                     TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
@@ -280,19 +390,40 @@ public class KistorTabComponent {
         }
         currY += 4;
 
+        // 7. Last-known warning
         TextUtil.drawScaledWrappedText(extractor, font, "Kan ha ändrats sedan du öppnade förvaringen.",
                 contentArea.x() + pad, currY, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_YELLOW, false);
 
         extractor.disableScissor();
 
+        renderActionRow(extractor, font, mouseX, mouseY, hasLabel);
+    }
+
+    private void renderActionRow(GuiGraphicsExtractor extractor, Font font, int mouseX, int mouseY, boolean hasLabel) {
+        UiRect renameBtn = layout.renameBtnRect();
+        UiRect copyBtn = layout.copyBtnRect();
+        UiRect forgetBtn = layout.forgetBtnRect();
+
+        String renameLabel = labelEditFocused ? "Spara" : (hasLabel ? "Byt namn" : "Namnge");
+        GZTheme.drawButton(extractor, font, renameBtn, renameLabel, false, renameBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+
+        boolean copyFeedbackActive = System.currentTimeMillis() < copyFeedbackExpiry;
+        String copyLabel = copyFeedbackActive ? "Kopierat!" : "Kopiera koord.";
+        int copyBg = copyFeedbackActive ? 0x4010B981 : (copyBtn.contains(mouseX, mouseY) ? GZTheme.COLOR_NAV_HOVER : GZTheme.COLOR_CARD_INNER);
+        int copyBorder = copyFeedbackActive ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_BORDER_SUBTLE;
+        GZTheme.drawCard(extractor, copyBtn, copyBg, copyBorder);
+        TextUtil.drawScaledCenteredText(extractor, font, copyLabel, copyBtn.x() + (copyBtn.width() / 2),
+                copyBtn.y() + ((copyBtn.height() - 7) / 2), copyBtn.width() - 4,
+                TypographyScale.META.getScale(), copyFeedbackActive ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_TEXT_MUTED, false);
+
         boolean confirmActive = isForgetConfirmActive();
-        String forgetLabel = confirmActive ? "Bekräfta! Tas bara bort lokalt" : "Glöm förvaring";
+        String forgetLabel = confirmActive ? "Bekräfta!" : "Glöm förvaring";
         int fBg = confirmActive ? 0x99EF4444 : (forgetBtn.contains(mouseX, mouseY) ? GZTheme.COLOR_NAV_HOVER : GZTheme.COLOR_CARD_INNER);
         int fBorder = confirmActive ? 0xFFEF4444 : GZTheme.COLOR_BORDER_SUBTLE;
         int fText = confirmActive ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_MUTED;
         GZTheme.drawCard(extractor, forgetBtn, fBg, fBorder);
         TextUtil.drawScaledCenteredText(extractor, font, forgetLabel, forgetBtn.x() + (forgetBtn.width() / 2),
-                forgetBtn.y() + ((forgetBtn.height() - 7) / 2), forgetBtn.width() - 4, TypographyScale.SMALL.getScale(), fText, false);
+                forgetBtn.y() + ((forgetBtn.height() - 7) / 2), forgetBtn.width() - 4, TypographyScale.META.getScale(), fText, false);
     }
 
     private void drawUnavailableState(GuiGraphicsExtractor extractor, Font font, UiRect bounds, ChestManagerStatus status) {
@@ -338,10 +469,44 @@ public class KistorTabComponent {
         if (button != 0) return false;
         if (layout == null) layout = KistorLayout.calculate(bounds);
 
-        boolean insideSearch = layout.searchRect().contains(mouseX, mouseY);
-        searchFocused = insideSearch;
+        CompanionSession session = CompanionSession.getInstance();
+        ChestManager manager = session.getChestManager();
+        String contextKey = session.getCurrentStorageContext();
 
+        // Clicking the search box focuses it and cancels any in-progress label edit (discarded,
+        // matching "clicking outside cancels" for the label editor - see keyPressed javadoc).
+        boolean insideSearch = layout.searchRect().contains(mouseX, mouseY);
+        boolean insideClear = layout.clearBtnRect().contains(mouseX, mouseY);
+        boolean insideLabelField = labelEditFocused && labelFieldRect != null && labelFieldRect.contains(mouseX, mouseY);
+        boolean insideRenameBtn = layout.renameBtnRect().contains(mouseX, mouseY);
+
+        if (insideLabelField) {
+            searchFocused = false;
+            return true;
+        }
+        if (labelEditFocused && !insideRenameBtn) {
+            // Clicked outside the label field (and not on the Spara/commit button itself) while
+            // editing: cancel without saving. The rename button's own click handler below is
+            // what actually commits when the click IS on it - it must not be preempted here.
+            cancelLabelEdit();
+        }
+
+        if (insideClear) {
+            searchText = "";
+            return true;
+        }
+
+        searchFocused = insideSearch;
         if (insideSearch) {
+            return true;
+        }
+
+        if (layout.filterBtnRect().contains(mouseX, mouseY)) {
+            typeFilter = typeFilter.next();
+            return true;
+        }
+        if (layout.sortBtnRect().contains(mouseX, mouseY)) {
+            sortMode = sortMode.next();
             return true;
         }
 
@@ -358,30 +523,76 @@ public class KistorTabComponent {
                     selectedId = hit.id;
                     compactShowingDetail = true;
                     confirmingForget = false;
+                    detailScrollOffset = 0;
                     return true;
                 }
             }
         }
 
-        if (selectedId != null && layout.forgetBtnRect().contains(mouseX, mouseY)) {
-            CompanionSession session = CompanionSession.getInstance();
-            ChestManager manager = session.getChestManager();
-            String contextKey = session.getCurrentStorageContext();
+        if (selectedId != null) {
+            StoredContainer selected = manager.getContainer(contextKey, selectedId).orElse(null);
 
-            if (isForgetConfirmActive()) {
-                manager.forgetContainer(contextKey, selectedId);
-                selectedId = null;
-                confirmingForget = false;
-                forgetConfirmExpiry = 0;
-                compactShowingDetail = false;
-            } else {
-                confirmingForget = true;
-                forgetConfirmExpiry = System.currentTimeMillis() + 4000;
+            if (layout.renameBtnRect().contains(mouseX, mouseY)) {
+                if (labelEditFocused) {
+                    commitLabelEdit(manager, contextKey);
+                } else if (selected != null) {
+                    labelEditFocused = true;
+                    labelEditText = selected.label() != null ? selected.label() : "";
+                    detailScrollOffset = 0;
+                }
+                return true;
             }
-            return true;
+
+            if (layout.copyBtnRect().contains(mouseX, mouseY) && selected != null) {
+                copyCoordinates(selected);
+                return true;
+            }
+
+            if (layout.forgetBtnRect().contains(mouseX, mouseY)) {
+                if (isForgetConfirmActive()) {
+                    manager.forgetContainer(contextKey, selectedId);
+                    confirmingForget = false;
+                    forgetConfirmExpiry = 0;
+
+                    // Select a sensible remaining entry rather than leaving a dangling selection.
+                    List<StoredContainer> remaining = manager.search(contextKey, searchText, typeFilter, sortMode);
+                    selectedId = remaining.isEmpty() ? null : remaining.get(0).id();
+                    if (selectedId == null) {
+                        compactShowingDetail = false;
+                    }
+                } else {
+                    confirmingForget = true;
+                    forgetConfirmExpiry = System.currentTimeMillis() + 4000;
+                }
+                return true;
+            }
         }
 
         return false;
+    }
+
+    private void copyCoordinates(StoredContainer container) {
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client != null && client.keyboardHandler != null) {
+                client.keyboardHandler.setClipboard(container.anchor().toCoordinateText());
+                copyFeedbackExpiry = System.currentTimeMillis() + 2000;
+            }
+        } catch (Exception ignored) {
+            // Clipboard access is a pure local OS convenience - never let a failure here affect anything else.
+        }
+    }
+
+    private void commitLabelEdit(ChestManager manager, String contextKey) {
+        String sanitized = labelEditText.trim();
+        manager.setLabel(contextKey, selectedId, sanitized.isEmpty() ? null : sanitized);
+        labelEditFocused = false;
+        labelEditText = "";
+    }
+
+    private void cancelLabelEdit() {
+        labelEditFocused = false;
+        labelEditText = "";
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
@@ -390,8 +601,8 @@ public class KistorTabComponent {
         if (layout.listRect().contains(mouseX, mouseY)) {
             CompanionSession session = CompanionSession.getInstance();
             ChestManager manager = session.getChestManager();
-            int count = manager != null ? manager.getContainers(session.getCurrentStorageContext()).size() : 0;
-            int maxScroll = calculateMaxListScroll(layout.listRect(), count);
+            int count = manager != null ? manager.search(session.getCurrentStorageContext(), searchText, typeFilter, sortMode).size() : 0;
+            int maxScroll = calculateMaxListScroll(layout.listRect(), count, layout.isCompact());
             this.listScrollOffset = Math.max(0, Math.min(listScrollOffset - (int) (scrollY * 14), maxScroll));
             return true;
         }
@@ -402,12 +613,9 @@ public class KistorTabComponent {
             String contextKey = session.getCurrentStorageContext();
             StoredContainer container = manager != null ? manager.getContainer(contextKey, selectedId).orElse(null) : null;
             if (container != null) {
-                Font font = net.minecraft.client.Minecraft.getInstance().font;
-                UiRect forgetBtn = layout.forgetBtnRect();
+                Font font = Minecraft.getInstance().font;
                 int contentTop = layout.detailRect().y() + (layout.isCompact() ? 16 : 4);
-                int contentBottom = forgetBtn.y() - 3;
-                int contentH = Math.max(1, contentBottom - contentTop);
-                UiRect contentArea = new UiRect(layout.detailRect().x() + 1, contentTop, layout.detailRect().width() - 2, contentH);
+                UiRect contentArea = new UiRect(layout.detailRect().x() + 1, contentTop, layout.detailRect().width() - 2, layout.detailRect().bottom() - contentTop - 1);
                 int maxScroll = calculateMaxDetailScroll(font, contentArea, container);
                 this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset - (int) (scrollY * 14), maxScroll));
                 return true;
@@ -418,28 +626,68 @@ public class KistorTabComponent {
     }
 
     public boolean charTyped(CharacterEvent event) {
-        if (!searchFocused || event == null) return false;
+        if (event == null) return false;
         String s = event.codepointAsString();
         if (s == null || s.isEmpty()) return false;
-        if (searchText.length() < MAX_SEARCH_LENGTH) {
-            searchText = searchText + s;
-        }
-        return true;
-    }
 
-    public boolean keyPressed(KeyEvent event) {
-        if (!searchFocused || event == null) return false;
-        int key = event.key();
-        if (key == GLFW.GLFW_KEY_BACKSPACE) {
-            if (!searchText.isEmpty()) {
-                searchText = searchText.substring(0, searchText.length() - 1);
+        if (labelEditFocused) {
+            if (labelEditText.length() < MAX_LABEL_LENGTH) {
+                labelEditText = labelEditText + s;
             }
             return true;
         }
-        if (key == GLFW.GLFW_KEY_ESCAPE) {
-            searchFocused = false;
+        if (searchFocused) {
+            if (searchText.length() < MAX_SEARCH_LENGTH) {
+                searchText = searchText + s;
+            }
             return true;
         }
+        return false;
+    }
+
+    /**
+     * Handles a key press while the Kistor tab is active. Priority: an in-progress label edit
+     * takes ESC/Enter/Backspace first, then the search field. Any other key while a text input
+     * is focused is consumed here (so it never leaks into unrelated global shortcuts) but does
+     * nothing beyond that - the actual character insertion happens via {@link #charTyped}.
+     */
+    public boolean keyPressed(KeyEvent event) {
+        if (event == null) return false;
+        int key = event.key();
+
+        if (labelEditFocused) {
+            if (key == GLFW.GLFW_KEY_ESCAPE) {
+                cancelLabelEdit();
+                return true;
+            }
+            if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+                CompanionSession session = CompanionSession.getInstance();
+                commitLabelEdit(session.getChestManager(), session.getCurrentStorageContext());
+                return true;
+            }
+            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!labelEditText.isEmpty()) {
+                    labelEditText = labelEditText.substring(0, labelEditText.length() - 1);
+                }
+                return true;
+            }
+            return true;
+        }
+
+        if (searchFocused) {
+            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+                if (!searchText.isEmpty()) {
+                    searchText = searchText.substring(0, searchText.length() - 1);
+                }
+                return true;
+            }
+            if (key == GLFW.GLFW_KEY_ESCAPE) {
+                searchFocused = false;
+                return true;
+            }
+            return false;
+        }
+
         return false;
     }
 }

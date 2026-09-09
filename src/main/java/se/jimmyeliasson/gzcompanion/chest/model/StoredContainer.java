@@ -14,12 +14,13 @@ public record StoredContainer(
     StoredContainerId id,
     String label,
     StoragePosition partner,
-    boolean partnerUnknown,
+    StorageShape shape,
     long lastOpenedAtMs,
     List<ChestSlotEntry> slots
 ) {
     public StoredContainer {
         Objects.requireNonNull(id, "id");
+        shape = shape != null ? shape : StorageShape.UNKNOWN;
         slots = slots != null ? List.copyOf(slots) : List.of();
     }
 
@@ -36,15 +37,15 @@ public record StoredContainer(
     }
 
     public boolean isDoubleWide() {
-        return partner != null;
+        return shape == StorageShape.DOUBLE;
     }
 
     public StoredContainer withLabel(String newLabel) {
-        return new StoredContainer(id, newLabel, partner, partnerUnknown, lastOpenedAtMs, slots);
+        return new StoredContainer(id, newLabel, partner, shape, lastOpenedAtMs, slots);
     }
 
-    public StoredContainer withSnapshot(StoragePosition newPartner, boolean newPartnerUnknown, long newLastOpenedAtMs, List<ChestSlotEntry> newSlots) {
-        return new StoredContainer(id, label, newPartner, newPartnerUnknown, newLastOpenedAtMs, newSlots);
+    public StoredContainer withSnapshot(StoragePosition newPartner, StorageShape newShape, long newLastOpenedAtMs, List<ChestSlotEntry> newSlots) {
+        return new StoredContainer(id, label, newPartner, newShape, newLastOpenedAtMs, newSlots);
     }
 
     /**

@@ -26,6 +26,7 @@ import net.minecraft.world.level.block.state.properties.ChestType;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestSlotEntry;
 import se.jimmyeliasson.gzcompanion.chest.model.StorageKind;
 import se.jimmyeliasson.gzcompanion.chest.model.StoragePosition;
+import se.jimmyeliasson.gzcompanion.chest.model.StorageShape;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -79,29 +80,51 @@ public final class MinecraftChestCaptureAdapter {
     }
 
     /**
-     * Determines the double-chest partner block position using ONLY the already client-visible
-     * {@link BlockState} of the block the player clicked (the {@code ChestBlock.TYPE} property).
-     * Never scans surrounding block entities. Returns empty for a single chest, or if the
-     * partner cannot be determined deterministically from the current state.
+     * Determines the chest-family physical shape (single / double / unknown) using ONLY the
+     * already client-visible {@link BlockState} of the block the player clicked (the
+     * {@code ChestBlock.TYPE} property and {@code ChestBlock.getConnectedBlockPos}). Never scans
+     * surrounding block entities.
+     *
+     * <p>Critically distinguishes "Minecraft explicitly proved this is a {@code SINGLE} chest"
+     * (returns {@link StorageShape#SINGLE}, no partner) from "this is a double-chest half whose
+     * partner could not be safely resolved" (returns {@link StorageShape#UNKNOWN}, no partner) —
+     * these previously collapsed into the same ambiguous state.
+     *
+     * <p>Only meaningful for chest-family blocks; callers must not invoke this for other storage
+     * kinds (Barrel, Shulker Box, Hopper, Dispenser, Dropper), which are always
+     * {@link StorageShape#NOT_APPLICABLE}.
      */
-    public static Optional<StoragePosition> findChestPartner(BlockState state, BlockPos clickedPos) {
-        if (state == null || clickedPos == null) return Optional.empty();
-        if (!(state.getBlock() instanceof ChestBlock)) return Optional.empty();
+    public static ChestShapeReading resolveChestShape(BlockState state, BlockPos clickedPos) {
+        if (state == null || clickedPos == null || !(state.getBlock() instanceof ChestBlock)) {
+            return ChestShapeReading.NOT_APPLICABLE;
+        }
 
         try {
             ChestType type = state.getValue(ChestBlock.TYPE);
-            if (type == null || type == ChestType.SINGLE) {
-                return Optional.empty();
+            if (type == null) {
+                return ChestShapeReading.UNKNOWN;
             }
+            if (type == ChestType.SINGLE) {
+                return ChestShapeReading.SINGLE;
+            }
+
+            // LEFT or RIGHT - a double chest half.
             BlockPos partnerPos = ChestBlock.getConnectedBlockPos(clickedPos, state);
             if (partnerPos == null || partnerPos.equals(clickedPos)) {
-                return Optional.empty();
+                return ChestShapeReading.UNKNOWN;
             }
-            return Optional.of(new StoragePosition(partnerPos.getX(), partnerPos.getY(), partnerPos.getZ()));
+            return new ChestShapeReading(StorageShape.DOUBLE, new StoragePosition(partnerPos.getX(), partnerPos.getY(), partnerPos.getZ()));
         } catch (Exception ignored) {
-            // Defensive: never guess a partner position if the state shape is unexpected.
-            return Optional.empty();
+            // Defensive: never guess a shape or partner position if the state shape is unexpected.
+            return ChestShapeReading.UNKNOWN;
         }
+    }
+
+    /** Plain result pairing a resolved {@link StorageShape} with its partner position, if any. */
+    public record ChestShapeReading(StorageShape shape, StoragePosition partner) {
+        public static final ChestShapeReading SINGLE = new ChestShapeReading(StorageShape.SINGLE, null);
+        public static final ChestShapeReading UNKNOWN = new ChestShapeReading(StorageShape.UNKNOWN, null);
+        public static final ChestShapeReading NOT_APPLICABLE = new ChestShapeReading(StorageShape.NOT_APPLICABLE, null);
     }
 
     /**

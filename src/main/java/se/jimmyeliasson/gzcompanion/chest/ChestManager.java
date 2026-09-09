@@ -3,8 +3,11 @@ package se.jimmyeliasson.gzcompanion.chest;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestDiagnosticsSummary;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestSlotEntry;
+import se.jimmyeliasson.gzcompanion.chest.model.ChestSortMode;
+import se.jimmyeliasson.gzcompanion.chest.model.ChestTypeFilter;
 import se.jimmyeliasson.gzcompanion.chest.model.StorageKind;
 import se.jimmyeliasson.gzcompanion.chest.model.StoragePosition;
+import se.jimmyeliasson.gzcompanion.chest.model.StorageShape;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainerId;
 import se.jimmyeliasson.gzcompanion.chest.storage.ChestIndexData;
@@ -100,16 +103,24 @@ public class ChestManager {
      * Records that the player just physically right-clicked a supported storage block.
      * Callers (the Minecraft-specific controller) must have already verified the block is on
      * the explicit storage allow-list before calling this.
+     *
+     * @param shape the physical shape Minecraft's already client-visible block state proved for
+     *              this block ({@link StorageShape#NOT_APPLICABLE} for non-chest-family kinds).
+     * @param partnerPos the double-chest partner position, required only when {@code shape} is
+     *                   {@link StorageShape#DOUBLE}; ignored otherwise.
      */
     public void recordPendingInteraction(String contextKey, String dimensionKey, StorageKind kind,
                                           StoragePosition clickedPos, StoragePosition partnerPos,
-                                          boolean partnerKnown, long nowMs) {
+                                          StorageShape shape, long nowMs) {
         if (!requireLoaded()) return;
         if (contextKey == null || dimensionKey == null || kind == null || clickedPos == null) return;
+        StorageShape safeShape = shape != null ? shape : StorageShape.UNKNOWN;
 
         StoragePosition anchor = clickedPos;
         StoragePosition partner = null;
-        if (partnerKnown && partnerPos != null) {
+        if (safeShape == StorageShape.DOUBLE && partnerPos != null) {
+            // Canonicalize so clicking either half of the same double chest resolves to the
+            // same identity, regardless of which side was opened.
             if (clickedPos.compareOrder(partnerPos) <= 0) {
                 anchor = clickedPos;
                 partner = partnerPos;
@@ -119,7 +130,7 @@ public class ChestManager {
             }
         }
 
-        this.pendingInteraction = new PendingInteraction(contextKey, dimensionKey, kind, anchor, partner, partnerKnown, nowMs);
+        this.pendingInteraction = new PendingInteraction(contextKey, dimensionKey, kind, anchor, partner, safeShape, nowMs);
     }
 
     /**
@@ -155,7 +166,7 @@ public class ChestManager {
             return false;
         }
 
-        this.activeCapture = new ActiveCapture(p.contextKey(), p.dimensionKey(), p.kind(), p.anchor(), p.partner(), p.partnerKnown());
+        this.activeCapture = new ActiveCapture(p.contextKey(), p.dimensionKey(), p.kind(), p.anchor(), p.partner(), p.shape());
         return true;
     }
 
@@ -208,7 +219,7 @@ public class ChestManager {
         StoredContainer existing = contextContainers.containers().get(id.asStableKey());
         String label = existing != null ? existing.label() : null;
 
-        StoredContainer updated = new StoredContainer(id, label, cap.partner, !cap.partnerKnown, cap.lastUpdateAtMs, cap.lastSlots);
+        StoredContainer updated = new StoredContainer(id, label, cap.partner, cap.shape, cap.lastUpdateAtMs, cap.lastSlots);
 
         ContextContainers updatedContext = contextContainers.withContainer(updated);
         indexData = indexData.withContext(cap.contextKey, updatedContext);
@@ -217,6 +228,18 @@ public class ChestManager {
 
     public boolean isCaptureActive() {
         return activeCapture != null;
+    }
+
+    /**
+     * Clears any in-memory pending interaction and/or active capture session WITHOUT persisting
+     * anything, guessing, or writing a fake final snapshot. Intended for lifecycle boundaries
+     * where continuing a capture would be unsafe or meaningless: leaving a world/server,
+     * disconnecting, or returning to the title screen. See {@code ChestCaptureController} for
+     * the verified Fabric hook this is registered against.
+     */
+    public void clearTransientCaptureState() {
+        this.pendingInteraction = null;
+        this.activeCapture = null;
     }
 
     // ------------------------------------------------------------------
@@ -248,24 +271,53 @@ public class ChestManager {
         return new ChestDiagnosticsSummary(status, indexData != null ? indexData.schemaVersion() : ChestIndexData.CURRENT_SCHEMA, getIndexedCount(contextKey));
     }
 
+    /** Local-only search across all containers in the context, no filter, default RECENT order. */
     public List<StoredContainer> search(String contextKey, String query) {
-        List<StoredContainer> all = getContainers(contextKey);
-        if (query == null || query.isBlank()) return all;
-        String q = query.trim().toLowerCase(Locale.ROOT);
+        return search(contextKey, query, ChestTypeFilter.ALL, ChestSortMode.RECENT);
+    }
+
+    /**
+     * Local-only search, restricted to the current context, combined with an optional storage
+     * type filter and sort mode. No world scanning of any kind is ever performed here.
+     */
+    public List<StoredContainer> search(String contextKey, String query, ChestTypeFilter typeFilter, ChestSortMode sortMode) {
+        List<StoredContainer> all = getContainers(contextKey); // already RECENT-desc by default
+        String q = (query != null && !query.isBlank()) ? query.trim().toLowerCase(Locale.ROOT) : null;
+        ChestTypeFilter safeFilter = typeFilter != null ? typeFilter : ChestTypeFilter.ALL;
+        ChestSortMode safeSort = sortMode != null ? sortMode : ChestSortMode.RECENT;
 
         List<StoredContainer> result = new ArrayList<>();
         for (StoredContainer container : all) {
-            if (matches(container, q)) {
-                result.add(container);
-            }
+            if (!safeFilter.matches(container.kind())) continue;
+            if (q != null && !matches(container, q)) continue;
+            result.add(container);
         }
+        sortContainers(result, safeSort);
         return result;
+    }
+
+    private void sortContainers(List<StoredContainer> containers, ChestSortMode mode) {
+        switch (mode) {
+            case NAME -> containers.sort(Comparator.comparing(ChestManager::nameSortKey, String.CASE_INSENSITIVE_ORDER));
+            case TYPE -> containers.sort(Comparator.comparing((StoredContainer c) -> c.kind().name())
+                    .thenComparing(ChestManager::typeSortSecondaryKey, String.CASE_INSENSITIVE_ORDER));
+            case RECENT -> containers.sort(Comparator.comparingLong(StoredContainer::lastOpenedAtMs).reversed());
+        }
+    }
+
+    private static String nameSortKey(StoredContainer c) {
+        return (c.label() != null && !c.label().isBlank()) ? c.label() : c.kind().getDisplayName();
+    }
+
+    private static String typeSortSecondaryKey(StoredContainer c) {
+        return (c.label() != null && !c.label().isBlank()) ? c.label() : c.anchor().toCoordinateText();
     }
 
     private boolean matches(StoredContainer container, String q) {
         if (container.anchor().toCoordinateText().toLowerCase(Locale.ROOT).contains(q)) return true;
         if (container.kind().getDisplayName().toLowerCase(Locale.ROOT).contains(q)) return true;
         if (container.kind().name().toLowerCase(Locale.ROOT).contains(q)) return true;
+        if (container.dimensionKey().toLowerCase(Locale.ROOT).contains(q)) return true;
         if (container.label() != null && container.label().toLowerCase(Locale.ROOT).contains(q)) return true;
 
         for (ChestSlotEntry slot : container.slots()) {
@@ -382,17 +434,17 @@ public class ChestManager {
         private final StorageKind kind;
         private final StoragePosition anchor;
         private final StoragePosition partner;
-        private final boolean partnerKnown;
+        private final StorageShape shape;
         private final long atMs;
 
         PendingInteraction(String contextKey, String dimensionKey, StorageKind kind, StoragePosition anchor,
-                            StoragePosition partner, boolean partnerKnown, long atMs) {
+                            StoragePosition partner, StorageShape shape, long atMs) {
             this.contextKey = contextKey;
             this.dimensionKey = dimensionKey;
             this.kind = kind;
             this.anchor = anchor;
             this.partner = partner;
-            this.partnerKnown = partnerKnown;
+            this.shape = shape;
             this.atMs = atMs;
         }
 
@@ -401,7 +453,7 @@ public class ChestManager {
         StorageKind kind() { return kind; }
         StoragePosition anchor() { return anchor; }
         StoragePosition partner() { return partner; }
-        boolean partnerKnown() { return partnerKnown; }
+        StorageShape shape() { return shape; }
         long atMs() { return atMs; }
     }
 
@@ -411,7 +463,7 @@ public class ChestManager {
         final StorageKind kind;
         final StoragePosition anchor;
         final StoragePosition partner;
-        final boolean partnerKnown;
+        final StorageShape shape;
 
         String lastFingerprint = null;
         List<ChestSlotEntry> lastSlots = List.of();
@@ -419,13 +471,13 @@ public class ChestManager {
         boolean hasAnyUpdate = false;
 
         ActiveCapture(String contextKey, String dimensionKey, StorageKind kind, StoragePosition anchor,
-                      StoragePosition partner, boolean partnerKnown) {
+                      StoragePosition partner, StorageShape shape) {
             this.contextKey = contextKey;
             this.dimensionKey = dimensionKey;
             this.kind = kind;
             this.anchor = anchor;
             this.partner = partner;
-            this.partnerKnown = partnerKnown;
+            this.shape = shape;
         }
     }
 }

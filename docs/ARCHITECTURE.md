@@ -28,8 +28,9 @@ se.jimmyeliasson.gzcompanion
 │   ├── ChestManager.java         # "Last known contents" index & capture session state machine
 │   ├── bridge/                   # MinecraftChestCaptureAdapter + ChestCaptureController (the ONLY
 │   │                              # place touching Minecraft menu/block/screen classes)
-│   ├── model/                    # StoredContainer, StorageKind, StoragePosition (no MC types)
-│   └── storage/                  # JsonChestIndexStore & versioned chest-index.json schema
+│   ├── model/                    # StoredContainer, StorageKind, StorageShape, ChestTypeFilter,
+│   │                              # ChestSortMode, StoragePosition (no MC types)
+│   └── storage/                  # JsonChestIndexStore, ChestIndexLoadResult & chest-index.json schema
 ├── minecraft/
 │   ├── MinecraftBridge.java      # Runtime abstraction interface
 │   └── VanillaMinecraftBridge.java # Minecraft client API caller

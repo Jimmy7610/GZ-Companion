@@ -138,7 +138,7 @@ public class HomeTabComponent {
             objTitle = nextStep.title();
             objDesc = engine.resolveTokens(nextStep.summary());
             chk1 = nextStep.why() != null ? engine.resolveTokens(nextStep.why()) : HomeCopy.CHECK_ITEM_1;
-            chk2 = nextStep.tip() != null ? engine.resolveTokens("Tips: " + nextStep.tip()) : HomeCopy.CHECK_ITEM_2;
+            chk2 = selectObjectiveSecondaryText(nextStep, engine);
             chk3 = !nextStep.conditions().isEmpty() && nextStep.conditions().get(0).description() != null
                     ? nextStep.conditions().get(0).description() : HomeCopy.CHECK_ITEM_3;
         } else {
@@ -200,6 +200,22 @@ public class HomeTabComponent {
             extractor.fill(toastX, toastY + 13, toastX + msgW, toastY + 14, GZTheme.COLOR_EMERALD);
             extractor.text(font, feedbackMessage, toastX + 7, toastY + 3, GZTheme.COLOR_MINT, false);
         }
+    }
+
+    /**
+     * Chooses the Home dashboard's secondary objective line for a real, specific active guide
+     * step. Never falls back to generic onboarding placeholder copy for a real step - if the
+     * step has no tip, its real description is used instead; if that is absent too, an empty
+     * string is returned rather than inventing or reusing unrelated placeholder text.
+     */
+    static String selectObjectiveSecondaryText(GuideStep step, GuideEngine engine) {
+        if (step.tip() != null && !step.tip().isBlank()) {
+            return engine.resolveTokens("Tips: " + step.tip());
+        }
+        if (step.description() != null && !step.description().isBlank()) {
+            return engine.resolveTokens(step.description());
+        }
+        return "";
     }
 
     private void drawMiniBadge(GuiGraphicsExtractor extractor, Font font, UiRect rect, String title, String val, int valArgb) {

@@ -8,6 +8,10 @@ bin/
 run/
 .fabric/
 
+# Local GZ Companion runtime data (this Loom setup runs the client with the
+# project root as its working directory, so config/ lands here, not in run/)
+config/
+
 # IDE files
 .idea/
 *.iml

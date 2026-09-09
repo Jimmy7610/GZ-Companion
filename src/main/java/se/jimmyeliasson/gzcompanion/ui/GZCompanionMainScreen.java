@@ -211,28 +211,27 @@ public class GZCompanionMainScreen extends Screen {
     public boolean keyPressed(KeyEvent event) {
         int keyCode = event.key();
 
-        // G always closes the Companion, matching established M1 behavior.
-        if (keyCode == GLFW.GLFW_KEY_G) {
+        // While a legitimate Companion text input (Kistor search or the local label editor) is
+        // focused, G must type into it rather than close the Companion. charTyped still inserts
+        // the character normally; only this global close action is suppressed.
+        boolean textInputFocused = activeTab == TabType.KISTOR && kistorTab.isTextInputFocused();
+
+        if (keyCode == GLFW.GLFW_KEY_G && !textInputFocused) {
             this.onClose();
             return true;
         }
 
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            // ESC closes the Companion, unless the Kistor search field is actively consuming
-            // the escape as an editing action (unfocusing itself) first.
-            if (activeTab == TabType.KISTOR && kistorTab.isSearchFocused()) {
-                if (kistorTab.keyPressed(event)) {
-                    return true;
-                }
-            }
-            this.onClose();
-            return true;
-        }
-
+        // Give the active tab's own input handling (label-edit cancel/save, search unfocus, etc.)
+        // first refusal on every key while it has something focused.
         if (activeTab == TabType.KISTOR) {
             if (kistorTab.keyPressed(event)) {
                 return true;
             }
+        }
+
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            this.onClose();
+            return true;
         }
 
         return super.keyPressed(event);
