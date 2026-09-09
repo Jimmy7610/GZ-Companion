@@ -6,9 +6,9 @@
 - **Scope**: Core architecture, Java 25 / Minecraft 26.1.2 Fabric toolchain, GameZone Rule Pack engine, safe server detection, Swedish UI with 9 navigation tabs, keybind G, and JUnit 5 test suite.
 - **Definition of Done**: Builds on JDK 25, passes all unit tests, creates valid production JAR, opens UI on keybind G, gracefully degrades on invalid data, and includes complete documentation.
 
-### M2 — Guide Engine
-- **Scope**: Interactive multi-step guide renderer, category filtering, search, and local step completion persistence.
-- **Definition of Done**: Interactive Swedish guides viewable in the Guide tab with persistent progress checkboxes stored in local config.
+### M2 — Guide Engine (Completed)
+- **Scope**: Data-driven beginner guide engine with 5 chapters and 22 survival steps, live inventory condition evaluation (items, tags, food), progression inference (`supersededBy`), dynamic keybinding token resolution, local-first progress storage (`guide-progress.json`), responsive 2-pane UI with reset confirmation, and Home dashboard objective synchronization.
+- **Definition of Done**: Builds on JDK 25 and Fabric 26.1.2, passes 100% unit tests, validates guide content schemas and acyclic prerequisite graphs, accurately tracks inventory evidence without network calls, and synchronizes dynamic next steps with the Home tab.
 
 ### M3 — Chest Manager (Fair-Play)
 - **Scope**: Indexing chest inventories legitimately opened by the player, search by item name, tag, or coordinates.

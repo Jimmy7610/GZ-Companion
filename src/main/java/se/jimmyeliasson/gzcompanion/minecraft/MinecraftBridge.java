@@ -1,5 +1,6 @@
 package se.jimmyeliasson.gzcompanion.minecraft;
 
+import se.jimmyeliasson.gzcompanion.guide.progress.GuideContext;
 import java.util.Optional;
 
 /**
@@ -10,5 +11,6 @@ public interface MinecraftBridge {
     Optional<String> getCurrentServerAddress();
     boolean isConnectedToGameZone();
     String getMinecraftVersion();
+    GuideContext getGuideContext();
     void openScreen(Object screen);
 }

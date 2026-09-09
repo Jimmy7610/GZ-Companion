@@ -56,7 +56,7 @@ public class FeatureManager {
         if (tab == null) return ModuleStatus.COMING_SOON;
         return switch (tab) {
             case HEM -> ModuleStatus.AVAILABLE;
-            case GUIDE -> ModuleStatus.COMING_SOON;
+            case GUIDE -> ModuleStatus.AVAILABLE;
             case CRAFTING -> ModuleStatus.COMING_SOON;
             case KISTOR -> ModuleStatus.COMING_SOON;
             case SETTLEMENT -> ModuleStatus.COMING_SOON;

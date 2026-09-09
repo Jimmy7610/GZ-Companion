@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "contentVersion": "2026.09.09.1",
+  "locale": "sv-SE",
+  "testedMinecraftVersions": ["26.1.2"],
+  "guides": [
+    {
+      "id": "minecraft-beginner",
+      "file": "minecraft-beginner-sv.json",
+      "title": "Nybörjarguiden",
+      "description": "Lär dig grunderna i Minecraft steg för steg från första träblocket till järnrustning."
+    }
+  ]
+}

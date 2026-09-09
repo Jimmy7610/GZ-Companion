@@ -41,11 +41,11 @@ class FeatureFlagTest {
     }
 
     @Test
-    @DisplayName("Should report accurate module readiness matching Milestone 1 implementation")
+    @DisplayName("Should report accurate module readiness matching Milestone 2 implementation")
     void testModuleStatusReadiness() {
         FeatureManager manager = new FeatureManager();
         assertEquals(ModuleStatus.AVAILABLE, manager.getModuleStatus(TabType.HEM));
-        assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.GUIDE));
+        assertEquals(ModuleStatus.AVAILABLE, manager.getModuleStatus(TabType.GUIDE));
         assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.CRAFTING));
         assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.KISTOR));
         assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.SETTLEMENT));

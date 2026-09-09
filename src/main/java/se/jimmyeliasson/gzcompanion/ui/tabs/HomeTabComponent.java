@@ -7,6 +7,9 @@ import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.core.feature.FeatureManager;
 import se.jimmyeliasson.gzcompanion.core.feature.ModuleStatus;
 import se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityResult;
+import se.jimmyeliasson.gzcompanion.guide.GuideEngine;
+import se.jimmyeliasson.gzcompanion.guide.model.GuideStep;
+import se.jimmyeliasson.gzcompanion.guide.progress.GuideContext;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.HomeCopy;
@@ -110,16 +113,28 @@ public class HomeTabComponent {
         int oPad = 5;
         int maxObjW = objectiveRect.width() - (oPad * 2);
 
+        GuideEngine engine = session.getGuideEngine();
+        GuideContext context = session.getCurrentGuideContext();
+        GuideStep nextStep = engine != null ? engine.getActiveOrNextStep(context) : null;
+
+        String objHeader = HomeCopy.OBJECTIVE_HEADER;
+        String objTitle = nextStep != null ? nextStep.title() : "Alla uppgifter klara!";
+        String objDesc = nextStep != null ? engine.resolveTokens(nextStep.summary()) : "Du har slutfört hela nybörjarguiden i Minecraft.";
+        String chk1 = nextStep != null && nextStep.why() != null ? engine.resolveTokens(nextStep.why()) : HomeCopy.CHECK_ITEM_1;
+        String chk2 = nextStep != null && nextStep.tip() != null ? engine.resolveTokens("Tips: " + nextStep.tip()) : HomeCopy.CHECK_ITEM_2;
+        String chk3 = nextStep != null && !nextStep.conditions().isEmpty() && nextStep.conditions().get(0).description() != null
+                ? nextStep.conditions().get(0).description() : HomeCopy.CHECK_ITEM_3;
+
         GZTheme.drawIcon(extractor, IconId.OBJECTIVE, objectiveRect.x() + oPad, objectiveRect.y() + 5, 9, GZTheme.COLOR_MINT);
-        TextUtil.drawScaledText(extractor, font, HomeCopy.OBJECTIVE_HEADER, objectiveRect.x() + oPad + 13, objectiveRect.y() + 5, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
-        TextUtil.drawScaledEllipsizedText(extractor, font, HomeCopy.OBJECTIVE_TITLE, objectiveRect.x() + oPad, objectiveRect.y() + 15, maxObjW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
-        TextUtil.drawScaledEllipsizedText(extractor, font, HomeCopy.OBJECTIVE_DESC, objectiveRect.x() + oPad, objectiveRect.y() + 24, maxObjW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        TextUtil.drawScaledText(extractor, font, objHeader, objectiveRect.x() + oPad + 13, objectiveRect.y() + 5, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
+        TextUtil.drawScaledEllipsizedText(extractor, font, objTitle, objectiveRect.x() + oPad, objectiveRect.y() + 15, maxObjW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
+        TextUtil.drawScaledEllipsizedText(extractor, font, objDesc, objectiveRect.x() + oPad, objectiveRect.y() + 24, maxObjW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
 
         int chkY = objectiveRect.y() + 34;
         int chkSpacing = 8;
-        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY, HomeCopy.CHECK_ITEM_1, maxObjW);
-        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + chkSpacing, HomeCopy.CHECK_ITEM_2, maxObjW);
-        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + (chkSpacing * 2), HomeCopy.CHECK_ITEM_3, maxObjW);
+        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY, chk1, maxObjW);
+        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + chkSpacing, chk2, maxObjW);
+        drawCheckItem(extractor, font, objectiveRect.x() + oPad, chkY + (chkSpacing * 2), chk3, maxObjW);
 
         // Render Action Buttons
         GZTheme.drawButton(extractor, font, primaryBtnRect, HomeCopy.ACTION_OPEN_GUIDE, true, primaryBtnRect.contains(mouseX, mouseY), TypographyScale.BODY.getScale());
@@ -186,13 +201,19 @@ public class HomeTabComponent {
         if (button != 0) return false;
         calculateLayout(bounds);
 
+        CompanionSession session = CompanionSession.getInstance();
+        GuideEngine engine = session.getGuideEngine();
+        GuideContext context = session.getCurrentGuideContext();
+        GuideStep nextStep = engine != null ? engine.getActiveOrNextStep(context) : null;
+
         if (layout.primaryButtonRect().contains(mouseX, mouseY)) {
-            mainScreen.setActiveTab(TabType.GUIDE);
+            mainScreen.openGuideStep(nextStep != null ? nextStep.id() : null);
             return true;
         }
 
         if (layout.secondaryButton1Rect().contains(mouseX, mouseY)) {
-            showToast("Rådgivaren är aktiv! Kolla 'Guide' för nästa steg.", 3000);
+            mainScreen.openGuideStep(nextStep != null ? nextStep.id() : null);
+            showToast("Nästa uppgift: " + (nextStep != null ? nextStep.title() : "Guide"), 3000);
             return true;
         }
 

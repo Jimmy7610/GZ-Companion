@@ -1,0 +1,508 @@
+{
+  "schemaVersion": 1,
+  "id": "minecraft-beginner",
+  "title": "Nybörjarguiden",
+  "description": "Lär dig grunderna i Minecraft från första träblocket till järnåldern.",
+  "chapters": [
+    {
+      "id": "ch1_kom_igang",
+      "title": "1. Kom igång",
+      "order": 1
+    },
+    {
+      "id": "ch2_forsta_verktygen",
+      "title": "2. Första verktygen",
+      "order": 2
+    },
+    {
+      "id": "ch3_overlev_natten",
+      "title": "3. Överlev natten",
+      "order": 3
+    },
+    {
+      "id": "ch4_trygg_bas",
+      "title": "4. Trygg bas & förvaring",
+      "order": 4
+    },
+    {
+      "id": "ch5_jarnaldern",
+      "title": "5. Järnåldern",
+      "order": 5
+    }
+  ],
+  "steps": [
+    {
+      "id": "movement_controls",
+      "chapterId": "ch1_kom_igang",
+      "order": 1,
+      "title": "Rörelse och blick",
+      "summary": "Lär dig röra dig i spelvärlden.",
+      "description": "Använd musen för att se dig omkring. Rör dig framåt med {key.forward}, bakåt med {key.back}, vänster med {key.left} och höger med {key.right}. Hoppa med {key.jump}.",
+      "why": "Att kunna navigera tryggt är grunden för all överlevnad.",
+      "tip": "Dubbeltryck {key.forward} eller tryck {key.sprint} för att sprinta snabbare.",
+      "prerequisites": [],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "MANUAL",
+          "description": "Bekräfta att du behärskar grundläggande rörelse"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "open_inventory",
+      "chapterId": "ch1_kom_igang",
+      "order": 2,
+      "title": "Öppna ditt inventory",
+      "summary": "Titta i din ryggsäck och 2x2 crafting-ruta.",
+      "description": "Tryck på {key.inventory} för att öppna ditt inventory. Här ser du dina bärbara föremål och en enkel tillverkningsyta.",
+      "why": "Allt du plockar upp hamnar här, och du kan snabbt kombinera råmaterial.",
+      "tip": "Stäng rutan med {key.inventory} eller ESC.",
+      "prerequisites": ["movement_controls"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "MANUAL",
+          "description": "Öppna och utforska ditt inventory"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "gather_wood",
+      "chapterId": "ch1_kom_igang",
+      "order": 3,
+      "title": "Samla träblock",
+      "summary": "Hugga ner ditt första träd.",
+      "description": "Gå fram till ett träd, sikta på stammen och håll inne {key.attack} tills träblocket går sönder. Plocka upp minst 4 trästockar.",
+      "why": "Trä är det viktigaste basmaterialet för verktyg och byggen.",
+      "tip": "Alla träslag (ek, björk, gran etc.) fungerar lika bra.",
+      "prerequisites": ["open_inventory"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM_TAG",
+          "tag": "minecraft:logs",
+          "count": 4,
+          "description": "Minst 4 trästockar i inventory"
+        }
+      ],
+      "supersededBy": ["craft_planks", "craft_crafting_table", "craft_wooden_pickaxe"]
+    },
+    {
+      "id": "craft_planks",
+      "chapterId": "ch2_forsta_verktygen",
+      "order": 4,
+      "title": "Tillverka träplankor",
+      "summary": "Omvandla trästockar till plankor.",
+      "description": "Öppna inventory ({key.inventory}), placera trästockar i tillverkningsrutan och plocka ut färdiga plankor.",
+      "why": "En trästock ger fyra användbara träplankor.",
+      "tip": "Shift-klicka på resultatet för att snabbt tillverka allt på en gång.",
+      "prerequisites": ["gather_wood"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM_TAG",
+          "tag": "minecraft:planks",
+          "count": 8,
+          "description": "Minst 8 träplankor"
+        }
+      ],
+      "supersededBy": ["craft_crafting_table", "craft_wooden_pickaxe", "craft_stone_pickaxe"]
+    },
+    {
+      "id": "craft_crafting_table",
+      "chapterId": "ch2_forsta_verktygen",
+      "order": 5,
+      "title": "Gör ett Crafting Table",
+      "summary": "Bygg din första arbetsbänk.",
+      "description": "Placera 4 träplankor så att de fyller hela 2x2-rutan i ditt inventory för att tillverka en arbetsbänk.",
+      "why": "En arbetsbänk ger en 3x3-yta som krävs för nästan alla avancerade verktyg och recept.",
+      "tip": "Placera bänken på marken med {key.use} och högerklicka den för att öppna den.",
+      "prerequisites": ["craft_planks"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:crafting_table",
+          "count": 1,
+          "description": "1 Crafting Table"
+        }
+      ],
+      "supersededBy": ["craft_wooden_pickaxe", "craft_stone_pickaxe", "craft_iron_pickaxe"]
+    },
+    {
+      "id": "craft_sticks",
+      "chapterId": "ch2_forsta_verktygen",
+      "order": 6,
+      "title": "Tillverka pinnar",
+      "summary": "Gör träpinnar till verktygsskaft.",
+      "description": "Placera 2 träplankor lodrätt ovanpå varandra i crafting-rutan för att tillverka 4 pinnar.",
+      "why": "Pinnar fungerar som skaft till hackor, svärd, spadar och facklor.",
+      "prerequisites": ["craft_crafting_table"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:stick",
+          "count": 4,
+          "description": "Minst 4 pinnar"
+        }
+      ],
+      "supersededBy": ["craft_wooden_pickaxe", "craft_stone_pickaxe"]
+    },
+    {
+      "id": "craft_wooden_pickaxe",
+      "chapterId": "ch2_forsta_verktygen",
+      "order": 7,
+      "title": "Gör en trähacka",
+      "summary": "Ditt allra första gruvverktyg.",
+      "description": "Öppna din arbetsbänk. Placera 3 plankor i översta raden och 2 pinnar lodrätt i mitten för att forma en trähacka.",
+      "why": "Trähackan behövs för att bryta sten och kullersten.",
+      "tip": "Använd bara trähackan tills du har brutit sten — uppgradera sedan direkt till stenhacka!",
+      "prerequisites": ["craft_sticks"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:wooden_pickaxe",
+          "count": 1,
+          "description": "1 Trähacka"
+        }
+      ],
+      "supersededBy": ["craft_stone_pickaxe", "craft_iron_pickaxe"]
+    },
+    {
+      "id": "mine_cobblestone",
+      "chapterId": "ch2_forsta_verktygen",
+      "order": 8,
+      "title": "Bryt kullersten",
+      "summary": "Samla sten för bättre verktyg och ugn.",
+      "description": "Hitta synlig sten i marken eller en bergssluttning. Hugg med din hacka ({key.attack}) för att samla minst 8 kullersten.",
+      "why": "Stenverktyg är dubbelt så snabba och håller tre gånger längre än trä.",
+      "prerequisites": ["craft_wooden_pickaxe"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:cobblestone",
+          "count": 8,
+          "description": "Minst 8 kullersten"
+        }
+      ],
+      "supersededBy": ["craft_stone_pickaxe", "craft_furnace"]
+    },
+    {
+      "id": "craft_stone_pickaxe",
+      "chapterId": "ch3_overlev_natten",
+      "order": 9,
+      "title": "Uppgradera till stenhacka",
+      "summary": "Ersätt trähackan med sten.",
+      "description": "Placera 3 kullersten i översta raden på din arbetsbänk och 2 pinnar lodrätt i mitten under.",
+      "why": "Stenhackan kan bryta järnmalm och bryter sten mycket snabbare.",
+      "prerequisites": ["mine_cobblestone"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:stone_pickaxe",
+          "count": 1,
+          "description": "1 Stenhacka"
+        }
+      ],
+      "supersededBy": ["craft_iron_pickaxe"]
+    },
+    {
+      "id": "craft_stone_sword",
+      "chapterId": "ch3_overlev_natten",
+      "order": 10,
+      "title": "Tillverka ett stensvärd",
+      "summary": "Ditt första försvar mot nattens monster.",
+      "description": "Placera 2 kullersten lodrätt ovanpå 1 pinne i arbetsbänken för att tillverka ett stensvärd.",
+      "why": "När mörkret faller dyker zombier, skelett och creepers upp.",
+      "tip": "Vänta på att attack-mätaren fylls helt för att göra maximal skada per hugg.",
+      "prerequisites": ["mine_cobblestone"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:stone_sword",
+          "count": 1,
+          "description": "1 Stensvärd"
+        }
+      ],
+      "supersededBy": ["craft_shield"]
+    },
+    {
+      "id": "gather_food",
+      "chapterId": "ch3_overlev_natten",
+      "order": 11,
+      "title": "Skaffa mat",
+      "summary": "Håll din hunger-mätare fylld.",
+      "description": "Samla mat genom att plocka äpplen, bär eller samla kött från djur i närheten.",
+      "why": "När hunger-mätaren är full regenereras ditt liv automatiskt. Om den töms kan du inte sprinta.",
+      "tip": "Tillagad mat i en ugn återställer mycket mer hunger och mättnad.",
+      "prerequisites": ["craft_stone_sword"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_EDIBLE_ITEM",
+          "count": 1,
+          "description": "Minst 1 ätbart föremål i inventory"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "craft_furnace",
+      "chapterId": "ch3_overlev_natten",
+      "order": 12,
+      "title": "Bygg en ugn",
+      "summary": "Tillaga mat och smält metaller.",
+      "description": "Placera 8 kullersten längs arbetsbänkens ytterkant och lämna mittenrutan tom.",
+      "why": "Ugnen behövs för att steka mat och smälta malm till metalltackor.",
+      "prerequisites": ["mine_cobblestone"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:furnace",
+          "count": 1,
+          "description": "1 Ugn (Furnace)"
+        }
+      ],
+      "supersededBy": ["smelt_iron_ingots"]
+    },
+    {
+      "id": "craft_torches",
+      "chapterId": "ch3_overlev_natten",
+      "order": 13,
+      "title": "Tillverka facklor",
+      "summary": "Lys upp din omgivning och hindra monster.",
+      "description": "Placera 1 kol (eller träkol) rakt ovanför 1 pinne för att tillverka 4 facklor.",
+      "why": "Monster kan bara spawna i mörka områden. Facklor håller din bas och dina gruvgångar säkra.",
+      "tip": "Om du inte hittat kol än kan du smälta en trästock med plankor som bränsle i ugnen för att göra träkol.",
+      "prerequisites": ["craft_furnace"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:torch",
+          "count": 4,
+          "description": "Minst 4 facklor"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "build_shelter",
+      "chapterId": "ch4_trygg_bas",
+      "order": 14,
+      "title": "Bygg ett enkelt skydd",
+      "summary": "Skapa en trygg plats för natten.",
+      "description": "Bygg en enkel stuga av jord eller trä, eller gräv in dig i en bergvägg. Sätt upp facklor och se till att inga monster kan nå dig.",
+      "why": "Första natten är farlig utan utrustning. Ett skydd ger dig ro att crafta och planera.",
+      "prerequisites": ["craft_torches"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "MANUAL",
+          "description": "Bygg eller gräv ett säkert nattskydd"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "craft_bed",
+      "chapterId": "ch4_trygg_bas",
+      "order": 15,
+      "title": "Gör en säng",
+      "summary": "Sova genom natten och sätta din spawnpoint.",
+      "description": "Placera 3 ullblock (från får) i översta raden och 3 träplankor under dem i arbetsbänken.",
+      "why": "Högerklicka på sängen på natten för att hoppa över mörkret och sätta en ny återupplivningspunkt.",
+      "prerequisites": ["build_shelter"],
+      "optional": true,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM_TAG",
+          "tag": "minecraft:beds",
+          "count": 1,
+          "description": "1 Säng (valfri färg)"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "craft_chest",
+      "chapterId": "ch4_trygg_bas",
+      "order": 16,
+      "title": "Tillverka en kista",
+      "summary": "Säker förvaring av dina resurser.",
+      "description": "Placera 8 träplankor längs arbetsbänkens ytterkant med mitten tom för att göra en kista.",
+      "why": "Om du dör tappar du dina föremål. Spara värdefulla material i en kista i din bas.",
+      "tip": "Placera två kistor bredvid varandra för att skapa en stor dubbelkista.",
+      "prerequisites": ["build_shelter"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:chest",
+          "count": 1,
+          "description": "1 Kista"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "mine_coal",
+      "chapterId": "ch4_trygg_bas",
+      "order": 17,
+      "title": "Samla kol",
+      "summary": "Hitta naturlig stenkol i berg eller grottor.",
+      "description": "Hitta kolmalm (sten med svarta fläckar) och bryt den med din stenhacka. Samla minst 4 kol.",
+      "why": "Kol är det effektivaste bränslet för ugnar och ger gott om facklor.",
+      "prerequisites": ["craft_stone_pickaxe"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM_TAG",
+          "tag": "minecraft:coals",
+          "count": 4,
+          "description": "Minst 4 kol eller träkol"
+        }
+      ],
+      "supersededBy": ["find_raw_iron"]
+    },
+    {
+      "id": "find_raw_iron",
+      "chapterId": "ch5_jarnaldern",
+      "order": 18,
+      "title": "Hitta råjärn",
+      "summary": "Gräv fram din första metallmalm.",
+      "description": "Utforska grottor eller gräv ner i marken. Bryt järnmalm (sten med brunbeiga fläckar) med en stenhacka för att få råjärn.",
+      "why": "Järn krävs för tåliga rustningar, kraftfulla verktyg och sköldar.",
+      "tip": "Bryt ALDRIG järn med en trähacka — då försvinner malmen utan att ge något!",
+      "prerequisites": ["mine_coal"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:raw_iron",
+          "count": 3,
+          "description": "Minst 3 råjärn"
+        }
+      ],
+      "supersededBy": ["smelt_iron_ingots", "craft_iron_pickaxe"]
+    },
+    {
+      "id": "smelt_iron_ingots",
+      "chapterId": "ch5_jarnaldern",
+      "order": 19,
+      "title": "Smält järntackor",
+      "summary": "Förvandla råjärn till rena metalltackor.",
+      "description": "Öppna ugnen. Placera råjärn i övre rutan och kol i undre rutan. Plocka ut de färdiga järntackorna.",
+      "why": "Järntackor är grunden för alla järnverktyg och rustningsdelar.",
+      "prerequisites": ["find_raw_iron", "craft_furnace"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:iron_ingot",
+          "count": 3,
+          "description": "Minst 3 järntackor"
+        }
+      ],
+      "supersededBy": ["craft_iron_pickaxe"]
+    },
+    {
+      "id": "craft_iron_pickaxe",
+      "chapterId": "ch5_jarnaldern",
+      "order": 20,
+      "title": "Gör en järnhacka",
+      "summary": "Verktyget som låser upp guld, redstone och diamanter.",
+      "description": "Placera 3 järntackor i översta raden och 2 pinnar lodrätt i mitten på din arbetsbänk.",
+      "why": "Med järnhackan kan du bryta diamanter, guldmalm, redstone och smaragder.",
+      "prerequisites": ["smelt_iron_ingots"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:iron_pickaxe",
+          "count": 1,
+          "description": "1 Järnhacka"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "craft_shield",
+      "chapterId": "ch5_jarnaldern",
+      "order": 21,
+      "title": "Tillverka en sköld",
+      "summary": "Blockera skada och projektiler.",
+      "description": "Placera 1 järntacka i mitten av översta raden, omgiven av 6 träplankor formade som en sköld.",
+      "why": "Utrusta skölden i din off-hand (vänster hand) och håll inne {key.use} för att blockera attacker, pilar och creeper-explosioner.",
+      "tip": "Tryck F för att snabbt flytta ett föremål mellan din huvudhand och off-hand.",
+      "prerequisites": ["smelt_iron_ingots"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ITEM",
+          "itemId": "minecraft:shield",
+          "count": 1,
+          "description": "1 Sköld"
+        }
+      ],
+      "supersededBy": []
+    },
+    {
+      "id": "craft_iron_armor",
+      "chapterId": "ch5_jarnaldern",
+      "order": 22,
+      "title": "Gör din första järnrustning",
+      "summary": "Skydda dig mot allvarlig skada.",
+      "description": "Tillverka minst en järnrustningsdel (bröstharnesk, byxor, hjälm eller stövlar) i din arbetsbänk.",
+      "why": "Rustning minskar all inkommande fysisk skada markant.",
+      "tip": "Bröstharnesk (8 järntackor) ger mest skydd för materialkostnaden.",
+      "prerequisites": ["smelt_iron_ingots"],
+      "optional": false,
+      "manualCompletionAllowed": true,
+      "conditions": [
+        {
+          "type": "HAS_ANY_ITEM",
+          "itemIds": [
+            "minecraft:iron_chestplate",
+            "minecraft:iron_leggings",
+            "minecraft:iron_helmet",
+            "minecraft:iron_boots"
+          ],
+          "count": 1,
+          "description": "Minst 1 valfri järnrustningsdel"
+        }
+      ],
+      "supersededBy": []
+    }
+  ]
+}

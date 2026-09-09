@@ -28,6 +28,7 @@ dependencies {
 }
 
 processResources {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
     inputs.property "version", project.version
 
     filesMatching("fabric.mod.json") {
@@ -36,6 +37,10 @@ processResources {
 
     from("gamezone-pack") {
         into("gamezone-pack")
+    }
+
+    from("guide-content") {
+        into("assets/gzcompanion/guides")
     }
 }
 

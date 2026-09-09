@@ -11,6 +11,7 @@ import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.ui.layout.MainScreenLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
+import se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.HomeTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.PlaceholderTabComponent;
 
@@ -21,6 +22,7 @@ import se.jimmyeliasson.gzcompanion.ui.tabs.PlaceholderTabComponent;
 public class GZCompanionMainScreen extends Screen {
     private TabType activeTab = TabType.HEM;
     private final HomeTabComponent homeTab = new HomeTabComponent();
+    private final se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent guideTab = new se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent();
     private final PlaceholderTabComponent placeholderTab = new PlaceholderTabComponent();
 
     private MainScreenLayout layout;
@@ -36,6 +38,17 @@ public class GZCompanionMainScreen extends Screen {
 
     public MainScreenLayout getLayout() {
         return layout;
+    }
+
+    public GuideTabComponent getGuideTab() {
+        return guideTab;
+    }
+
+    public void openGuideStep(String stepId) {
+        this.activeTab = TabType.GUIDE;
+        if (stepId != null) {
+            this.guideTab.selectStep(stepId);
+        }
     }
 
     @Override
@@ -106,10 +119,12 @@ public class GZCompanionMainScreen extends Screen {
             TextUtil.drawScaledEllipsizedText(extractor, font, tab.getDisplayName(), tr.x() + 15, textY, maxLabelW, tabScale, textTint, isActive);
         }
 
-        // 4. Content Canvas (Home or Placeholder)
+        // 4. Content Canvas (Home, Guide, or Placeholder)
         extractor.enableScissor(contentRect.x(), contentRect.y(), contentRect.right(), contentRect.bottom());
         if (activeTab == TabType.HEM) {
             homeTab.render(extractor, font, contentRect, mouseX, mouseY, this);
+        } else if (activeTab == TabType.GUIDE) {
+            guideTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else {
             placeholderTab.render(extractor, font, contentRect, mouseX, mouseY, activeTab, this);
         }
@@ -149,6 +164,10 @@ public class GZCompanionMainScreen extends Screen {
         if (UiInput.isPointInside(contentRect, mouseX, mouseY)) {
             if (activeTab == TabType.HEM) {
                 if (homeTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
+                    return true;
+                }
+            } else if (activeTab == TabType.GUIDE) {
+                if (guideTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
                 }
             } else {

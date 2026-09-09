@@ -31,14 +31,23 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 
 ---
 
-## 🛠 Features (Milestone 1 — Foundation)
+## 🛠 Features
 
+### Milestone 1 — Foundation
 - **Modern In-Game UI**: Dark translucent glass styling with emerald accents and readable Swedish typography.
 - **Keybind G**: Open the companion anytime in-game; press `ESC` or `G` to close.
 - **Dynamic Player & Server Detection**: Real-time identification of your Minecraft username and connection status to `play.gamezonemc.se`.
 - **Versioned GameZone Rule Pack**: "Java understands Minecraft. Data understands GameZone." All server rules, commands, and guides live in declarative JSON rule packs rather than hardcoded Java constants.
 - **Graceful Degradation**: If an individual server module or rule is unverified or modified, unrelated features continue running seamlessly.
-- **Local-First Storage**: User configurations are saved safely in `.minecraft/config/gzcompanion/config.json` with corruption recovery.
+- **Local-First Storage**: User configurations are saved safely in `config/gzcompanion/config.json` with corruption recovery.
+
+### Milestone 2 — Guide Engine
+- **Data-Driven Progression**: Complete vanilla beginner guide (5 chapters, 22 steps) from first tree to iron armor.
+- **Live Inventory Condition Evaluation**: Automatically detects items, tags (`#minecraft:logs`, `#minecraft:planks`, `#minecraft:beds`, `#minecraft:coals`), and food in player inventory.
+- **Progression Inference (`supersededBy`)**: Smart backfilling (e.g. obtaining an iron pickaxe automatically satisfies wood and stone tool steps).
+- **Dynamic Keybinding Tokens**: Dynamically resolves `{key.inventory}`, `{key.forward}`, etc., to the user's custom keybinds.
+- **Interactive 2-Pane Guide UI**: Left chapter/step navigator and right detail pane with live condition evidence, tip callouts, manual toggles, and reset confirmation dialog.
+- **Home Dashboard Objective Integration**: "Nästa uppgift" automatically syncs with the active guide step.
 
 ---
 

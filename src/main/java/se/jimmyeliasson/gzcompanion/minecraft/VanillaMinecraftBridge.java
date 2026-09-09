@@ -56,6 +56,33 @@ public class VanillaMinecraftBridge implements MinecraftBridge {
     }
 
     @Override
+    public se.jimmyeliasson.gzcompanion.guide.progress.GuideContext getGuideContext() {
+        String profileId = "offline_profile";
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client != null && client.getUser() != null && client.getUser().getProfileId() != null) {
+                profileId = client.getUser().getProfileId().toString();
+            } else if (client != null && client.player != null) {
+                profileId = client.player.getStringUUID();
+            }
+        } catch (Exception ignored) {}
+
+        String contextKey = "singleplayer:default";
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client != null) {
+                if (client.getCurrentServer() != null && client.getCurrentServer().ip != null) {
+                    contextKey = "server:" + client.getCurrentServer().ip.toLowerCase().trim();
+                } else if (client.isLocalServer()) {
+                    contextKey = "singleplayer:local";
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return new se.jimmyeliasson.gzcompanion.guide.progress.GuideContext(profileId, contextKey);
+    }
+
+    @Override
     public void openScreen(Object screen) {
         if (screen instanceof Screen mcScreen) {
             Minecraft client = Minecraft.getInstance();

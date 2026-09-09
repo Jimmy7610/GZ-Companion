@@ -16,6 +16,14 @@ se.jimmyeliasson.gzcompanion
 │   ├── CompanionConstants.java   # Mod metadata
 │   ├── CompanionSession.java     # Runtime coordinator singleton
 │   └── feature/                  # Data-driven feature flags
+├── guide/
+│   ├── GuideEngine.java          # Progression state & inference engine
+│   ├── GuideLoader.java          # Resilient guide JSON parser
+│   ├── GuideValidator.java       # Prerequisite cycle & schema validator
+│   ├── bridge/                   # Player snapshot abstraction
+│   ├── condition/                # Pure condition evaluators
+│   ├── model/                    # Immutable guide definitions & records
+│   └── progress/                 # Local progress storage & atomic file writes
 ├── minecraft/
 │   ├── MinecraftBridge.java      # Runtime abstraction interface
 │   └── VanillaMinecraftBridge.java # Minecraft client API caller
@@ -41,8 +49,10 @@ se.jimmyeliasson.gzcompanion
     ├── GZTheme.java              # Color palette, tokens, card renderer
     ├── TabType.java              # 9 navigation section definitions
     ├── GZCompanionMainScreen.java# Main container dialog screen
+    ├── layout/                   # Responsive geometry & typography
     └── tabs/
         ├── HomeTabComponent.java # Home dashboard
+        ├── GuideTabComponent.java# Interactive 2-pane guide tab
         └── PlaceholderTabComponent.java # Placeholder sections
 ```
 
@@ -59,7 +69,10 @@ graph TD
     D --> F[RulePackLoader]
     D --> G[CompatibilityService]
     D --> H[StorageManager]
+    D --> J[GuideEngine]
     F --> I[gamezone-pack/*.json]
+    J --> K[guide-content/*.json]
+    J --> L[config/gzcompanion/guide-progress.json]
     G --> C
     E --> C
 ```
