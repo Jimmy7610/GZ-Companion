@@ -22,6 +22,7 @@ import java.util.List;
 /**
  * Interactive Guide tab component rendering 2-pane progression navigation,
  * dynamic keybindings, live inventory condition validation, manual toggles, and reset controls.
+ * Read-only during rendering (no mutation or disk writes).
  */
 public class GuideTabComponent {
     private String selectedStepId = null;
@@ -33,15 +34,31 @@ public class GuideTabComponent {
     private GuideLayout layout;
     private final List<StepRowHit> stepHitTargets = new ArrayList<>();
 
-    private record StepRowHit(UiRect rect, String stepId) {}
+    public record StepRowHit(UiRect rect, String stepId) {}
 
     public GuideLayout getLayout() {
         return layout;
     }
 
+    public int getScrollOffset() {
+        return scrollOffset;
+    }
+
+    public void setScrollOffset(int scrollOffset) {
+        this.scrollOffset = scrollOffset;
+    }
+
+    public List<StepRowHit> getStepHitTargets() {
+        return stepHitTargets;
+    }
+
     public void selectStep(String stepId) {
         this.selectedStepId = stepId;
         this.compactShowingDetail = (stepId != null);
+    }
+
+    public String getSelectedStepId() {
+        return selectedStepId;
     }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
@@ -52,13 +69,10 @@ public class GuideTabComponent {
         GuideEngine engine = session.getGuideEngine();
         GuideContext context = session.getCurrentGuideContext();
 
-        if (engine == null || engine.getActiveGuide() == null) {
-            drawEmptyState(extractor, font, bounds);
+        if (engine == null || engine.getLoadStatus() != GuideLoadStatus.LOADED || engine.getActiveGuide() == null) {
+            drawUnavailableState(extractor, font, bounds, engine != null ? engine.getLoadStatus() : GuideLoadStatus.UNAVAILABLE);
             return;
         }
-
-        // Periodically evaluate snapshot
-        engine.evaluate(context);
 
         GuideDefinition guide = engine.getActiveGuide();
         GuideEngine.ProgressSummary progress = engine.getOverallProgress(context);
@@ -100,7 +114,7 @@ public class GuideTabComponent {
         TextUtil.drawScaledEllipsizedText(extractor, font, title, headerRect.x() + 18, headerRect.y() + 3,
                 headerRect.width() - 120, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
 
-        // Progress Text Badge (e.g. "5/22 (23%)")
+        // Progress Text Badge (e.g. "21/21 (100%)")
         String progressText = progress.completedCount() + "/" + progress.totalCount() + " (" + progress.percent() + "%)";
         int badgeW = TextUtil.scaledWidth(font, progressText, TypographyScale.SMALL.getScale()) + 10;
         int badgeX = headerRect.right() - badgeW - 5;
@@ -116,9 +130,26 @@ public class GuideTabComponent {
         }
     }
 
+    public static int calculateMaxScroll(UiRect navRect, GuideEngine engine, GuideDefinition guide) {
+        if (navRect == null || engine == null || guide == null) return 0;
+        int itemH = 14;
+        int chHeaderH = 15;
+        int totalContentH = 6;
+        for (GuideChapter chapter : guide.chapters()) {
+            totalContentH += chHeaderH + 1;
+            totalContentH += (engine.getStepsForChapter(chapter.id()).size() * (itemH + 1));
+            totalContentH += 3;
+        }
+        int visibleH = Math.max(1, navRect.height() - 4);
+        return Math.max(0, totalContentH - visibleH);
+    }
+
     private void renderNavigator(GuiGraphicsExtractor extractor, Font font, UiRect navRect, GuideEngine engine,
                                  GuideContext context, GuideDefinition guide, int mouseX, int mouseY) {
         GZTheme.drawCard(extractor, navRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
+
+        int maxScroll = calculateMaxScroll(navRect, engine, guide);
+        this.scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
 
         extractor.enableScissor(navRect.x() + 1, navRect.y() + 1, navRect.right() - 1, navRect.bottom() - 1);
 
@@ -151,7 +182,11 @@ public class GuideTabComponent {
             int stepIndex = 1;
             for (GuideStep step : chapterSteps) {
                 UiRect stepRect = new UiRect(navRect.x() + 3, currentY, navRect.width() - 6, itemH);
-                stepHitTargets.add(new StepRowHit(stepRect, step.id()));
+
+                // Only register hit testing for rows within visible navigator view
+                if (stepRect.bottom() >= navRect.y() + 2 && stepRect.y() <= navRect.bottom() - 2) {
+                    stepHitTargets.add(new StepRowHit(stepRect, step.id()));
+                }
 
                 if (currentY + itemH >= navRect.y() && currentY <= navRect.bottom()) {
                     boolean isSelected = step.id().equals(selectedStepId);
@@ -304,8 +339,12 @@ public class GuideTabComponent {
             boolean hov = markBtn.contains(mouseX, mouseY);
             GZTheme.drawButton(extractor, font, markBtn, "Ångra markering", false, hov, TypographyScale.BODY.getScale());
         } else if (!isCompleted && state != GuideStepState.LOCKED) {
-            boolean hov = markBtn.contains(mouseX, mouseY);
-            GZTheme.drawButton(extractor, font, markBtn, "Markera klar", true, hov, TypographyScale.BODY.getScale());
+            if (step.manualCompletionAllowed()) {
+                boolean hov = markBtn.contains(mouseX, mouseY);
+                GZTheme.drawButton(extractor, font, markBtn, "Markera klar", true, hov, TypographyScale.BODY.getScale());
+            } else {
+                GZTheme.drawButton(extractor, font, markBtn, "Kräver inventarier", false, false, TypographyScale.SMALL.getScale());
+            }
         } else if (state == GuideStepState.LOCKED) {
             GZTheme.drawButton(extractor, font, markBtn, "Låst", false, false, TypographyScale.SMALL.getScale());
         } else {
@@ -340,9 +379,15 @@ public class GuideTabComponent {
         };
     }
 
-    private void drawEmptyState(GuiGraphicsExtractor extractor, Font font, UiRect bounds) {
+    private void drawUnavailableState(GuiGraphicsExtractor extractor, Font font, UiRect bounds, GuideLoadStatus status) {
         GZTheme.drawCard(extractor, bounds, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
-        TextUtil.drawCenteredText(extractor, font, "Inga guider tillgängliga.", bounds.x() + (bounds.width() / 2),
+        String msg = switch (status) {
+            case ERROR -> "Fel inträffade vid inläsning av guider.";
+            case INCOMPATIBLE -> "Guiden är inte kompatibel med denna version.";
+            case UNAVAILABLE -> "Inga guider är tillgängliga för närvarande.";
+            case LOADED -> "Laddar...";
+        };
+        TextUtil.drawCenteredText(extractor, font, msg, bounds.x() + (bounds.width() / 2),
                 bounds.y() + (bounds.height() / 2) - 4, bounds.width(), GZTheme.COLOR_TEXT_MUTED, false);
     }
 
@@ -438,7 +483,11 @@ public class GuideTabComponent {
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (layout != null && layout.leftNavRect().contains(mouseX, mouseY)) {
-            scrollOffset = Math.max(0, scrollOffset - (int) (scrollY * 12));
+            CompanionSession session = CompanionSession.getInstance();
+            GuideEngine engine = session.getGuideEngine();
+            GuideDefinition guide = engine != null ? engine.getActiveGuide() : null;
+            int maxScroll = calculateMaxScroll(layout.leftNavRect(), engine, guide);
+            this.scrollOffset = Math.max(0, Math.min(scrollOffset - (int) (scrollY * 14), maxScroll));
             return true;
         }
         return false;

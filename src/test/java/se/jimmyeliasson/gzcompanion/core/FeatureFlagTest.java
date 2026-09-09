@@ -54,4 +54,22 @@ class FeatureFlagTest {
         assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.KOMMANDON));
         assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.INSTALLNINGAR));
     }
+
+    @Test
+    @DisplayName("Should reflect dynamic GuideLoadStatus in Guide module status")
+    void testDynamicGuideStatus() {
+        FeatureManager manager = new FeatureManager();
+
+        manager.setGuideStatusSupplier(() -> se.jimmyeliasson.gzcompanion.guide.model.GuideLoadStatus.LOADED);
+        assertEquals(ModuleStatus.AVAILABLE, manager.getModuleStatus(TabType.GUIDE));
+
+        manager.setGuideStatusSupplier(() -> se.jimmyeliasson.gzcompanion.guide.model.GuideLoadStatus.UNAVAILABLE);
+        assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.GUIDE));
+
+        manager.setGuideStatusSupplier(() -> se.jimmyeliasson.gzcompanion.guide.model.GuideLoadStatus.ERROR);
+        assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.GUIDE));
+
+        manager.setGuideStatusSupplier(() -> se.jimmyeliasson.gzcompanion.guide.model.GuideLoadStatus.INCOMPATIBLE);
+        assertEquals(ModuleStatus.COMING_SOON, manager.getModuleStatus(TabType.GUIDE));
+    }
 }

@@ -26,7 +26,8 @@ public class MinecraftGuideSnapshotProvider implements GuideSnapshotProvider {
         ItemTags.LOGS,
         ItemTags.PLANKS,
         ItemTags.BEDS,
-        ItemTags.COALS
+        ItemTags.COALS,
+        ItemTags.WOOL
     };
 
     @Override
@@ -80,19 +81,21 @@ public class MinecraftGuideSnapshotProvider implements GuideSnapshotProvider {
         return new GuidePlayerSnapshot(itemCounts, tagCounts, hasEdibleItem, fingerprint, keyTokens);
     }
 
-    private Map<String, String> extractKeyTokens(Options options) {
+    public static Map<String, String> extractKeyTokens(Options options) {
         if (options == null) return Map.of();
         Map<String, String> tokens = new HashMap<>();
-        tokens.put("{key.forward}", options.keyUp.getTranslatedKeyMessage().getString());
-        tokens.put("{key.back}", options.keyDown.getTranslatedKeyMessage().getString());
-        tokens.put("{key.left}", options.keyLeft.getTranslatedKeyMessage().getString());
-        tokens.put("{key.right}", options.keyRight.getTranslatedKeyMessage().getString());
-        tokens.put("{key.jump}", options.keyJump.getTranslatedKeyMessage().getString());
-        tokens.put("{key.inventory}", options.keyInventory.getTranslatedKeyMessage().getString());
-        tokens.put("{key.attack}", options.keyAttack.getTranslatedKeyMessage().getString());
-        tokens.put("{key.use}", options.keyUse.getTranslatedKeyMessage().getString());
-        tokens.put("{key.sneak}", options.keyShift.getTranslatedKeyMessage().getString());
-        tokens.put("{key.sprint}", options.keySprint.getTranslatedKeyMessage().getString());
+        if (options.keyUp != null) tokens.put("key.forward", options.keyUp.getTranslatedKeyMessage().getString());
+        if (options.keyDown != null) tokens.put("key.back", options.keyDown.getTranslatedKeyMessage().getString());
+        if (options.keyLeft != null) tokens.put("key.left", options.keyLeft.getTranslatedKeyMessage().getString());
+        if (options.keyRight != null) tokens.put("key.right", options.keyRight.getTranslatedKeyMessage().getString());
+        if (options.keyJump != null) tokens.put("key.jump", options.keyJump.getTranslatedKeyMessage().getString());
+        if (options.keyInventory != null) tokens.put("key.inventory", options.keyInventory.getTranslatedKeyMessage().getString());
+        if (options.keyAttack != null) tokens.put("key.attack", options.keyAttack.getTranslatedKeyMessage().getString());
+        if (options.keyUse != null) tokens.put("key.use", options.keyUse.getTranslatedKeyMessage().getString());
+        if (options.keyShift != null) tokens.put("key.sneak", options.keyShift.getTranslatedKeyMessage().getString());
+        if (options.keySprint != null) tokens.put("key.sprint", options.keySprint.getTranslatedKeyMessage().getString());
+        if (options.keyDrop != null) tokens.put("key.drop", options.keyDrop.getTranslatedKeyMessage().getString());
+        if (options.keySwapOffhand != null) tokens.put("key.swapOffhand", options.keySwapOffhand.getTranslatedKeyMessage().getString());
         return tokens;
     }
 

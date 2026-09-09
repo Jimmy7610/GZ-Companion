@@ -1,9 +1,11 @@
 package se.jimmyeliasson.gzcompanion.core.feature;
 
+import se.jimmyeliasson.gzcompanion.guide.model.GuideLoadStatus;
 import se.jimmyeliasson.gzcompanion.ui.TabType;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Evaluates feature availability and module implementation readiness.
@@ -11,6 +13,7 @@ import java.util.Map;
  */
 public class FeatureManager {
     private final Map<FeatureFlag, Boolean> flagStates = new EnumMap<>(FeatureFlag.class);
+    private Supplier<GuideLoadStatus> guideStatusSupplier = () -> GuideLoadStatus.LOADED;
 
     public FeatureManager() {
         resetToDefaults();
@@ -21,6 +24,22 @@ public class FeatureManager {
         for (FeatureFlag flag : FeatureFlag.values()) {
             flagStates.put(flag, flag.isDefaultEnabled());
         }
+    }
+
+    public void setGuideStatusSupplier(Supplier<GuideLoadStatus> supplier) {
+        if (supplier != null) {
+            this.guideStatusSupplier = supplier;
+        }
+    }
+
+    public void setGuideStatus(GuideLoadStatus status) {
+        if (status != null) {
+            this.guideStatusSupplier = () -> status;
+        }
+    }
+
+    public GuideLoadStatus getGuideLoadStatus() {
+        return guideStatusSupplier != null ? guideStatusSupplier.get() : GuideLoadStatus.UNAVAILABLE;
     }
 
     public void setFeatureState(FeatureFlag flag, boolean enabled) {
@@ -48,15 +67,13 @@ public class FeatureManager {
 
     /**
      * Determines the actual runtime module readiness for UI display.
-     * In Milestone 1, only HEM is fully implemented and AVAILABLE.
-     * Other functional tabs (like Guide, Crafting, Settlements) are COMING_SOON
-     * until their respective milestone implementations are complete.
+     * Evaluates module implementation readiness and GuideEngine load status.
      */
     public ModuleStatus getModuleStatus(TabType tab) {
         if (tab == null) return ModuleStatus.COMING_SOON;
         return switch (tab) {
             case HEM -> ModuleStatus.AVAILABLE;
-            case GUIDE -> ModuleStatus.AVAILABLE;
+            case GUIDE -> (getGuideLoadStatus() == GuideLoadStatus.LOADED) ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case CRAFTING -> ModuleStatus.COMING_SOON;
             case KISTOR -> ModuleStatus.COMING_SOON;
             case SETTLEMENT -> ModuleStatus.COMING_SOON;

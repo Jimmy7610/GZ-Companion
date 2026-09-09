@@ -59,6 +59,7 @@ public class CompanionSession {
         }
         
         guideEngine.initialize();
+        featureManager.setGuideStatusSupplier(guideEngine::getLoadStatus);
         refreshCompatibility();
     }
 

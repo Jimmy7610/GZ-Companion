@@ -72,14 +72,25 @@ public class VanillaMinecraftBridge implements MinecraftBridge {
             Minecraft client = Minecraft.getInstance();
             if (client != null) {
                 if (client.getCurrentServer() != null && client.getCurrentServer().ip != null) {
-                    contextKey = "server:" + client.getCurrentServer().ip.toLowerCase().trim();
-                } else if (client.isLocalServer()) {
-                    contextKey = "singleplayer:local";
+                    contextKey = se.jimmyeliasson.gzcompanion.guide.progress.GuideContextResolver.resolveServerContext(client.getCurrentServer().ip);
+                } else if (client.isLocalServer() || client.getSingleplayerServer() != null) {
+                    String worldName = null;
+                    if (client.getSingleplayerServer() != null) {
+                        try {
+                            worldName = client.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).getFileName().toString();
+                        } catch (Exception ignored) {}
+                        if (worldName == null || worldName.isBlank()) {
+                            try {
+                                worldName = client.getSingleplayerServer().getWorldData().getLevelName();
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                    contextKey = se.jimmyeliasson.gzcompanion.guide.progress.GuideContextResolver.resolveSingleplayerContext(worldName != null ? worldName : "local");
                 }
             }
         } catch (Exception ignored) {}
 
-        return new se.jimmyeliasson.gzcompanion.guide.progress.GuideContext(profileId, contextKey);
+        return se.jimmyeliasson.gzcompanion.guide.progress.GuideContextResolver.create(profileId, contextKey);
     }
 
     @Override

@@ -463,7 +463,7 @@
       "summary": "Blockera skada och projektiler.",
       "description": "Placera 1 järntacka i mitten av översta raden, omgiven av 6 träplankor formade som en sköld.",
       "why": "Utrusta skölden i din off-hand (vänster hand) och håll inne {key.use} för att blockera attacker, pilar och creeper-explosioner.",
-      "tip": "Tryck F för att snabbt flytta ett föremål mellan din huvudhand och off-hand.",
+      "tip": "Tryck {key.swapOffhand} för att snabbt flytta ett föremål mellan din huvudhand och off-hand.",
       "prerequisites": ["smelt_iron_ingots"],
       "optional": false,
       "manualCompletionAllowed": true,
