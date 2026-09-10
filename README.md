@@ -76,6 +76,11 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Material Checklist with Optional Chest Estimate**: Track owned amounts manually, or opt in to summing specific already-indexed Chest Manager containers — always labeled "Lokalt estimat från senast känt innehåll," never presented as the server's real settlement inventory.
 - **Local Member Organizer**: Purely local "Lokala anteckningar" about settlement members — never the live server roster, never scraped, never chat history.
 
+### Milestone 7 — Building Planner *(Implemented, pending human gameplay QA)*
+- **Full Current Building Catalog**: All 19 buildings currently in the active Building System 1.0 progression (Stadskärna through Myntverk), each with its level requirement, license cost, bonus, and special block/entity requirements. See [Building Planner](docs/BUILDING-PLANNER.md).
+- **Structure Calculator ("Planeringsestimat")**: A local footprint helper calculating floor/roof/wall area and the published minimum coverage block counts — always labeled an estimate, never a guarantee of GameZone's real approval.
+- **Local Plans with a Fixed Checklist**: Create, rename, and delete (with confirmation) local building plans, tracking License/Nivå/Storlek/Väggar/Tak/Specialkrav as local-only planning checkboxes.
+
 ---
 
 ## 🚀 Building from Source

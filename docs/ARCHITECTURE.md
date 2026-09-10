@@ -50,10 +50,14 @@ se.jimmyeliasson.gzcompanion
 │   │   ├── ClientRecipeSnapshot.java  # runtime-observed, NEVER "Vanilla", no VerificationMetadata
 │   │   └── bridge/MinecraftRecipeDisplayAdapter.java  # ONLY place touching MC recipe/item classes
 │   ├── items/                    # ItemKnowledgeBase, ItemKnowledgeLoader (item-overrides.json - relics)
-│   └── settlement/                # M6: SettlementCatalog, SettlementKnowledgeLoader (see SETTLEMENT-COMPANION.md)
+│   ├── settlement/                # M6: SettlementCatalog, SettlementKnowledgeLoader (see SETTLEMENT-COMPANION.md)
+│   └── building/                  # M7: BuildingKnowledgeBase, BuildingKnowledgeLoader (see BUILDING-PLANNER.md)
 ├── settlement/                    # M6: local settlement planner state (see SETTLEMENT-COMPANION.md)
 │   ├── SettlementPlannerManager.java # Runtime coordinator, mirrors ChestManager's fail-closed pattern
 │   └── storage/                  # JsonSettlementPlannerStore & settlement-planner.json schema
+├── building/                      # M7: local building plan state (see BUILDING-PLANNER.md)
+│   ├── BuildingPlanManager.java   # Runtime coordinator, mirrors SettlementPlannerManager
+│   └── storage/                  # JsonBuildingPlanStore & building-plans.json schema
 ├── gamezone/events/, gamezone/parsing/, gamezone/toast/, gamezone/bridge/  # M5: read-only GameZone
 │   │                              # event engine (see GAMEZONE-ADAPTER.md) - chat is only ever observed,
 │   │                              # never cancelled/rewritten/answered
@@ -80,6 +84,7 @@ se.jimmyeliasson.gzcompanion
         ├── CommandsTabComponent.java # Searchable Kommandon tab (implements TextInputHandler)
         ├── CraftingTabComponent.java # Crafting tab: recipes + GameZone items (implements TextInputHandler)
         ├── SettlementTabComponent.java # M6: Översikt/Progression/Material/Medlemmar (implements TextInputHandler)
+        ├── BuildingsTabComponent.java # M7: search/detail + Structure Calculator + local plans (implements TextInputHandler)
         └── PlaceholderTabComponent.java # Placeholder sections
 ```
 

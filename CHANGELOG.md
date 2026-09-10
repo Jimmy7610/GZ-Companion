@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - Milestone 7: Building Planner - 2026-09-10
+
+### Added
+- Byggplaner tab: a local reference/planner covering all 19 buildings currently in the active GameZone Building System 1.0 progression (Stadskärna through Myntverk), sourced from the official Wiki's physical-buildings page. Underverk (level 50) is explicitly excluded, per the source's own disclaimer that it is not yet part of the active progression.
+- `knowledge.building` package: `SettlementBuilding`, `BuildingRequirement`, `GlobalBuildingRules`, `BuildingKnowledgeBase` (with `search(query)`), `BuildingKnowledgeLoader`.
+- `building`/`building.storage` package: local, per-context building plans (`BuildingPlan`, `BuildingPlanManager`) persisted atomically to `config/gzcompanion/building-plans.json`, with a fixed six-item local checklist (`BuildingRequirementKey`: License/Nivå/Storlek/Väggar/Tak/Specialkrav) that never claims server-side completion.
+- A rectangular Structure Calculator ("Planeringsestimat") computing floor/roof/wall area and the published minimum wall/roof coverage block counts from the building's global rules, with an explicit reminder that this is a local estimate, not a guarantee of GameZone's actual approval.
+- `docs/BUILDING-PLANNER.md`: architecture, the explicitly-documented per-building minimum-footprint data gap, and fair-play/privacy guarantees.
+
 ## [Unreleased] - Milestone 6: Settlement Companion - 2026-09-10
 
 ### Added

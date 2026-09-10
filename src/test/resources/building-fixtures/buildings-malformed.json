@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "globalRules": { "minWallCoveragePercent": 40, "minRoofCoveragePercent": 75, "mustBeFullyInsideTerritory": true },
+  "buildings": [
+    { "id": "stadskarna", "name": "Stadskärna", "levelRequirement": 1, "licenseCost": 5000 },
+    { "name": "Byggnad utan id", "levelRequirement": 2 },
+    { "id": "stadskarna", "name": "Dubblerad", "levelRequirement": 99 }
+  ]
+}

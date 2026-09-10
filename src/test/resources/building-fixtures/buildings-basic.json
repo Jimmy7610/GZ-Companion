@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "globalRules": {
+    "minWallCoveragePercent": 40,
+    "minRoofCoveragePercent": 75,
+    "mustBeFullyInsideTerritory": true,
+    "process": "Licens -> bygg -> godkänn",
+    "verification": { "status": "VERIFIED", "sourceName": "TEST ONLY fixture", "sourceReference": "test://fixture", "lastVerified": "2026-09-10" }
+  },
+  "buildings": [
+    { "id": "stadskarna", "name": "Stadskärna", "levelRequirement": 1, "licenseCost": 5000, "mainBonus": "Grundbyggnad",
+      "specialRequirements": [ {"itemId": "minecraft:bell", "displayName": "Bell", "count": 1} ],
+      "minWidth": null, "minDepth": null, "minHeight": null,
+      "verification": { "status": "VERIFIED", "sourceName": "TEST ONLY fixture", "sourceReference": "test://fixture", "lastVerified": "2026-09-10" } },
+    { "id": "bank", "name": "Bank", "levelRequirement": 3, "licenseCost": 15000, "mainBonus": "Ränta",
+      "specialRequirements": [ {"itemId": "minecraft:iron_bars", "displayName": "Iron Bars", "count": 8} ],
+      "minWidth": 5, "minDepth": 5, "minHeight": 4,
+      "verification": { "status": "VERIFIED", "sourceName": "TEST ONLY fixture", "sourceReference": "test://fixture", "lastVerified": "2026-09-10" } }
+  ]
+}
