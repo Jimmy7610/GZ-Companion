@@ -38,6 +38,13 @@ Every toggle above defaults to **on**, because that is exactly the behavior each
 already had before this setting existed. Turning a toggle off is the only way to see different
 behavior — a fresh install matches a pre-Settings install exactly.
 
+**Confirmed during the cross-server safety pass**: turning "Använd senast kända kistodata i
+planerare" on only makes the "Beräkna från sparade kistor" button visible - it never
+automatically reads or sums chest data by itself. Reaching an actual estimate still always
+requires the player to (1) click the button to open the container picker, (2) manually check
+which specific already-indexed containers to include (none are pre-selected), and (3) click
+"Beräkna" to apply the sum. No cached chest content is ever read without that explicit sequence.
+
 A "Remember planner/search selections across restarts" toggle was deliberately **not** shipped:
 no tab's search text or list selection is currently persisted across closing and reopening the
 Companion (each tab component is a fresh in-memory object every time `GZCompanionMainScreen` is

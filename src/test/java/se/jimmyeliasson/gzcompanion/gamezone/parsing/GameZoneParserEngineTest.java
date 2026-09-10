@@ -89,4 +89,34 @@ class GameZoneParserEngineTest {
                 "x", List.of(), true, TEST_ONLY_VERIFICATION);
         assertTrue(GameZoneParserEngine.match(List.of(parser), null, 1000L).isEmpty());
     }
+
+    @Test
+    @DisplayName("A REGEX pattern is compiled once and reused across many messages, never recompiled per message")
+    void testRegexPatternIsCompiledOnceNotPerMessage() {
+        GameZoneParserEngine.clearCompiledPatternCacheForTesting();
+        GameZoneParserDefinition parser = new GameZoneParserDefinition("p1", GameZoneEventType.BALANCE_CHANGE, ParserMatchType.REGEX,
+                "^TEST_ONLY_PERF balance (\\d+)$", List.of("amount"), true, TEST_ONLY_VERIFICATION);
+
+        for (int i = 0; i < 50; i++) {
+            GameZoneParserEngine.match(List.of(parser), "TEST_ONLY_PERF balance " + i, 1000L + i);
+        }
+
+        assertEquals(1, GameZoneParserEngine.compiledPatternCacheSizeForTesting(),
+                "50 messages against the same pattern must compile it exactly once, not 50 times.");
+    }
+
+    @Test
+    @DisplayName("Two different REGEX parsers with distinct patterns each get their own cached compiled Pattern")
+    void testDistinctPatternsCacheSeparately() {
+        GameZoneParserEngine.clearCompiledPatternCacheForTesting();
+        GameZoneParserDefinition parserA = new GameZoneParserDefinition("a", GameZoneEventType.WHISPER, ParserMatchType.REGEX,
+                "^TEST_ONLY_A (\\d+)$", List.of("x"), true, TEST_ONLY_VERIFICATION);
+        GameZoneParserDefinition parserB = new GameZoneParserDefinition("b", GameZoneEventType.WHISPER, ParserMatchType.REGEX,
+                "^TEST_ONLY_B (\\d+)$", List.of("y"), true, TEST_ONLY_VERIFICATION);
+
+        GameZoneParserEngine.match(List.of(parserA), "TEST_ONLY_A 1", 1000L);
+        GameZoneParserEngine.match(List.of(parserB), "TEST_ONLY_B 2", 1000L);
+
+        assertEquals(2, GameZoneParserEngine.compiledPatternCacheSizeForTesting());
+    }
 }

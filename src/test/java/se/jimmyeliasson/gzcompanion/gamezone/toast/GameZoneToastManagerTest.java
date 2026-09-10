@@ -77,4 +77,44 @@ class GameZoneToastManagerTest {
         assertEquals(0, manager.queuedCount());
         assertTrue(manager.offer("key1", "Title", "Body", 1001L), "After clear(), the same key must be allowed again immediately");
     }
+
+    @Test
+    @DisplayName("Dedupe keys older than the dedupe window are pruned rather than kept forever")
+    void testStaleDedupeKeysArePruned() {
+        GameZoneToastManager manager = new GameZoneToastManager();
+        manager.offer("stale-key", "Title", "Body", 1000L);
+        assertEquals(1, manager.dedupeMapSizeForTesting());
+
+        // A later, unrelated offer (any key) past the dedupe window must opportunistically prune
+        // the now-stale entry - it can never again suppress a future offer, so keeping it would
+        // only ever grow the map without bound over a long session.
+        manager.offer("new-key", "Title", "Body", 1000L + GameZoneToastManager.DEFAULT_DEDUPE_WINDOW_MS + 1);
+
+        assertEquals(1, manager.dedupeMapSizeForTesting(), "Only the still-fresh 'new-key' entry should remain; 'stale-key' must have been pruned.");
+    }
+
+    @Test
+    @DisplayName("Many distinct event keys within the dedupe window do not get pruned prematurely")
+    void testFreshDedupeKeysAreNotPrunedEarly() {
+        GameZoneToastManager manager = new GameZoneToastManager();
+        for (int i = 0; i < 20; i++) {
+            manager.offer("key-" + i, "Title", "Body", 1000L + i);
+        }
+        assertEquals(20, manager.dedupeMapSizeForTesting(), "Distinct keys still inside the dedupe window must all be retained.");
+    }
+
+    @Test
+    @DisplayName("The dedupe map stays bounded across a long session of many distinct, non-overlapping event keys")
+    void testDedupeMapStaysBoundedOverLongSession() {
+        GameZoneToastManager manager = new GameZoneToastManager();
+        long windowMs = GameZoneToastManager.DEFAULT_DEDUPE_WINDOW_MS;
+        // Simulate 500 completely distinct events spread far enough apart in time that none of
+        // them are dedupe-relevant to each other - a naive implementation would grow this map to
+        // 500 entries; pruning should keep it small at any single point in time.
+        for (int i = 0; i < 500; i++) {
+            manager.offer("session-key-" + i, "Title", "Body", 1000L + (i * (windowMs + 10)));
+        }
+        assertTrue(manager.dedupeMapSizeForTesting() <= 2,
+                "The dedupe map must not accumulate every distinct key ever seen across a long session; got " + manager.dedupeMapSizeForTesting());
+    }
 }

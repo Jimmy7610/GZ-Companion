@@ -59,10 +59,45 @@ missing. Adding a real parser later is a pure Rule Pack data change (one new obj
 
 `GameZoneToastManager.setNotificationsEnabledSupplier(...)` and
 `setGameZoneToastsEnabledSupplier(...)` are the two hooks the Settings module wires to the user's
-actual saved preferences. Until Settings exists, both default to always-enabled.
+actual saved preferences (`companionNotificationsEnabled`/`gameZoneToastsEnabled`).
+
+## Profile gating - GameZone parsing never runs on another server
+
+GZ Companion is explicitly allowed to run on singleplayer, another Minecraft server, or
+GameZoneMC. The chat observation hooks (`ClientReceiveMessageEvents.GAME`/`CHAT`) fire for every
+message on every one of those - but GameZone parser logic must only ever evaluate a message while
+the client is actually connected to a verified GameZone profile.
+
+`GameZoneChatObserver`'s constructor takes a `Supplier<Boolean> gameZoneProfileActiveSupplier`,
+wired in `CompanionSession` to `this::isConnectedToGameZone` (itself backed by the existing
+`ServerDetection`/`ServerProfile` logic - no new ping probes or additional server scanning). This
+gate is checked FIRST in `onMessage`, before anything else: when it returns `false`, the message
+is not parsed, no toast can ever be offered, and - deliberately - the message is not even counted
+in `getObservedMessageCount()`. That counter and `getMatchedEventCount()` represent messages that
+were actually *eligible* for GameZone parsing, not every chat line the client happened to receive
+on an unrelated server.
+
+**The profile gate always wins over settings.** Even with `gameZoneToastsEnabled = true`, no
+GameZone toast can ever appear outside a verified GameZone profile - a user preference can turn
+GameZone toasts off, but it can never turn them on somewhere they don't belong. See
+`GameZoneChatObserverTest` for the behavioral proof (GameZoneMC eligible; another server and
+singleplayer both ineligible; enabled settings alone can never override the gate).
+
+The gate is a pure read - it never cancels, mutates, or delays the message itself; on a
+non-GameZone server the message still renders in chat exactly as it always would, GZ Companion
+just never looks at it for GameZone-parsing purposes.
+
+## Performance
+
+Verified regex patterns are compiled once per distinct pattern string and cached
+(`GameZoneParserEngine`'s `ConcurrentHashMap<String, Pattern>`), never recompiled per incoming
+message. `GameZoneToastManager`'s dedupe map opportunistically prunes entries older than the
+dedupe window on every `offer()` call, so it stays bounded by recent activity rather than growing
+by one entry per distinct event key ever seen across a session. Both were found and fixed during
+this pass' performance audit - see `docs/ARCHITECTURE.md` §5.
 
 ## Diagnostics
 
 `GameZoneChatObserver` exposes `getObservedMessageCount()`, `getMatchedEventCount()`, and
-`getLastMatchedEventType()` for a future Settings/diagnostics screen. None of these ever expose
-raw chat text.
+`getLastMatchedEventType()` for the Settings diagnostics screen. None of these ever expose raw
+chat text, and (per the profile gate above) they only ever reflect GameZone-eligible messages.

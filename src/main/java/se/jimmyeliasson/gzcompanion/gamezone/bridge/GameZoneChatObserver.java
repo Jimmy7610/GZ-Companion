@@ -21,18 +21,38 @@ import java.util.function.Supplier;
  * persistent - only {@link GameZoneParserEngine#match} results (parser id + declared capture
  * values) ever leave this method, and even those live only in memory in
  * {@link GameZoneToastManager}.
+ *
+ * <p><b>Profile gating.</b> The registration hooks above fire for EVERY message the client
+ * receives, on any server - singleplayer, GameZoneMC, or any other Minecraft server. GameZone
+ * parser logic must only ever run while the client is actually connected to a verified GameZone
+ * profile: {@code gameZoneProfileActiveSupplier} is checked FIRST, before anything else, and a
+ * message is not even counted as "observed" when it fails this check - {@link
+ * #getObservedMessageCount()} deliberately represents "messages that were actually eligible for
+ * GameZone parsing," not every chat line the client happened to receive on an unrelated server.
+ * This gate is a pure read - it never cancels, mutates, or delays the message itself; the message
+ * still renders in chat exactly as Minecraft/the server intended either way.
  */
 public final class GameZoneChatObserver {
     private final Supplier<GameZoneParserCatalog> catalogSupplier;
     private final GameZoneToastManager toastManager;
+    private final Supplier<Boolean> gameZoneProfileActiveSupplier;
 
     private volatile GameZoneEventType lastMatchedEventType;
     private volatile long observedMessageCount;
     private volatile long matchedEventCount;
 
-    public GameZoneChatObserver(Supplier<GameZoneParserCatalog> catalogSupplier, GameZoneToastManager toastManager) {
+    /**
+     * @param gameZoneProfileActiveSupplier returns {@code true} only when the client is currently
+     *                                       connected to a server {@link
+     *                                       se.jimmyeliasson.gzcompanion.profile.ServerDetection}
+     *                                       recognizes as GameZoneMC - never {@code true} for
+     *                                       singleplayer or any other server.
+     */
+    public GameZoneChatObserver(Supplier<GameZoneParserCatalog> catalogSupplier, GameZoneToastManager toastManager,
+                                 Supplier<Boolean> gameZoneProfileActiveSupplier) {
         this.catalogSupplier = catalogSupplier;
         this.toastManager = toastManager;
+        this.gameZoneProfileActiveSupplier = gameZoneProfileActiveSupplier != null ? gameZoneProfileActiveSupplier : () -> false;
     }
 
     public void register() {
@@ -40,8 +60,16 @@ public final class GameZoneChatObserver {
         ClientReceiveMessageEvents.CHAT.register((message, playerChatMessage, sender, boundChatType, timeStamp) -> onMessage(message.getString()));
     }
 
-    private void onMessage(String text) {
+    /** Package-private (not private) so tests can exercise the profile gate directly without a live Fabric event bus. */
+    void onMessage(String text) {
         try {
+            if (!Boolean.TRUE.equals(gameZoneProfileActiveSupplier.get())) {
+                // Not connected to a verified GameZone profile - no GameZone parsing occurs at
+                // all, and this message is not even counted as "observed." A setting that enables
+                // GameZone toasts can never override this: the profile gate always wins.
+                return;
+            }
+
             observedMessageCount++;
             GameZoneParserCatalog catalog = catalogSupplier.get();
             if (catalog == null || catalog.activeCount() == 0) {

@@ -15,6 +15,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationMetadata;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationStatus;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
+import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
 import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
@@ -57,6 +58,17 @@ public class CommandsTabComponent implements TextInputHandler {
     }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
+        renderContent(extractor, font, bounds, mouseX, mouseY, mainScreen);
+        // Kommandon is GameZone-specific reference data - show a small, unobtrusive note when the
+        // current server/world isn't GameZoneMC itself, so the catalog is never mistaken for a
+        // live confirmation of the current server's commands. Drawn last, after everything else,
+        // so it never disturbs any existing layout/scroll math above.
+        if (!CompanionSession.getInstance().isConnectedToGameZone()) {
+            ReferenceModeBanner.renderAtBottom(extractor, font, bounds);
+        }
+    }
+
+    private void renderContent(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         this.layout = CommandsLayout.calculate(bounds);
         listHitTargets.clear();
 

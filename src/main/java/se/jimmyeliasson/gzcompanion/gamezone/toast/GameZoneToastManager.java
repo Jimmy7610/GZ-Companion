@@ -40,6 +40,8 @@ public final class GameZoneToastManager {
         if (!notificationsEnabledSupplier.get() || !gameZoneToastsEnabledSupplier.get()) {
             return false;
         }
+        pruneExpiredDedupeEntries(nowMs);
+
         Long lastShown = lastShownAtByDedupeKey.get(dedupeKey);
         if (lastShown != null && (nowMs - lastShown) < DEFAULT_DEDUPE_WINDOW_MS) {
             return false;
@@ -51,6 +53,18 @@ public final class GameZoneToastManager {
         }
         queue.addLast(new ToastEntry(title, body, nowMs, nowMs + DEFAULT_TOAST_DURATION_MS));
         return true;
+    }
+
+    /**
+     * Opportunistically removes dedupe entries older than {@link #DEFAULT_DEDUPE_WINDOW_MS} - once
+     * an entry is that old it can never again suppress a future {@link #offer}, so keeping it
+     * around forever would let this map grow without bound over a long session as distinct event
+     * keys (e.g. different players, different amounts) accumulate. No background thread: this
+     * runs inline, only when a new event is actually offered, keeping the map's size proportional
+     * to recent activity rather than lifetime activity.
+     */
+    private void pruneExpiredDedupeEntries(long nowMs) {
+        lastShownAtByDedupeKey.entrySet().removeIf(entry -> (nowMs - entry.getValue()) >= DEFAULT_DEDUPE_WINDOW_MS);
     }
 
     /** The toast that should currently be visible, if any - expired entries are dropped first. */
@@ -68,5 +82,10 @@ public final class GameZoneToastManager {
     public void clear() {
         queue.clear();
         lastShownAtByDedupeKey.clear();
+    }
+
+    /** Test-only introspection into the dedupe map's size - never used by production code. */
+    int dedupeMapSizeForTesting() {
+        return lastShownAtByDedupeKey.size();
     }
 }

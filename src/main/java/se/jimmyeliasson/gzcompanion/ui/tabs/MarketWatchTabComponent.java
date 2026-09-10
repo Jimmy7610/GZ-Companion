@@ -16,6 +16,7 @@ import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNotesManager;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNote;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
+import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
 import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
@@ -69,6 +70,16 @@ public class MarketWatchTabComponent implements TextInputHandler {
     }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
+        renderContent(extractor, font, bounds, mouseX, mouseY, mainScreen);
+        // MarketWatch is GameZone-specific reference/notes data - show a small, unobtrusive note
+        // when the current server/world isn't GameZoneMC, so the verified system facts and local
+        // notes are never mistaken for the current server's actual live market state.
+        if (!CompanionSession.getInstance().isConnectedToGameZone()) {
+            ReferenceModeBanner.renderAtBottom(extractor, font, bounds);
+        }
+    }
+
+    private void renderContent(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         this.layout = MarketWatchLayout.calculate(bounds);
         hitTargets.clear();
 

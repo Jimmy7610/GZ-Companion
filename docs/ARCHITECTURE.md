@@ -151,3 +151,66 @@ lifecycle and fair-play boundary.
 - If `chest-index.json` cannot be read, `ChestManager` reports `ChestManagerStatus.ERROR`, the Kistor tab shows a controlled error state, and the rest of the mod (Guide, Home, etc.) remains fully operational.
 - Each of the three M4 knowledge modules (`CommandCatalog`, `CraftingKnowledgeBase`, `ItemKnowledgeBase`) is loaded independently in its own try/catch in `CompanionSession.loadKnowledgeModules()` and reports its own `KnowledgeModuleStatus` (LOADED/UNAVAILABLE/ERROR/INCOMPATIBLE) — a malformed `item-overrides.json` never affects `commands.json`, `crafting-overrides.json`, Guide, or Kistor, and vice versa. `KnowledgeModuleStatus` is intentionally new and scoped to `knowledge.*`; it does not replace or merge with the already-approved `GuideLoadStatus`/`ChestManagerStatus`.
 - The UI displays explicit status badges instead of failing silently or guessing server behavior.
+
+---
+
+## 5. Performance Architecture (static/runtime audit, not measured profiling)
+
+This section states factual architectural properties reviewed during the M6-M9/Settings
+completion pass, not measured numbers. Actual RAM/FPS/tick profiling is explicitly out of scope
+for this pass and belongs to Milestone 10.
+
+- **No world scanning.** No module added in M5-M9/Settings reads blocks, entities, or chunks -
+  every fact comes from the bundled Rule Pack, the player's own already-legitimate client state
+  (recipe book, chat the client already received), or local files the player's own actions wrote.
+- **No network polling.** The GameZone Wiki is a development-time authoring source only; nothing
+  in the shipped mod makes an HTTP request at runtime, on a timer or otherwise.
+- **No AI model.** The Advisor (M8) is a small, fixed, deterministic rule table - no inference,
+  no external call.
+- **Rule Pack data loaded once.** Every knowledge loader (Settlement, Building, MarketWatch,
+  Commands, Crafting, Items, Parsers) runs exactly once, in `CompanionSession.init()`, and the
+  resulting catalog is held in memory for the rest of the session - never re-parsed per render
+  frame or per keystroke. Search/filter operations (`catalog.search(...)`) run in memory against
+  already-loaded, small datasets (max 50 settlement levels, 19 buildings, low hundreds of commands
+  and relics, a local notes list bounded by what the player actually created).
+- **Regex is precompiled, not per-message.** `GameZoneParserEngine`'s regex parsers are compiled
+  once per distinct pattern string and cached (`ConcurrentHashMap<String, Pattern>`), never
+  recompiled per incoming chat message - found and fixed during this pass' performance audit.
+- **The toast dedupe map is bounded, not lifetime-growing.** `GameZoneToastManager` opportunistically
+  prunes dedupe entries older than the dedupe window on every `offer()` call, so a long session
+  with many distinct event keys (different players, different amounts) does not accumulate one
+  permanent entry per distinct key ever seen - found and fixed during this pass' performance audit.
+- **The toast queue itself is hard-capped** at 3 queued entries regardless of session length.
+- **No new per-tick subsystem.** M5's chat observer only runs on Fabric's message-received event,
+  never on a client tick; no new `Thread`, `ScheduledExecutorService`, or busy loop was introduced
+  by M5-M9/Settings.
+- **No known heavy per-frame allocation.** Each tab component clears and rebuilds its own small
+  click-hit-target list once per render call (the same pattern already used by M1-M4's tabs); no
+  instance field accumulates growing state across frames.
+- **Actual RAM/FPS/tick measurement is explicitly out of scope for this pass** and remains owned
+  by Milestone 10 - everything above is a code-level architecture review, not a profiled number.
+
+---
+
+## 6. Cross-Server Behavior ("Referensläge")
+
+GZ Companion works on three kinds of worlds: GameZoneMC, another Minecraft server, and
+singleplayer. `CompanionSession.isConnectedToGameZone()` (backed by the same
+`ServerDetection`/`ServerProfile` logic already used elsewhere - no new ping probes or server
+scanning) is the sole authoritative check.
+
+- **Generic/singleplayer, always fully functional**: Guide, Kistor (with its existing context
+  isolation), Minecraft's own client recipe book in Crafting, and Inställningar all work exactly
+  the same regardless of server.
+- **GameZone-specific reference/planning tools remain available, but honestly labeled**:
+  Kommandon, the GameZone item/relic detail area inside Crafting, Settlement, Byggplaner, and
+  MarketWatch all continue to work fully offline as verified GameZone reference/planning tools
+  outside GameZone - the Rule Pack data they show is static and loads the same everywhere. When
+  the client is NOT connected to GameZone, each of these surfaces shows one small, unobtrusive
+  line - `ui.ReferenceModeBanner`'s fixed text, "Referensläge — du är inte ansluten till
+  GameZoneMC." - so their verified facts and local plans are never mistaken for the current
+  server's actual, live state. The banner disappears entirely once actually connected to GameZone.
+  Plain Minecraft content (e.g. Crafting's own client-recipe-book entries, which are not GameZone
+  facts at all) is deliberately never labeled this way.
+- **GameZone-connected mode**: identical UI, minus the banner. No additional connection check is
+  performed beyond the existing server-address detection.

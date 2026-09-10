@@ -20,6 +20,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationStatus;
 import se.jimmyeliasson.gzcompanion.knowledge.crafting.bridge.MinecraftRecipeDisplayAdapter;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
+import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
 import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
@@ -70,6 +71,16 @@ public class BuildingsTabComponent implements TextInputHandler {
     }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
+        renderContent(extractor, font, bounds, mouseX, mouseY, mainScreen);
+        // Byggplaner is GameZone-specific reference/planning data - show a small, unobtrusive note
+        // when the current server/world isn't GameZoneMC, so verified requirements and local plans
+        // are never mistaken for the current server's actual state.
+        if (!CompanionSession.getInstance().isConnectedToGameZone()) {
+            ReferenceModeBanner.renderAtBottom(extractor, font, bounds);
+        }
+    }
+
+    private void renderContent(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         this.layout = BuildingLayout.calculate(bounds);
         hitTargets.clear();
 
@@ -205,10 +216,21 @@ public class BuildingsTabComponent implements TextInputHandler {
                         rowRect.x() + 11, rowRect.y() + 11, rowRect.width() - 15, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
 
                 final String bId = building.id();
+                final Integer bMinWidth = building.minWidth();
+                final Integer bMinDepth = building.minDepth();
+                final Integer bMinHeight = building.minHeight();
                 hitTargets.add(new ListRowHit(rowRect, () -> {
                     selectedBuildingId = bId;
                     detailScrollOffset = 0;
                     compactShowingDetail = true;
+                    // Start the calculator at exactly this building's published minimum, so it
+                    // opens already showing a passing status - the player can then reduce a
+                    // dimension to see the warning, or increase for a safety margin.
+                    if (bMinWidth != null && bMinDepth != null) {
+                        calcWidth = bMinWidth;
+                        calcDepth = bMinDepth;
+                        calcHeight = bMinHeight != null ? bMinHeight : calcHeight;
+                    }
                 }));
             }
             currentY += ROW_H;
@@ -248,14 +270,30 @@ public class BuildingsTabComponent implements TextInputHandler {
 
         TextUtil.drawScaledEllipsizedText(extractor, font, building.name(), x, y, maxW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
         y += 11;
-        TextUtil.drawScaledEllipsizedText(extractor, font, "Nivå " + building.levelRequirement() + " · Licens: " + building.licenseCost() + " Coins",
+        TextUtil.drawScaledEllipsizedText(extractor, font, "Nivåkrav: Settlementnivå " + building.levelRequirement(),
                 x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
         y += 10;
-        if (!building.mainBonus().isBlank()) {
-            y += TextUtil.drawScaledWrappedText(extractor, font, building.mainBonus(), x, y, maxW, TypographyScale.SMALL.getScale(), 2, 1, GZTheme.COLOR_STATUS_YELLOW, false) + 2;
-        }
+        TextUtil.drawScaledEllipsizedText(extractor, font, "Licenskostnad: " + building.licenseCost() + " Coins",
+                x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += 10;
 
-        y += 4;
+        // "Minsta storlek" is shown prominently here (not buried inside the calculator below) -
+        // per-building minimum footprint is real, verified data now, not an unpublished gap.
+        if (building.hasPublishedMinimumFootprint()) {
+            String sizeLine = "Minsta storlek: " + building.minWidth() + " × " + building.minDepth();
+            if (building.minHeight() != null) {
+                sizeLine += " (höjd: " + building.minHeight() + " block)";
+            }
+            TextUtil.drawScaledEllipsizedText(extractor, font, sizeLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
+            y += 10;
+        }
+        TextUtil.drawScaledEllipsizedText(extractor, font, "Väggkrav: minst " + base.globalRules().minWallCoveragePercent() + "% täckning",
+                x, y, maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += 9;
+        TextUtil.drawScaledEllipsizedText(extractor, font, "Takkrav: minst " + base.globalRules().minRoofCoveragePercent() + "% täckning",
+                x, y, maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += 11;
+
         TextUtil.drawScaledText(extractor, font, "SPECIALKRAV", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
         y += 10;
         for (BuildingRequirement req : building.specialRequirements()) {
@@ -272,6 +310,13 @@ public class BuildingsTabComponent implements TextInputHandler {
             String line = "x" + req.count() + "  " + req.displayName();
             TextUtil.drawScaledEllipsizedText(extractor, font, line, x + 16, y, maxW - 16, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
             y += 12;
+        }
+
+        if (!building.mainBonus().isBlank()) {
+            y += 4;
+            TextUtil.drawScaledText(extractor, font, "BONUS", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+            y += 9;
+            y += TextUtil.drawScaledWrappedText(extractor, font, building.mainBonus(), x, y, maxW, TypographyScale.SMALL.getScale(), 2, 1, GZTheme.COLOR_STATUS_YELLOW, false) + 2;
         }
 
         y += 4;
@@ -295,11 +340,14 @@ public class BuildingsTabComponent implements TextInputHandler {
     }
 
     private int estimateDetailHeight(SettlementBuilding building, GlobalBuildingRules rules, List<BuildingPlan> buildingPlans) {
-        int h = 11 + 10 + 12; // heading, level/license, bonus label baseline
+        int h = 11 + 10 + 10; // heading, level requirement, license cost
+        if (building.hasPublishedMinimumFootprint()) h += 10; // "Minsta storlek"
+        h += 9 + 11; // Väggkrav, Takkrav
         h += 10; // "SPECIALKRAV"
         h += building.specialRequirements().size() * 12;
+        if (!building.mainBonus().isBlank()) h += 4 + 9 + 11; // "BONUS" label + wrapped text estimate
         h += 4 + estimateVerificationTrailHeight(building.verification());
-        h += 6 + 70; // structure calculator block (fixed-height estimate)
+        h += 6 + 90; // structure calculator block (fixed-height estimate)
         h += 6 + 20 + (buildingPlans.size() * 34) + 16;
         return h;
     }
@@ -339,11 +387,17 @@ public class BuildingsTabComponent implements TextInputHandler {
                 x, y, maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
         y += 11;
 
-        if (building.hasPublishedMinimumFootprint()
-                && (calcWidth < building.minWidth() || calcDepth < building.minDepth()
-                || (building.minHeight() != null && calcHeight < building.minHeight()))) {
-            y += TextUtil.drawScaledWrappedText(extractor, font, "Varning: dessa mått är under byggnadens publicerade minimikrav.", x, y, maxW,
-                    TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_YELLOW, false) + 2;
+        if (building.hasPublishedMinimumFootprint()) {
+            boolean tooSmall = !building.fitsFootprint(calcWidth, calcDepth, calcHeight);
+            if (tooSmall) {
+                y += TextUtil.drawScaledWrappedText(extractor, font, "För litet för " + building.name() + " - minsta storlek är "
+                        + building.minWidth() + " × " + building.minDepth()
+                        + (building.minHeight() != null ? " (höjd " + building.minHeight() + ")" : "") + ".",
+                        x, y, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_RED, false) + 2;
+            } else {
+                y += TextUtil.drawScaledWrappedText(extractor, font, "Måtten uppfyller " + building.name() + "s publicerade minimikrav.",
+                        x, y, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_GREEN, false) + 2;
+            }
         }
 
         y += TextUtil.drawScaledWrappedText(extractor, font,

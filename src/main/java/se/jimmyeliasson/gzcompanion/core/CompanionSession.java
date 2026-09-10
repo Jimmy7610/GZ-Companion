@@ -82,7 +82,7 @@ public class CompanionSession {
     private GameZoneParserCatalog parserCatalog = GameZoneParserCatalog.empty();
     private KnowledgeModuleStatus parserCatalogStatus = KnowledgeModuleStatus.UNAVAILABLE;
     private final GameZoneToastManager toastManager = new GameZoneToastManager();
-    private final GameZoneChatObserver chatObserver = new GameZoneChatObserver(() -> parserCatalog, toastManager);
+    private final GameZoneChatObserver chatObserver = new GameZoneChatObserver(() -> parserCatalog, toastManager, this::isConnectedToGameZone);
 
     private CompanionSession() {
         this.bridge = new VanillaMinecraftBridge();
@@ -365,6 +365,17 @@ public class CompanionSession {
             return ServerProfile.GAMEZONE;
         }
         return ServerProfile.GENERIC;
+    }
+
+    /**
+     * Whether the client is currently connected to a server {@link
+     * se.jimmyeliasson.gzcompanion.profile.ServerDetection} recognizes as GameZoneMC - never true
+     * for singleplayer or any other server. This is the sole authoritative profile check used to
+     * gate {@link GameZoneChatObserver}'s parsing; no ping probes or additional server scanning
+     * are ever performed here.
+     */
+    public boolean isConnectedToGameZone() {
+        return bridge.isConnectedToGameZone();
     }
 }
 

@@ -3,6 +3,10 @@ package se.jimmyeliasson.gzcompanion.knowledge.building;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeLoadResult;
+import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationStatus;
+
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -73,5 +77,84 @@ class BuildingKnowledgeLoaderTest {
         assertEquals(40, base.globalRules().minWallCoveragePercent());
         assertEquals(75, base.globalRules().minRoofCoveragePercent());
         assertTrue(base.globalRules().mustBeFullyInsideTerritory());
+    }
+
+    @Test
+    @DisplayName("Every bundled building id is unique - no duplicate survives loading")
+    void bundledBuildingsHaveUniqueIds() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        Set<String> seen = new HashSet<>();
+        for (SettlementBuilding building : base.buildings()) {
+            assertTrue(seen.add(building.id()), "Duplicate building id: " + building.id());
+        }
+        assertEquals(19, seen.size());
+    }
+
+    @Test
+    @DisplayName("Every bundled building now publishes a non-null minimum width and depth - the per-building footprint gap is closed")
+    void everyBundledBuildingHasPublishedFootprint() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        for (SettlementBuilding building : base.buildings()) {
+            assertTrue(building.hasPublishedMinimumFootprint(), building.id() + " is missing its published minimum footprint.");
+            assertTrue(building.minWidth() > 0, building.id() + " minWidth must be positive.");
+            assertTrue(building.minDepth() > 0, building.id() + " minDepth must be positive.");
+        }
+    }
+
+    @Test
+    @DisplayName("Stall's published minimum footprint is exactly 19x19, per its individual Wiki detail page")
+    void stallIsExactly19By19() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        SettlementBuilding stall = base.byId("stall").orElseThrow();
+        assertEquals(19, stall.minWidth());
+        assertEquals(19, stall.minDepth());
+        assertEquals(14, stall.levelRequirement());
+        assertEquals(500000, stall.licenseCost());
+    }
+
+    @Test
+    @DisplayName("Exactly 4 of the 19 buildings publish a separate minimum height; the rest correctly have none")
+    void exactlyFourBuildingsPublishMinimumHeight() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        long withHeight = base.buildings().stream().filter(b -> b.minHeight() != null).count();
+        assertEquals(4, withHeight, "Vindhamn, Kyrka, Rådhus, and Slott are the only buildings with a separately published minimum height.");
+        assertEquals(18, base.byId("vindhamn").orElseThrow().minHeight());
+        assertEquals(15, base.byId("kyrka").orElseThrow().minHeight());
+        assertEquals(16, base.byId("radhus").orElseThrow().minHeight());
+        assertEquals(20, base.byId("slott").orElseThrow().minHeight());
+    }
+
+    @Test
+    @DisplayName("Every building's level requirement is positive and its license cost is non-negative")
+    void levelRequirementAndCostAreValid() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        for (SettlementBuilding building : base.buildings()) {
+            assertTrue(building.levelRequirement() > 0, building.id() + " levelRequirement must be positive.");
+            assertTrue(building.licenseCost() >= 0, building.id() + " licenseCost must be non-negative.");
+        }
+    }
+
+    @Test
+    @DisplayName("Every VERIFIED building entry carries a non-blank sourceReference pointing at its own individual Wiki page")
+    void everyVerifiedBuildingHasItsOwnSourceReference() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        for (SettlementBuilding building : base.buildings()) {
+            if (building.verification().status() != VerificationStatus.VERIFIED) continue;
+            assertNotNull(building.verification().sourceReference(), building.id() + " is VERIFIED but has no sourceReference.");
+            assertTrue(building.verification().sourceReference().contains("/wiki/buildings/" + building.id()),
+                    building.id() + "'s sourceReference should point at its own individual building page, not a shared summary page.");
+        }
+    }
+
+    @Test
+    @DisplayName("Stadskärna and Handelscentrum's level requirements were corrected against their individual pages, not the overview table's row order")
+    void levelRequirementsMatchIndividualPagesNotOverviewOrder() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        // The Fysiska byggnader overview table's "Nivå" column is a row index, not the actual
+        // settlement level requirement - confirmed by cross-checking each individual page.
+        assertEquals(2, base.byId("stadskarna").orElseThrow().levelRequirement(),
+                "Stadskärna's individual page states Settlementnivå 2, not the overview table's row-1 position.");
+        assertEquals(4, base.byId("handelscentrum").orElseThrow().levelRequirement(),
+                "Handelscentrum's individual page states Settlementnivå 4, not the overview table's row-3 position.");
     }
 }

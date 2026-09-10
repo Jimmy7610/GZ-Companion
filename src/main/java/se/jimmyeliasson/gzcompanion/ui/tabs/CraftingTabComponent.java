@@ -23,6 +23,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.items.CustomItemKnowledge;
 import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeBase;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
+import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
 import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
@@ -593,6 +594,9 @@ public class CraftingTabComponent implements TextInputHandler {
 
     private int estimateItemDetailHeight(Font font, int maxW, CustomItemKnowledge item) {
         int h = 11; // heading
+        if (!CompanionSession.getInstance().isConnectedToGameZone()) {
+            h += ReferenceModeBanner.inlineHeight() + 2;
+        }
         boolean hasMeta = item.tier() != null || item.culture() != null || item.serial() != null || item.baseMinecraftItemId() != null;
         if (hasMeta) h += 10;
         if (item.description() != null && !item.description().isBlank()) {
@@ -713,6 +717,10 @@ public class CraftingTabComponent implements TextInputHandler {
         TextUtil.drawScaledEllipsizedText(extractor, font, item.displayName(), x, currY,
                 maxW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
         currY += 11;
+
+        if (!CompanionSession.getInstance().isConnectedToGameZone()) {
+            currY += ReferenceModeBanner.renderInline(extractor, font, x, currY, maxW) + 2;
+        }
 
         StringBuilder meta = new StringBuilder();
         if (item.tier() != null) meta.append(item.tier());

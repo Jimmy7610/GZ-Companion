@@ -22,6 +22,7 @@ import se.jimmyeliasson.gzcompanion.settlement.storage.MemberNote;
 import se.jimmyeliasson.gzcompanion.settlement.storage.SettlementPlannerProfile;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
+import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
 import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
@@ -96,6 +97,16 @@ public class SettlementTabComponent implements TextInputHandler {
     }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
+        renderContent(extractor, font, bounds, mouseX, mouseY, mainScreen);
+        // Settlement is GameZone-specific reference/planning data - show a small, unobtrusive note
+        // when the current server/world isn't GameZoneMC, so its verified facts and local plans
+        // are never mistaken for the current server's actual state.
+        if (!CompanionSession.getInstance().isConnectedToGameZone()) {
+            ReferenceModeBanner.renderAtBottom(extractor, font, bounds);
+        }
+    }
+
+    private void renderContent(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         this.layout = SettlementLayout.calculate(bounds);
         hitTargets.clear();
 

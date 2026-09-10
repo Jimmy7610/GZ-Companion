@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -16,8 +17,17 @@ import java.util.regex.Pattern;
  *
  * <p>Never mutates the input message. Never used to cancel, rewrite, or hide anything - callers
  * only ever read the match result to optionally show a local toast.
+ *
+ * <p><b>Performance.</b> A verified parser's regex pattern is fixed Rule Pack data - it never
+ * changes between messages - so {@link #COMPILED_PATTERN_CACHE} memoizes each distinct pattern
+ * string's {@link Pattern#compile} result once, rather than recompiling it on every single
+ * incoming chat message. The cache is keyed by the pattern string itself (not object identity),
+ * is naturally bounded by the small, static number of distinct verified parser patterns that
+ * ever exist in a loaded Rule Pack, and needs no pruning - it is not a per-message or per-event
+ * structure.
  */
 public final class GameZoneParserEngine {
+    private static final Map<String, Pattern> COMPILED_PATTERN_CACHE = new ConcurrentHashMap<>();
 
     private GameZoneParserEngine() {}
 
@@ -45,7 +55,7 @@ public final class GameZoneParserEngine {
 
     private static Map<String, String> matchRegex(GameZoneParserDefinition parser, String message) {
         try {
-            Pattern compiled = Pattern.compile(parser.pattern());
+            Pattern compiled = COMPILED_PATTERN_CACHE.computeIfAbsent(parser.pattern(), Pattern::compile);
             Matcher matcher = compiled.matcher(message);
             if (!matcher.find()) return null;
 
@@ -64,5 +74,15 @@ public final class GameZoneParserEngine {
             // but defensive here too) must never break the observer.
             return null;
         }
+    }
+
+    /** Test-only introspection into the compiled-pattern cache - never used by production code. */
+    static int compiledPatternCacheSizeForTesting() {
+        return COMPILED_PATTERN_CACHE.size();
+    }
+
+    /** Test-only cache reset so tests don't leak state into each other - never used by production code. */
+    static void clearCompiledPatternCacheForTesting() {
+        COMPILED_PATTERN_CACHE.clear();
     }
 }
