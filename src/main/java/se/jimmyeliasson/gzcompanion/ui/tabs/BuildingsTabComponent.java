@@ -189,6 +189,11 @@ public class BuildingsTabComponent implements TextInputHandler {
         return Math.max(0, totalH - Math.max(1, visibleH));
     }
 
+    static String listRowLevelAndCostText(SettlementBuilding building) {
+        String levelPart = building.hasLevelRequirementConflict() ? "Nivåkonflikt" : "Nivå " + building.levelRequirement();
+        return levelPart + " · " + building.licenseCost() + " Coins";
+    }
+
     private void renderList(GuiGraphicsExtractor extractor, Font font, List<SettlementBuilding> entries, int mouseX, int mouseY) {
         UiRect listRect = layout.listRect();
         GZTheme.drawCard(extractor, listRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
@@ -215,7 +220,7 @@ public class BuildingsTabComponent implements TextInputHandler {
                 GZTheme.drawStatusDot(extractor, rowRect.x() + 4, rowRect.y() + 5, dotColor);
                 TextUtil.drawScaledEllipsizedText(extractor, font, building.name(), rowRect.x() + 11, rowRect.y() + 2,
                         rowRect.width() - 15, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, isSelected);
-                TextUtil.drawScaledEllipsizedText(extractor, font, "Nivå " + building.levelRequirement() + " · " + building.licenseCost() + " Coins",
+                TextUtil.drawScaledEllipsizedText(extractor, font, listRowLevelAndCostText(building),
                         rowRect.x() + 11, rowRect.y() + 11, rowRect.width() - 15, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
 
                 final String bId = building.id();
