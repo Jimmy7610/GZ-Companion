@@ -81,6 +81,11 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Structure Calculator ("Planeringsestimat")**: A local footprint helper calculating floor/roof/wall area and the published minimum coverage block counts — always labeled an estimate, never a guarantee of GameZone's real approval.
 - **Local Plans with a Fixed Checklist**: Create, rename, and delete (with confirmation) local building plans, tracking License/Nivå/Storlek/Väggar/Tak/Specialkrav as local-only planning checkboxes.
 
+### Milestone 8 — Contextual Advisor *(Implemented, pending human gameplay QA)*
+- **"Vad ska jag göra?" Becomes Real**: Home's existing button now opens a ranked, explainable overlay generated from your actual Guide/Settlement/Building state — never a hardcoded fake tip. See [Advisor](docs/ADVISOR.md).
+- **Deterministic, Explainable Suggestions**: Each suggestion shows Vad/Varför/Nästa steg, with an optional copy-only clipboard button for an already-verified command.
+- **No New Tab**: The Advisor is reached from Home, keeping the 9-tab navigation exactly as designed.
+
 ---
 
 ## 🚀 Building from Source

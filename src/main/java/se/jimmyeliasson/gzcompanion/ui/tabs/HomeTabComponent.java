@@ -1,7 +1,11 @@
 package se.jimmyeliasson.gzcompanion.ui.tabs;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import se.jimmyeliasson.gzcompanion.advisor.AdvisorContextBuilder;
+import se.jimmyeliasson.gzcompanion.advisor.AdvisorEngine;
+import se.jimmyeliasson.gzcompanion.advisor.AdvisorSuggestion;
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.core.feature.FeatureManager;
@@ -20,12 +24,22 @@ import se.jimmyeliasson.gzcompanion.ui.layout.HomeTabLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Renders the compact, polished Home ("Hem") tab following docs/design/GZ-COMPANION-UI-REFERENCE.png.
  */
 public class HomeTabComponent {
     private String feedbackMessage = null;
     private long feedbackExpiry = 0;
+
+    private boolean showAdvisor = false;
+    private List<AdvisorSuggestion> advisorSuggestions = List.of();
+    private UiRect advisorCloseBtnRect = new UiRect(0, 0, 0, 0);
+    private final List<AdvisorHit> advisorHitTargets = new ArrayList<>();
+
+    private record AdvisorHit(UiRect rect, Runnable action) {}
 
     private HomeTabLayout layout;
 
@@ -200,6 +214,72 @@ public class HomeTabComponent {
             extractor.fill(toastX, toastY + 13, toastX + msgW, toastY + 14, GZTheme.COLOR_EMERALD);
             extractor.text(font, feedbackMessage, toastX + 7, toastY + 3, GZTheme.COLOR_MINT, false);
         }
+
+        if (showAdvisor) {
+            renderAdvisorOverlay(extractor, font, bounds, mouseX, mouseY);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Advisor overlay ("Vad ska jag göra?") - M8
+    // ------------------------------------------------------------------
+
+    private void renderAdvisorOverlay(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY) {
+        advisorHitTargets.clear();
+        extractor.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), GZTheme.COLOR_BACKDROP);
+
+        UiRect card = bounds.inset(6, 4);
+        GZTheme.drawCard(extractor, card, GZTheme.COLOR_PANEL_BG, GZTheme.COLOR_BORDER_MODAL);
+
+        int pad = 6;
+        int x = card.x() + pad;
+        int maxW = card.width() - (pad * 2);
+        int y = card.y() + 4;
+
+        GZTheme.drawIcon(extractor, IconId.OBJECTIVE, x, y, 10, GZTheme.COLOR_MINT);
+        TextUtil.drawScaledText(extractor, font, "Vad ska jag göra?", x + 13, y + 1, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
+
+        advisorCloseBtnRect = new UiRect(card.right() - 16, card.y() + 3, 12, 10);
+        boolean closeHov = advisorCloseBtnRect.contains(mouseX, mouseY);
+        extractor.fill(advisorCloseBtnRect.x(), advisorCloseBtnRect.y(), advisorCloseBtnRect.right(), advisorCloseBtnRect.bottom(), closeHov ? 0x99EF4444 : 0x221E293B);
+        TextUtil.drawCenteredText(extractor, font, "x", advisorCloseBtnRect.x() + (advisorCloseBtnRect.width() / 2), advisorCloseBtnRect.y() + 1,
+                advisorCloseBtnRect.width(), closeHov ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_MUTED, false);
+        advisorHitTargets.add(new AdvisorHit(advisorCloseBtnRect, () -> showAdvisor = false));
+
+        y += 14;
+        extractor.enableScissor(card.x(), y, card.right(), card.bottom() - 4);
+        for (AdvisorSuggestion suggestion : advisorSuggestions) {
+            GZTheme.drawCard(extractor, new UiRect(x, y, maxW, 2), 0, 0); // no-op spacer for readability
+            TextUtil.drawScaledEllipsizedText(extractor, font, suggestion.title(), x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, true);
+            y += 10;
+            y += TextUtil.drawScaledWrappedText(extractor, font, "Varför: " + suggestion.reason(), x, y, maxW,
+                    TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_TEXT_SECONDARY, false) + 1;
+            y += TextUtil.drawScaledWrappedText(extractor, font, "Nästa steg: " + suggestion.nextStep(), x, y, maxW,
+                    TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false) + 1;
+
+            if (suggestion.optionalCommand() != null) {
+                UiRect copyBtn = new UiRect(x, y, Math.min(120, maxW), 10);
+                boolean hov = copyBtn.contains(mouseX, mouseY);
+                GZTheme.drawButton(extractor, font, copyBtn, "Kopiera " + suggestion.optionalCommand(), false, hov, TypographyScale.META.getScale());
+                String command = suggestion.optionalCommand();
+                advisorHitTargets.add(new AdvisorHit(copyBtn, () -> copyToClipboard(command)));
+                y += 12;
+            }
+            y += 6;
+        }
+        extractor.disableScissor();
+    }
+
+    private void copyToClipboard(String text) {
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client != null && client.keyboardHandler != null) {
+                client.keyboardHandler.setClipboard(text);
+                showToast("Kopierat: " + text, 2000);
+            }
+        } catch (Exception ignored) {
+            // Clipboard access is a pure local OS convenience - never let a failure here affect anything else.
+        }
     }
 
     /**
@@ -244,6 +324,17 @@ public class HomeTabComponent {
         if (button != 0) return false;
         calculateLayout(bounds);
 
+        if (showAdvisor) {
+            for (AdvisorHit hit : advisorHitTargets) {
+                if (hit.rect().contains(mouseX, mouseY)) {
+                    hit.action().run();
+                    return true;
+                }
+            }
+            // Swallow every other click while the overlay is open, so it can't be clicked "through".
+            return true;
+        }
+
         CompanionSession session = CompanionSession.getInstance();
         GuideEngine engine = session.getGuideEngine();
         GuideContext context = session.getCurrentGuideContext();
@@ -255,8 +346,8 @@ public class HomeTabComponent {
         }
 
         if (layout.secondaryButton1Rect().contains(mouseX, mouseY)) {
-            mainScreen.openGuideStep(nextStep != null ? nextStep.id() : null);
-            showToast("Nästa uppgift: " + (nextStep != null ? nextStep.title() : "Guide"), 3000);
+            advisorSuggestions = AdvisorEngine.generate(AdvisorContextBuilder.build(session));
+            showAdvisor = true;
             return true;
         }
 

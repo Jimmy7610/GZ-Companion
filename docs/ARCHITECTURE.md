@@ -58,6 +58,10 @@ se.jimmyeliasson.gzcompanion
 ├── building/                      # M7: local building plan state (see BUILDING-PLANNER.md)
 │   ├── BuildingPlanManager.java   # Runtime coordinator, mirrors SettlementPlannerManager
 │   └── storage/                  # JsonBuildingPlanStore & building-plans.json schema
+├── advisor/                       # M8: contextual "Vad ska jag göra?" advisor (see ADVISOR.md)
+│   ├── AdvisorContext.java, AdvisorSuggestion.java  # plain data, no Minecraft types
+│   ├── AdvisorEngine.java        # pure, deterministic rule evaluator
+│   └── AdvisorContextBuilder.java # the ONLY class here touching CompanionSession
 ├── gamezone/events/, gamezone/parsing/, gamezone/toast/, gamezone/bridge/  # M5: read-only GameZone
 │   │                              # event engine (see GAMEZONE-ADAPTER.md) - chat is only ever observed,
 │   │                              # never cancelled/rewritten/answered

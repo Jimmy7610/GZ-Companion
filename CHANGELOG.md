@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - Milestone 8: Contextual Advisor - 2026-09-10
+
+### Added
+- Home's "Vad ska jag göra?" button now opens a real contextual Advisor overlay, ranking up to 3 explainable suggestions (Vad/Varför/Nästa steg) generated from actual Guide/Settlement/Building state - never a hardcoded fake tip. No new top-level tab was added.
+- `advisor` package: `AdvisorContext` (plain data), `AdvisorEngine` (pure, deterministic rule evaluator with a fixed priority order and a safe generic fallback), `AdvisorContextBuilder` (the sole bridge to `CompanionSession`).
+- `docs/ADVISOR.md`: architecture and current rule list.
+
 ## [Unreleased] - Milestone 7: Building Planner - 2026-09-10
 
 ### Added
