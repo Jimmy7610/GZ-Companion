@@ -25,9 +25,13 @@ import se.jimmyeliasson.gzcompanion.knowledge.crafting.CraftingKnowledgeBase;
 import se.jimmyeliasson.gzcompanion.knowledge.crafting.CraftingKnowledgeLoader;
 import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeBase;
 import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeLoader;
+import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementCatalog;
+import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementKnowledgeLoader;
 import se.jimmyeliasson.gzcompanion.minecraft.MinecraftBridge;
 import se.jimmyeliasson.gzcompanion.minecraft.VanillaMinecraftBridge;
 import se.jimmyeliasson.gzcompanion.profile.ServerProfile;
+import se.jimmyeliasson.gzcompanion.settlement.SettlementPlannerManager;
+import se.jimmyeliasson.gzcompanion.settlement.storage.JsonSettlementPlannerStore;
 import se.jimmyeliasson.gzcompanion.storage.StorageManager;
 
 import java.nio.file.Path;
@@ -54,6 +58,9 @@ public class CompanionSession {
     private KnowledgeModuleStatus craftingKnowledgeStatus = KnowledgeModuleStatus.UNAVAILABLE;
     private ItemKnowledgeBase itemKnowledgeBase = ItemKnowledgeBase.empty();
     private KnowledgeModuleStatus itemKnowledgeStatus = KnowledgeModuleStatus.UNAVAILABLE;
+    private SettlementCatalog settlementCatalog = SettlementCatalog.empty();
+    private KnowledgeModuleStatus settlementCatalogStatus = KnowledgeModuleStatus.UNAVAILABLE;
+    private final SettlementPlannerManager settlementPlannerManager;
 
     private GameZoneParserCatalog parserCatalog = GameZoneParserCatalog.empty();
     private KnowledgeModuleStatus parserCatalogStatus = KnowledgeModuleStatus.UNAVAILABLE;
@@ -72,6 +79,8 @@ public class CompanionSession {
 
         this.chestManager = new ChestManager(new JsonChestIndexStore(configDir.resolve("chest-index.json")));
         this.chestManager.setDisplayNameResolver(MinecraftChestCaptureAdapter::resolveItemDisplayName);
+
+        this.settlementPlannerManager = new SettlementPlannerManager(new JsonSettlementPlannerStore(configDir.resolve("settlement-planner.json")));
 
         init();
     }
@@ -99,6 +108,9 @@ public class CompanionSession {
         featureManager.setCommandCatalogStatusSupplier(() -> commandCatalogStatus);
         featureManager.setCraftingKnowledgeStatusSupplier(() -> craftingKnowledgeStatus);
         featureManager.setItemKnowledgeStatusSupplier(() -> itemKnowledgeStatus);
+        featureManager.setSettlementKnowledgeStatusSupplier(() -> settlementCatalogStatus);
+
+        settlementPlannerManager.initialize();
 
         loadParserCatalog();
 
@@ -149,6 +161,15 @@ public class CompanionSession {
         } catch (Exception e) {
             this.itemKnowledgeBase = ItemKnowledgeBase.empty();
             this.itemKnowledgeStatus = KnowledgeModuleStatus.ERROR;
+        }
+
+        try {
+            KnowledgeLoadResult<SettlementCatalog> result = new SettlementKnowledgeLoader().load();
+            this.settlementCatalog = result.data() != null ? result.data() : SettlementCatalog.empty();
+            this.settlementCatalogStatus = toModuleStatus(result.outcome());
+        } catch (Exception e) {
+            this.settlementCatalog = SettlementCatalog.empty();
+            this.settlementCatalogStatus = KnowledgeModuleStatus.ERROR;
         }
     }
 
@@ -221,6 +242,18 @@ public class CompanionSession {
 
     public KnowledgeModuleStatus getItemKnowledgeStatus() {
         return itemKnowledgeStatus;
+    }
+
+    public SettlementCatalog getSettlementCatalog() {
+        return settlementCatalog;
+    }
+
+    public KnowledgeModuleStatus getSettlementCatalogStatus() {
+        return settlementCatalogStatus;
+    }
+
+    public SettlementPlannerManager getSettlementPlannerManager() {
+        return settlementPlannerManager;
     }
 
     public GameZoneParserCatalog getParserCatalog() {

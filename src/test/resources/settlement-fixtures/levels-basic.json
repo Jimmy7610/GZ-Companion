@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "levels": [
+    { "level": 1, "name": "Enstöring", "coinCost": 0,
+      "items": [],
+      "verification": { "status": "VERIFIED", "sourceName": "TEST ONLY fixture", "sourceReference": "test://fixture", "lastVerified": "2026-09-10" } },
+    { "level": 2, "name": "Nybyggare", "coinCost": 100,
+      "items": [ { "itemId": "minecraft:oak_log", "displayName": "Ekstock", "count": 10 } ],
+      "requiredBuildingName": "Stadskärna",
+      "verification": { "status": "VERIFIED", "sourceName": "TEST ONLY fixture", "sourceReference": "test://fixture", "lastVerified": "2026-09-10" } },
+    { "level": 3, "name": "Bosättare", "coinCost": 250,
+      "items": [
+        { "itemId": "minecraft:oak_log", "displayName": "Ekstock", "count": 5 },
+        { "itemId": null, "displayName": "Ullfärg", "count": 2, "distinctVariantsRequired": 2 }
+      ],
+      "unlockedBuildingName": "Bank",
+      "unlockedBuildingBonus": "Ränta",
+      "verification": { "status": "VERIFIED", "sourceName": "TEST ONLY fixture", "sourceReference": "test://fixture", "lastVerified": "2026-09-10" } }
+  ]
+}

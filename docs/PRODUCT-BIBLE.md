@@ -17,7 +17,7 @@ Minecraft servers with custom economies, claims, rules, and commands can be over
 ### Persona B: "The Builder & Organizer" (Byggaren)
 - **Profile**: An established player managing base chests, resources, and claims.
 - **Pain Points**: Forgetting in which chest specific materials were stored, calculating block requirements.
-- **How GZ Companion Helps**: The Kistor tab indexes "senast känt innehåll" (last known contents) for every chest, barrel, shulker box, hopper, dispenser, and dropper the player has personally opened — searchable by item, ID, or coordinates — plus future building planning tools. See [Chest Manager](CHEST-MANAGER.md).
+- **How GZ Companion Helps**: The Kistor tab indexes "senast känt innehåll" (last known contents) for every chest, barrel, shulker box, hopper, dispenser, and dropper the player has personally opened — searchable by item, ID, or coordinates. See [Chest Manager](CHEST-MANAGER.md). The Settlement tab builds on this with a local level/material planner against the full current settlement progression, optionally summing specific already-indexed chests into the material checklist. See [Settlement Companion](SETTLEMENT-COMPANION.md).
 
 ---
 

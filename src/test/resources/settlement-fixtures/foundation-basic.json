@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "foundation": {
+    "creationCommand": "/settlement create <namn>",
+    "creationCostCoins": 0,
+    "startLevel": 1,
+    "startLevelName": "Enstöring",
+    "renameCostCoins": 50000,
+    "categoryChangeCostCoins": 50000,
+    "note": "TEST ONLY fixture note.",
+    "verification": { "status": "VERIFIED", "sourceName": "TEST ONLY fixture", "sourceReference": "test://fixture", "lastVerified": "2026-09-10" }
+  },
+  "productionCategories": [
+    { "id": "gruvdrift", "displayName": "Gruvdrift", "description": "Test." },
+    { "id": "jordbruk", "displayName": "Jordbruk", "description": "Test." }
+  ],
+  "productionCategoriesVerification": { "status": "VERIFIED", "sourceName": "TEST ONLY fixture", "sourceReference": "test://fixture", "lastVerified": "2026-09-10" }
+}

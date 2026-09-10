@@ -18,6 +18,7 @@ import se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.HomeTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.KistorTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.PlaceholderTabComponent;
+import se.jimmyeliasson.gzcompanion.ui.tabs.SettlementTabComponent;
 
 /**
  * Main GZ Companion Screen interface.
@@ -30,6 +31,7 @@ public class GZCompanionMainScreen extends Screen {
     private final KistorTabComponent kistorTab = new KistorTabComponent();
     private final CommandsTabComponent commandsTab = new CommandsTabComponent();
     private final CraftingTabComponent craftingTab = new CraftingTabComponent();
+    private final SettlementTabComponent settlementTab = new SettlementTabComponent();
     private final PlaceholderTabComponent placeholderTab = new PlaceholderTabComponent();
 
     private MainScreenLayout layout;
@@ -142,6 +144,8 @@ public class GZCompanionMainScreen extends Screen {
             commandsTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else if (activeTab == TabType.CRAFTING) {
             craftingTab.render(extractor, font, contentRect, mouseX, mouseY, this);
+        } else if (activeTab == TabType.SETTLEMENT) {
+            settlementTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else {
             placeholderTab.render(extractor, font, contentRect, mouseX, mouseY, activeTab, this);
         }
@@ -199,6 +203,10 @@ public class GZCompanionMainScreen extends Screen {
                 if (craftingTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
                 }
+            } else if (activeTab == TabType.SETTLEMENT) {
+                if (settlementTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
+                    return true;
+                }
             } else {
                 if (placeholderTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
@@ -227,6 +235,10 @@ public class GZCompanionMainScreen extends Screen {
             if (craftingTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
+        } else if (activeTab == TabType.SETTLEMENT) {
+            if (settlementTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+                return true;
+            }
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
@@ -245,6 +257,9 @@ public class GZCompanionMainScreen extends Screen {
         }
         if (activeTab == TabType.CRAFTING) {
             return craftingTab;
+        }
+        if (activeTab == TabType.SETTLEMENT) {
+            return settlementTab;
         }
         return null;
     }

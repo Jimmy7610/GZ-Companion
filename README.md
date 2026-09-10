@@ -65,6 +65,17 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Never "Vanilla"**: Recipes read from your own recipe book are labeled "Tillgängligt Minecraft-recept" (client/server-synced), kept structurally and visually distinct from hand-verified GameZone Rule Pack facts.
 - **Zero Automation, Zero Runtime Network Access**: The GameZone Wiki is a build-time authoring source only — the shipped mod never fetches it, never crafts automatically, and never modifies or intercepts any recipe.
 
+### Milestone 5 — GameZone Adapter *(Implemented, pending human gameplay QA)*
+- **Read-Only Event Engine**: Observes chat messages the client already legitimately receives via Fabric's non-cancellable `ClientReceiveMessageEvents.GAME`/`CHAT` — never cancels, rewrites, hides, or responds to any message.
+- **Verified-Only Parser Activation**: A parser can only ever activate when it is both `enabled` AND carries a fully verified source — "better inactive than false-positive." No GameZone chat pattern is guessed; the bundled Rule Pack ships with zero active parsers today, honestly reported as "engine ready, pattern awaiting live verification."
+- **Local Toast Notifications**: A small, dedupe-windowed, settings-gated toast queue for future verified events (settlement invites, system messages) — no sound spam, no persistent chat history, never logs raw message text.
+
+### Milestone 6 — Settlement Companion *(Implemented, pending human gameplay QA)*
+- **Full Current Progression**: All 50 levels / 49 upgrades of the current "Settlement Levels 1.0" engine, sourced from the official GameZone Wiki — the obsolete 15-level model is never used. See [Settlement Companion](docs/SETTLEMENT-COMPANION.md).
+- **Local Level Planner**: Choose a current and target level locally ("Planerad nuvarande nivå" — never claimed as your server-observed level) and see the aggregated Coins, materials, and building prerequisites between them.
+- **Material Checklist with Optional Chest Estimate**: Track owned amounts manually, or opt in to summing specific already-indexed Chest Manager containers — always labeled "Lokalt estimat från senast känt innehåll," never presented as the server's real settlement inventory.
+- **Local Member Organizer**: Purely local "Lokala anteckningar" about settlement members — never the live server roster, never scraped, never chat history.
+
 ---
 
 ## 🚀 Building from Source

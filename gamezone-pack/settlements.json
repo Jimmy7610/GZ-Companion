@@ -1,10 +1,24 @@
 {
-  "schemaVersion": "1.0.0",
-  "description": "Schema definition and placeholder for GameZone settlement progression rules.",
-  "rules": {
-    "creationCost": 0,
-    "maxMembersInitial": 5,
-    "claimBlockCost": 0
+  "schemaVersion": 1,
+  "description": "GameZone settlement foundation facts (creation, production categories, rename/category cost) - independent of the 50-level progression in settlement-levels.json.",
+  "foundation": {
+    "creationCommand": "/settlement create <namn>",
+    "creationCostCoins": 0,
+    "startLevel": 1,
+    "startLevelName": "Enstöring",
+    "renameCostCoins": 50000,
+    "categoryChangeCostCoins": 50000,
+    "note": "Grundaren blir automatiskt King. Endast resurser inom settlementets valda produktionskategori ger Coins från produktion.",
+    "verification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Skapa ett settlement", "sourceReference": "https://www.gamezonemc.se/wiki/settlements/skapa-ett-settlement", "lastVerified": "2026-09-10" }
   },
-  "settlements": []
+  "productionCategories": [
+    { "id": "gruvdrift", "displayName": "Gruvdrift", "description": "Mineraler, malm och skatter." },
+    { "id": "jordbruk", "displayName": "Jordbruk", "description": "Grödor, odling och skörd." },
+    { "id": "boskap", "displayName": "Boskap", "description": "Djurhållning, kött, ull, läder och ägg." },
+    { "id": "skogsbruk", "displayName": "Skogsbruk", "description": "Träd, stockar och träresurser." },
+    { "id": "byggmaterial", "displayName": "Byggmaterial", "description": "Förädlade block och byggresurser." },
+    { "id": "fiske", "displayName": "Fiske", "description": "Fisk och resurser från fiske." },
+    { "id": "alkemi", "displayName": "Alkemi", "description": "Bryggning och alkemiska resurser." }
+  ],
+  "productionCategoriesVerification": { "status": "VERIFIED", "sourceName": "GameZone Wiki — Produktion", "sourceReference": "https://www.gamezonemc.se/wiki/categories", "lastVerified": "2026-09-10" }
 }

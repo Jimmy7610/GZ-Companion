@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "levels": [
+    { "level": 1, "name": "Enstöring", "coinCost": 0, "items": [] },
+    { "name": "Nivå utan nummer", "coinCost": 50 },
+    { "level": 1, "name": "Dubblerad nivå 1", "coinCost": 999 },
+    { "level": 2, "name": "Nybyggare", "coinCost": 100, "items": [] }
+  ]
+}

@@ -20,6 +20,10 @@ public class FeatureManager {
     private Supplier<KnowledgeModuleStatus> commandCatalogStatusSupplier = () -> KnowledgeModuleStatus.UNAVAILABLE;
     private Supplier<KnowledgeModuleStatus> craftingKnowledgeStatusSupplier = () -> KnowledgeModuleStatus.UNAVAILABLE;
     private Supplier<KnowledgeModuleStatus> itemKnowledgeStatusSupplier = () -> KnowledgeModuleStatus.UNAVAILABLE;
+    private Supplier<KnowledgeModuleStatus> settlementKnowledgeStatusSupplier = () -> KnowledgeModuleStatus.UNAVAILABLE;
+    private Supplier<KnowledgeModuleStatus> buildingKnowledgeStatusSupplier = () -> KnowledgeModuleStatus.UNAVAILABLE;
+    private Supplier<KnowledgeModuleStatus> marketWatchKnowledgeStatusSupplier = () -> KnowledgeModuleStatus.UNAVAILABLE;
+    private Supplier<Boolean> settingsStatusSupplier = () -> Boolean.FALSE;
 
     public FeatureManager() {
         resetToDefaults();
@@ -88,6 +92,46 @@ public class FeatureManager {
         return itemKnowledgeStatusSupplier != null ? itemKnowledgeStatusSupplier.get() : KnowledgeModuleStatus.UNAVAILABLE;
     }
 
+    public void setSettlementKnowledgeStatusSupplier(Supplier<KnowledgeModuleStatus> supplier) {
+        if (supplier != null) {
+            this.settlementKnowledgeStatusSupplier = supplier;
+        }
+    }
+
+    public KnowledgeModuleStatus getSettlementKnowledgeStatus() {
+        return settlementKnowledgeStatusSupplier != null ? settlementKnowledgeStatusSupplier.get() : KnowledgeModuleStatus.UNAVAILABLE;
+    }
+
+    public void setBuildingKnowledgeStatusSupplier(Supplier<KnowledgeModuleStatus> supplier) {
+        if (supplier != null) {
+            this.buildingKnowledgeStatusSupplier = supplier;
+        }
+    }
+
+    public KnowledgeModuleStatus getBuildingKnowledgeStatus() {
+        return buildingKnowledgeStatusSupplier != null ? buildingKnowledgeStatusSupplier.get() : KnowledgeModuleStatus.UNAVAILABLE;
+    }
+
+    public void setMarketWatchKnowledgeStatusSupplier(Supplier<KnowledgeModuleStatus> supplier) {
+        if (supplier != null) {
+            this.marketWatchKnowledgeStatusSupplier = supplier;
+        }
+    }
+
+    public KnowledgeModuleStatus getMarketWatchKnowledgeStatus() {
+        return marketWatchKnowledgeStatusSupplier != null ? marketWatchKnowledgeStatusSupplier.get() : KnowledgeModuleStatus.UNAVAILABLE;
+    }
+
+    public void setSettingsStatusSupplier(Supplier<Boolean> supplier) {
+        if (supplier != null) {
+            this.settingsStatusSupplier = supplier;
+        }
+    }
+
+    public boolean getSettingsStatus() {
+        return settingsStatusSupplier != null && Boolean.TRUE.equals(settingsStatusSupplier.get());
+    }
+
     public void setFeatureState(FeatureFlag flag, boolean enabled) {
         if (flag != null) {
             flagStates.put(flag, enabled);
@@ -123,11 +167,11 @@ public class FeatureManager {
             case CRAFTING -> (getCraftingKnowledgeStatus().isAvailable() || getItemKnowledgeStatus().isAvailable())
                     ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case KISTOR -> getChestManagerStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
-            case SETTLEMENT -> ModuleStatus.COMING_SOON;
-            case BYGGPLANER -> ModuleStatus.COMING_SOON;
-            case MARKETWATCH -> ModuleStatus.COMING_SOON;
+            case SETTLEMENT -> getSettlementKnowledgeStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
+            case BYGGPLANER -> getBuildingKnowledgeStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
+            case MARKETWATCH -> getMarketWatchKnowledgeStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case KOMMANDON -> getCommandCatalogStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
-            case INSTALLNINGAR -> ModuleStatus.COMING_SOON;
+            case INSTALLNINGAR -> getSettingsStatus() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
         };
     }
 }

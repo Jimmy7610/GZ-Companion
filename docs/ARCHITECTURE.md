@@ -49,7 +49,14 @@ se.jimmyeliasson.gzcompanion
 │   │   ├── CraftingKnowledgeBase.java, CraftingKnowledgeLoader.java  # crafting-overrides.json
 │   │   ├── ClientRecipeSnapshot.java  # runtime-observed, NEVER "Vanilla", no VerificationMetadata
 │   │   └── bridge/MinecraftRecipeDisplayAdapter.java  # ONLY place touching MC recipe/item classes
-│   └── items/                    # ItemKnowledgeBase, ItemKnowledgeLoader (item-overrides.json - relics)
+│   ├── items/                    # ItemKnowledgeBase, ItemKnowledgeLoader (item-overrides.json - relics)
+│   └── settlement/                # M6: SettlementCatalog, SettlementKnowledgeLoader (see SETTLEMENT-COMPANION.md)
+├── settlement/                    # M6: local settlement planner state (see SETTLEMENT-COMPANION.md)
+│   ├── SettlementPlannerManager.java # Runtime coordinator, mirrors ChestManager's fail-closed pattern
+│   └── storage/                  # JsonSettlementPlannerStore & settlement-planner.json schema
+├── gamezone/events/, gamezone/parsing/, gamezone/toast/, gamezone/bridge/  # M5: read-only GameZone
+│   │                              # event engine (see GAMEZONE-ADAPTER.md) - chat is only ever observed,
+│   │                              # never cancelled/rewritten/answered
 ├── diagnostics/
 │   ├── CompatibilityStatus.java  # Semantic status codes & colors
 │   ├── ModuleReport.java         # Per-module diagnostic record
@@ -72,6 +79,7 @@ se.jimmyeliasson.gzcompanion
         ├── KistorTabComponent.java # Searchable 2-pane Chest Manager tab
         ├── CommandsTabComponent.java # Searchable Kommandon tab (implements TextInputHandler)
         ├── CraftingTabComponent.java # Crafting tab: recipes + GameZone items (implements TextInputHandler)
+        ├── SettlementTabComponent.java # M6: Översikt/Progression/Material/Medlemmar (implements TextInputHandler)
         └── PlaceholderTabComponent.java # Placeholder sections
 ```
 
