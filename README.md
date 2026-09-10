@@ -58,7 +58,7 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Explicit `StorageShape`**: Single, double, or unknown-shape chests are shown honestly and distinctly — never guessed.
 - **Context & Dimension Isolated**: Reuses the Guide Engine's world/server identity rules; the same coordinates in a different world, server, or dimension are always separate entries.
 
-### Milestone 4 — GameZone Knowledge Base *(pending human gameplay QA)*
+### Milestone 4 — GameZone Knowledge Base *(Completed — confirmed via human gameplay QA)*
 - **Kommandon Tab**: A searchable, category-filtered catalog of GameZone commands sourced from the official GameZone Wiki, each with a verification badge and a "Kopiera kommando" clipboard action — never auto-sent, never auto-typed into chat.
 - **Crafting Tab**: Legitimately-unlocked client/server-synced crafting-table recipes read from your own Minecraft recipe book, shown alongside any documented GameZone crafting overrides (none exist on the wiki today) and the 50-relic GameZone item registry — switchable via an Alla/Recept/GameZone-föremål filter.
 - **Explicit Verification Model**: Every GameZone fact carries a `VerificationStatus` (Verifierad/Overifierad/Inaktuell/Okänd) plus its exact source page and the date it was checked — see [Knowledge Base](docs/KNOWLEDGE-BASE.md) for the full sourcing policy.

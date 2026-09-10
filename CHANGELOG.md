@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - Milestone 4 confirmed complete via human gameplay QA - 2026-09-10
+
+### Changed
+- Milestone 4 (GameZone Knowledge Base) marked **Completed** after human gameplay QA confirmed: Home shows Crafting/Kommandon as Aktiv, all 107 verified commands load and are searchable, typing "g" in command search does not close Companion, command detail shows the verification/source/date trail, "Kopiera kommando" copies without executing, Crafting shows legitimate client recipe-book data and all 50 verified relics, crafting-table recipes render with real item icons (multi-alternative "+" included), and relic detail shows tier/culture/serial/base item/enchants with its own verification trail.
+
 ## [Unreleased] - Milestone 4: GameZone Knowledge Base - 2026-09-10
 
 ### Added
