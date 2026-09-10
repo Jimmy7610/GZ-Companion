@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "parsers": [
+    { "id": "bad-event", "eventType": "TOTALLY_MADE_UP", "matchType": "CONTAINS", "pattern": "x", "enabled": true },
+    { "id": "bad-match", "eventType": "WHISPER", "matchType": "TOTALLY_MADE_UP", "pattern": "x", "enabled": true },
+    { "id": "good", "eventType": "WHISPER", "matchType": "CONTAINS", "pattern": "x", "enabled": true }
+  ]
+}

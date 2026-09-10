@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
-  "description": "Schema definition and placeholder for chat and event parser rules. Requires live verification against actual server messages before activation.",
+  "schemaVersion": 1,
+  "description": "GameZone chat/event parser rules for the M5 event engine. Intentionally ships with zero entries: no canonical GameZone source publishes the exact incoming chat/system text for settlement invites, whispers, balance changes, or other system messages. The engine itself is fully implemented and ready - a parser is only ever activated when it is both explicitly enabled AND carries VerificationStatus.VERIFIED (see GameZoneParserDefinition.isActive()), so 'better inactive than false-positive' holds even if this file is edited by hand later. Add entries here once the exact server-sent text for an event has been observed and can be cited against an official source.",
   "parsers": []
 }

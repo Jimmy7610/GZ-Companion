@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "parsers": [
+    { "id": "p1", "eventType": "WHISPER", "matchType": "REGEX", "pattern": "[unterminated(", "enabled": true }
+  ]
+}

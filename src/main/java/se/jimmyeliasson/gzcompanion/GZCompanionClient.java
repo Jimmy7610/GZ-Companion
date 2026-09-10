@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import se.jimmyeliasson.gzcompanion.chest.bridge.ChestCaptureController;
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
+import se.jimmyeliasson.gzcompanion.gamezone.bridge.GameZoneToastHudElement;
 import se.jimmyeliasson.gzcompanion.guide.GuideScheduler;
 import se.jimmyeliasson.gzcompanion.keybind.KeybindHandler;
 
@@ -52,6 +53,15 @@ public class GZCompanionClient implements ClientModInitializer {
         LOGGER.info("GameZone-föremål: {} ({} föremål)",
                 session.getItemKnowledgeStatus().getDisplayName(),
                 session.getItemKnowledgeBase().size());
+
+        // 6. Register the read-only GameZone chat/event observer and its local toast HUD element.
+        // Only ever listens via the non-cancellable ClientReceiveMessageEvents.GAME/CHAT - never
+        // ALLOW_GAME/ALLOW_CHAT - so it can observe but never cancel, rewrite, or hide a message.
+        session.getChatObserver().register();
+        new GameZoneToastHudElement(session.getToastManager()).register();
+        LOGGER.info("GameZone-händelsemotor: {} ({} verifierade parsrar)",
+                session.getParserCatalogStatus().getDisplayName(),
+                session.getParserCatalog().activeCount());
 
         LOGGER.info("{} initialized successfully.", CompanionConstants.MOD_NAME);
     }

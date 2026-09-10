@@ -8,6 +8,10 @@ import se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityResult;
 import se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityService;
 import se.jimmyeliasson.gzcompanion.gamezone.RulePack;
 import se.jimmyeliasson.gzcompanion.gamezone.RulePackLoader;
+import se.jimmyeliasson.gzcompanion.gamezone.bridge.GameZoneChatObserver;
+import se.jimmyeliasson.gzcompanion.gamezone.parsing.GameZoneParserCatalog;
+import se.jimmyeliasson.gzcompanion.gamezone.parsing.GameZoneParserLoader;
+import se.jimmyeliasson.gzcompanion.gamezone.toast.GameZoneToastManager;
 import se.jimmyeliasson.gzcompanion.guide.GuideEngine;
 import se.jimmyeliasson.gzcompanion.guide.GuideLoader;
 import se.jimmyeliasson.gzcompanion.guide.bridge.MinecraftGuideSnapshotProvider;
@@ -51,6 +55,11 @@ public class CompanionSession {
     private ItemKnowledgeBase itemKnowledgeBase = ItemKnowledgeBase.empty();
     private KnowledgeModuleStatus itemKnowledgeStatus = KnowledgeModuleStatus.UNAVAILABLE;
 
+    private GameZoneParserCatalog parserCatalog = GameZoneParserCatalog.empty();
+    private KnowledgeModuleStatus parserCatalogStatus = KnowledgeModuleStatus.UNAVAILABLE;
+    private final GameZoneToastManager toastManager = new GameZoneToastManager();
+    private final GameZoneChatObserver chatObserver = new GameZoneChatObserver(() -> parserCatalog, toastManager);
+
     private CompanionSession() {
         this.bridge = new VanillaMinecraftBridge();
         this.featureManager = new FeatureManager();
@@ -91,7 +100,20 @@ public class CompanionSession {
         featureManager.setCraftingKnowledgeStatusSupplier(() -> craftingKnowledgeStatus);
         featureManager.setItemKnowledgeStatusSupplier(() -> itemKnowledgeStatus);
 
+        loadParserCatalog();
+
         refreshCompatibility();
+    }
+
+    private void loadParserCatalog() {
+        try {
+            KnowledgeLoadResult<GameZoneParserCatalog> result = new GameZoneParserLoader().load();
+            this.parserCatalog = result.data() != null ? result.data() : GameZoneParserCatalog.empty();
+            this.parserCatalogStatus = toModuleStatus(result.outcome());
+        } catch (Exception e) {
+            this.parserCatalog = GameZoneParserCatalog.empty();
+            this.parserCatalogStatus = KnowledgeModuleStatus.ERROR;
+        }
     }
 
     /**
@@ -199,6 +221,22 @@ public class CompanionSession {
 
     public KnowledgeModuleStatus getItemKnowledgeStatus() {
         return itemKnowledgeStatus;
+    }
+
+    public GameZoneParserCatalog getParserCatalog() {
+        return parserCatalog;
+    }
+
+    public KnowledgeModuleStatus getParserCatalogStatus() {
+        return parserCatalogStatus;
+    }
+
+    public GameZoneToastManager getToastManager() {
+        return toastManager;
+    }
+
+    public GameZoneChatObserver getChatObserver() {
+        return chatObserver;
     }
 
     /**

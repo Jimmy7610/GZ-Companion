@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "parsers": [
+    { "id": "p1", "eventType": "WHISPER", "matchType": "CONTAINS", "pattern": "TEST ONLY", "enabled": true,
+      "verification": { "status": "VERIFIED", "sourceName": "TEST ONLY fixture", "sourceReference": "test://fixture", "lastVerified": "2026-09-10" } }
+  ]
+}

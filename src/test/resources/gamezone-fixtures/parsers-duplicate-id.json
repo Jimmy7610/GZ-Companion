@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "parsers": [
+    { "id": "dup", "eventType": "WHISPER", "matchType": "CONTAINS", "pattern": "first", "enabled": true },
+    { "id": "dup", "eventType": "WHISPER", "matchType": "CONTAINS", "pattern": "second", "enabled": true }
+  ]
+}
