@@ -927,6 +927,15 @@ public class CraftingTabComponent implements TextInputHandler {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (layout == null) return false;
 
+        // In compact mode, listRect() and detailRect() are the SAME rectangle (only one pane is
+        // rendered at a time), so a plain rect-containment check below would always resolve to
+        // the list branch even while the detail pane is the one actually showing - silently
+        // eating every scroll event meant for the detail pane. Route explicitly on
+        // compactShowingDetail first so the two panes are never aliased.
+        if (layout.isCompact() && compactShowingDetail) {
+            return layout.detailRect().contains(mouseX, mouseY) && scrollDetail(scrollY);
+        }
+
         if (layout.listRect().contains(mouseX, mouseY)) {
             CompanionSession session = CompanionSession.getInstance();
             CraftingKnowledgeBase craftingBase = session.getCraftingKnowledgeStatus().isAvailable() ? session.getCraftingKnowledgeBase() : null;
@@ -937,18 +946,37 @@ public class CraftingTabComponent implements TextInputHandler {
             return true;
         }
 
-        if (layout.detailRect().contains(mouseX, mouseY) && selectedEntryId != null) {
-            CompanionSession session = CompanionSession.getInstance();
-            CraftingKnowledgeBase craftingBase = session.getCraftingKnowledgeStatus().isAvailable() ? session.getCraftingKnowledgeBase() : null;
-            ItemKnowledgeBase itemBase = session.getItemKnowledgeStatus().isAvailable() ? session.getItemKnowledgeBase() : null;
-            Font font = Minecraft.getInstance().font;
-            UiRect contentArea = computeDetailContentArea(layout.detailRect(), layout.isCompact());
-            int maxScroll = calculateDetailMaxScroll(font, contentArea, craftingBase, itemBase);
-            this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset - (int) (scrollY * 14), maxScroll));
-            return true;
+        if (layout.detailRect().contains(mouseX, mouseY)) {
+            return scrollDetail(scrollY);
         }
 
         return false;
+    }
+
+    private boolean scrollDetail(double scrollY) {
+        if (selectedEntryId == null) return false;
+        CompanionSession session = CompanionSession.getInstance();
+        CraftingKnowledgeBase craftingBase = session.getCraftingKnowledgeStatus().isAvailable() ? session.getCraftingKnowledgeBase() : null;
+        ItemKnowledgeBase itemBase = session.getItemKnowledgeStatus().isAvailable() ? session.getItemKnowledgeBase() : null;
+        Font font = Minecraft.getInstance().font;
+        UiRect contentArea = computeDetailContentArea(layout.detailRect(), layout.isCompact());
+        int maxScroll = calculateDetailMaxScroll(font, contentArea, craftingBase, itemBase);
+        this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset - (int) (scrollY * 14), maxScroll));
+        return true;
+    }
+
+    /**
+     * Test-only: drives the compact list/detail scroll-routing state directly, since {@link #layout}
+     * is otherwise only ever set inside the render path, which needs a live Font.
+     */
+    void setCompactStateForTesting(UiRect bounds, boolean compactShowingDetail, String selectedEntryId) {
+        this.layout = CraftingLayout.calculate(bounds);
+        this.compactShowingDetail = compactShowingDetail;
+        this.selectedEntryId = selectedEntryId;
+    }
+
+    int listScrollOffsetForTesting() {
+        return listScrollOffset;
     }
 
     @Override

@@ -30,6 +30,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.ToIntFunction;
 
 /**
  * Renders the MarketWatch tab: an always-available offline reference to the verified GameZone
@@ -70,11 +71,13 @@ public class MarketWatchTabComponent implements TextInputHandler {
     }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
-        renderContent(extractor, font, bounds, mouseX, mouseY, mainScreen);
         // MarketWatch is GameZone-specific reference/notes data - show a small, unobtrusive note
         // when the current server/world isn't GameZoneMC, so the verified system facts and local
-        // notes are never mistaken for the current server's actual live market state.
-        if (!CompanionSession.getInstance().isConnectedToGameZone()) {
+        // notes are never mistaken for the current server's actual live market state. The layout
+        // must RESERVE this strip rather than let the banner overlay live content.
+        boolean showReferenceBanner = !CompanionSession.getInstance().isConnectedToGameZone();
+        renderContent(extractor, font, ReferenceModeBanner.reserveBottomSpace(bounds, showReferenceBanner), mouseX, mouseY, mainScreen);
+        if (showReferenceBanner) {
             ReferenceModeBanner.renderAtBottom(extractor, font, bounds);
         }
     }
@@ -136,11 +139,18 @@ public class MarketWatchTabComponent implements TextInputHandler {
         int categoryCount = session.getSettlementCatalogStatus().isAvailable()
                 ? session.getSettlementCatalog().productionCategories().size() : info.categoryCount();
         String metaLine = info.command() + " · " + categoryCount + " kategorier";
-        TextUtil.drawScaledEllipsizedText(extractor, font, metaLine, x, y, maxW - 74, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
 
-        UiRect copyBtn = new UiRect(card.right() - 74, y - 1, 70, 11);
+        // The button used to be a hardcoded 70px wide regardless of the command text, which
+        // truncated "Kopiera /marketwatch" to "Kopiera /mark...". Size it to the actual text
+        // instead, and let the meta line's own ellipsis absorb whatever space is left.
+        String copyLabel = "Kopiera " + info.command();
+        int copyBtnW = Math.min(maxW - 10, widestButtonWidth(s -> TextUtil.scaledWidth(font, s, TypographyScale.META.getScale()), 10, copyLabel));
+        UiRect copyBtn = new UiRect(card.right() - 4 - copyBtnW, y - 1, copyBtnW, 11);
         boolean hov = copyBtn.contains(mouseX, mouseY);
-        GZTheme.drawButton(extractor, font, copyBtn, "Kopiera " + info.command(), false, hov, TypographyScale.META.getScale());
+
+        TextUtil.drawScaledEllipsizedText(extractor, font, metaLine, x, y, Math.max(10, (copyBtn.x() - 2) - x),
+                TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        GZTheme.drawButton(extractor, font, copyBtn, copyLabel, false, hov, TypographyScale.META.getScale());
         String command = info.command();
         hitTargets.add(new ListRowHit(copyBtn, () -> copyToClipboard(command)));
 
@@ -291,6 +301,28 @@ public class MarketWatchTabComponent implements TextInputHandler {
         return Math.max(0, (rowCount * rowH) - Math.max(1, visibleH));
     }
 
+    /**
+     * The exact two-step delete label - extracted so the confirmation wording is directly
+     * testable without a live Font/render pass.
+     */
+    static String deleteButtonLabel(boolean pendingConfirm) {
+        return pendingConfirm ? "Säker?" : "Ta bort";
+    }
+
+    /**
+     * Computes a button width that actually fits its widest possible label, rather than a
+     * hardcoded pixel width that truncates as soon as real text (a command, a longer label)
+     * exceeds it. {@code textWidthMeasurer} is injected so this stays testable without a live
+     * Minecraft {@code Font}.
+     */
+    static int widestButtonWidth(ToIntFunction<String> textWidthMeasurer, int padding, String... labels) {
+        int widest = 0;
+        for (String label : labels) {
+            widest = Math.max(widest, textWidthMeasurer.applyAsInt(label));
+        }
+        return widest + padding;
+    }
+
     private void renderNotesList(GuiGraphicsExtractor extractor, Font font, CompanionSession session, int mouseX, int mouseY) {
         UiRect listRect = layout.listRect();
         GZTheme.drawCard(extractor, listRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
@@ -359,17 +391,28 @@ public class MarketWatchTabComponent implements TextInputHandler {
         TextUtil.drawScaledEllipsizedText(extractor, font, note.note(), x + 2 + iconOffset, y + 12, maxW - 20 - iconOffset,
                 TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
 
+        boolean pendingConfirm = noteId.equals(pendingDeleteId) && (now - pendingDeleteAtMs) < 3000L;
+        String deleteLabel = deleteButtonLabel(pendingConfirm);
+
+        // Both buttons used to be a hardcoded 34px, which truncated "Ta bort" to "Ta bo...".
+        // Size each to whichever of its possible labels is widest ("Säker?" vs "Ta bort" for the
+        // delete button) so the two-step confirmation never shifts the row layout mid-flow.
+        ToIntFunction<String> measure = s -> TextUtil.scaledWidth(font, s, TypographyScale.META.getScale());
+        int deleteBtnW = Math.max(34, widestButtonWidth(measure, 8, "Ta bort", "Säker?"));
+        int editBtnW = Math.max(34, widestButtonWidth(measure, 8, "Ändra"));
+
+        UiRect deleteBtn = new UiRect(x + maxW - deleteBtnW, y + 20, deleteBtnW, 10);
+        UiRect editBtn = new UiRect(deleteBtn.x() - 2 - editBtnW, y + 20, editBtnW, 10);
+
         String lastObserved = note.lastObservedAtMs() > 0
                 ? "Senast sett: " + DATE_FORMAT.format(Instant.ofEpochMilli(note.lastObservedAtMs()).atZone(ZoneId.systemDefault()))
                 : "Senast sett: aldrig";
-        TextUtil.drawScaledEllipsizedText(extractor, font, lastObserved, x + 2 + iconOffset, y + 21, maxW - 90 - iconOffset,
+        int lastObservedMaxW = Math.max(10, (editBtn.x() - 2) - (x + 2 + iconOffset));
+        TextUtil.drawScaledEllipsizedText(extractor, font, lastObserved, x + 2 + iconOffset, y + 21, lastObservedMaxW,
                 TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
 
-        boolean pendingConfirm = noteId.equals(pendingDeleteId) && (now - pendingDeleteAtMs) < 3000L;
-        UiRect editBtn = new UiRect(x + maxW - 70, y + 20, 34, 10);
-        UiRect deleteBtn = new UiRect(x + maxW - 34, y + 20, 34, 10);
         GZTheme.drawButton(extractor, font, editBtn, "Ändra", false, editBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
-        GZTheme.drawButton(extractor, font, deleteBtn, pendingConfirm ? "Säker?" : "Ta bort", false, deleteBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+        GZTheme.drawButton(extractor, font, deleteBtn, deleteLabel, false, deleteBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
 
         hitTargets.add(new ListRowHit(editBtn, () -> {
             editing = true;

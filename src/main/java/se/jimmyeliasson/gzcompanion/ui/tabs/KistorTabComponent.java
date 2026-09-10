@@ -599,6 +599,14 @@ public class KistorTabComponent implements TextInputHandler {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (layout == null) return false;
 
+        // In compact mode, listRect() and detailRect() are the SAME rectangle (only one pane is
+        // rendered at a time), so checking listRect() first would always win and silently eat
+        // every scroll event meant for the detail pane. Route explicitly on compactShowingDetail
+        // first so the two panes are never aliased.
+        if (layout.isCompact() && compactShowingDetail) {
+            return layout.detailRect().contains(mouseX, mouseY) && scrollDetail(scrollY);
+        }
+
         if (layout.listRect().contains(mouseX, mouseY)) {
             CompanionSession session = CompanionSession.getInstance();
             ChestManager manager = session.getChestManager();
@@ -608,22 +616,40 @@ public class KistorTabComponent implements TextInputHandler {
             return true;
         }
 
-        if (layout.detailRect().contains(mouseX, mouseY) && selectedId != null) {
-            CompanionSession session = CompanionSession.getInstance();
-            ChestManager manager = session.getChestManager();
-            String contextKey = session.getCurrentStorageContext();
-            StoredContainer container = manager != null ? manager.getContainer(contextKey, selectedId).orElse(null) : null;
-            if (container != null) {
-                Font font = Minecraft.getInstance().font;
-                int contentTop = layout.detailRect().y() + (layout.isCompact() ? 16 : 4);
-                UiRect contentArea = new UiRect(layout.detailRect().x() + 1, contentTop, layout.detailRect().width() - 2, layout.detailRect().bottom() - contentTop - 1);
-                int maxScroll = calculateMaxDetailScroll(font, contentArea, container);
-                this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset - (int) (scrollY * 14), maxScroll));
-                return true;
-            }
+        if (layout.detailRect().contains(mouseX, mouseY)) {
+            return scrollDetail(scrollY);
         }
 
         return false;
+    }
+
+    private boolean scrollDetail(double scrollY) {
+        if (selectedId == null) return false;
+        CompanionSession session = CompanionSession.getInstance();
+        ChestManager manager = session.getChestManager();
+        String contextKey = session.getCurrentStorageContext();
+        StoredContainer container = manager != null ? manager.getContainer(contextKey, selectedId).orElse(null) : null;
+        if (container == null) return false;
+        Font font = Minecraft.getInstance().font;
+        int contentTop = layout.detailRect().y() + (layout.isCompact() ? 16 : 4);
+        UiRect contentArea = new UiRect(layout.detailRect().x() + 1, contentTop, layout.detailRect().width() - 2, layout.detailRect().bottom() - contentTop - 1);
+        int maxScroll = calculateMaxDetailScroll(font, contentArea, container);
+        this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset - (int) (scrollY * 14), maxScroll));
+        return true;
+    }
+
+    /**
+     * Test-only: drives the compact list/detail scroll-routing state directly, since {@link #layout}
+     * is otherwise only ever set inside the render path, which needs a live Font.
+     */
+    void setCompactStateForTesting(UiRect bounds, boolean compactShowingDetail, StoredContainerId selectedId) {
+        this.layout = KistorLayout.calculate(bounds);
+        this.compactShowingDetail = compactShowingDetail;
+        this.selectedId = selectedId;
+    }
+
+    int listScrollOffsetForTesting() {
+        return listScrollOffset;
     }
 
     public boolean charTyped(CharacterEvent event) {

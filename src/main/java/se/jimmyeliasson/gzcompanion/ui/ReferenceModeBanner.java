@@ -19,6 +19,19 @@ public final class ReferenceModeBanner {
 
     private ReferenceModeBanner() {}
 
+    /**
+     * Shrinks {@code bounds} by this banner's height when it will be shown, so a tab's own
+     * layout - computed against the returned rect - never extends underneath the strip
+     * {@link #renderAtBottom} draws over the original {@code bounds}. Human QA found the banner
+     * drawn straight over live content (e.g. Byggplaner's "Bonus" line) because layout was
+     * calculated against the full tab bounds while the banner then painted over its last 10px.
+     * Returns {@code bounds} unchanged when the banner won't be shown.
+     */
+    public static UiRect reserveBottomSpace(UiRect bounds, boolean showBanner) {
+        if (!showBanner) return bounds;
+        return new UiRect(bounds.x(), bounds.y(), bounds.width(), Math.max(0, bounds.height() - HEIGHT));
+    }
+
     /** Draws a thin floating strip pinned to the bottom of {@code bounds}. Purely informational - no click target. */
     public static void renderAtBottom(GuiGraphicsExtractor extractor, Font font, UiRect bounds) {
         int y = bounds.bottom() - HEIGHT;

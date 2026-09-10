@@ -58,12 +58,13 @@ public class CommandsTabComponent implements TextInputHandler {
     }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
-        renderContent(extractor, font, bounds, mouseX, mouseY, mainScreen);
         // Kommandon is GameZone-specific reference data - show a small, unobtrusive note when the
         // current server/world isn't GameZoneMC itself, so the catalog is never mistaken for a
-        // live confirmation of the current server's commands. Drawn last, after everything else,
-        // so it never disturbs any existing layout/scroll math above.
-        if (!CompanionSession.getInstance().isConnectedToGameZone()) {
+        // live confirmation of the current server's commands. The layout must RESERVE this strip
+        // rather than let the banner overlay live content.
+        boolean showReferenceBanner = !CompanionSession.getInstance().isConnectedToGameZone();
+        renderContent(extractor, font, ReferenceModeBanner.reserveBottomSpace(bounds, showReferenceBanner), mouseX, mouseY, mainScreen);
+        if (showReferenceBanner) {
             ReferenceModeBanner.renderAtBottom(extractor, font, bounds);
         }
     }

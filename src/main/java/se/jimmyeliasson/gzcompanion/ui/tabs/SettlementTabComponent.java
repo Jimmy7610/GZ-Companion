@@ -97,11 +97,13 @@ public class SettlementTabComponent implements TextInputHandler {
     }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
-        renderContent(extractor, font, bounds, mouseX, mouseY, mainScreen);
         // Settlement is GameZone-specific reference/planning data - show a small, unobtrusive note
         // when the current server/world isn't GameZoneMC, so its verified facts and local plans
-        // are never mistaken for the current server's actual state.
-        if (!CompanionSession.getInstance().isConnectedToGameZone()) {
+        // are never mistaken for the current server's actual state. The layout must RESERVE this
+        // strip rather than let the banner overlay live content.
+        boolean showReferenceBanner = !CompanionSession.getInstance().isConnectedToGameZone();
+        renderContent(extractor, font, ReferenceModeBanner.reserveBottomSpace(bounds, showReferenceBanner), mouseX, mouseY, mainScreen);
+        if (showReferenceBanner) {
             ReferenceModeBanner.renderAtBottom(extractor, font, bounds);
         }
     }
@@ -245,13 +247,13 @@ public class SettlementTabComponent implements TextInputHandler {
 
         if (layout.isCompact()) {
             if (compactShowingDetail) {
-                renderProgressionDetail(extractor, font, layout.detailRect(), catalog, planner, contextKey, mouseX, mouseY, true);
+                renderProgressionDetail(extractor, font, layout.detailRect(), catalog, planner, profile, contextKey, mouseX, mouseY, true);
             } else {
                 renderProgressionList(extractor, font, layout.listRect(), levels, mouseX, mouseY);
             }
         } else {
             renderProgressionList(extractor, font, layout.listRect(), levels, mouseX, mouseY);
-            renderProgressionDetail(extractor, font, layout.detailRect(), catalog, planner, contextKey, mouseX, mouseY, false);
+            renderProgressionDetail(extractor, font, layout.detailRect(), catalog, planner, profile, contextKey, mouseX, mouseY, false);
         }
     }
 
@@ -295,10 +297,15 @@ public class SettlementTabComponent implements TextInputHandler {
         extractor.disableScissor();
     }
 
-    private int estimateLevelDetailHeight(SettlementLevel level) {
+    private static final int UNLOCK_TEXT_MAX_LINES = 3;
+
+    private int estimateLevelDetailHeight(Font font, int maxW, SettlementLevel level) {
         int h = 11 + 10; // heading + coin cost
         if (level.requiredBuildingName() != null) h += 10;
-        if (level.unlockedBuildingName() != null) h += 10;
+        if (level.unlockedBuildingName() != null) {
+            h += TextUtil.measureWrappedHeightCapped(font, unlockedBuildingLine(level), maxW,
+                    TypographyScale.SMALL.getScale(), UNLOCK_TEXT_MAX_LINES, 1) + 2;
+        }
         h += 10; // "MATERIAL" label
         h += level.items().size() * 12;
         h += 6;
@@ -306,8 +313,40 @@ public class SettlementTabComponent implements TextInputHandler {
         return h;
     }
 
+    /**
+     * "Låser upp: ..." is important gameplay information (which building/bonus a level unlocks)
+     * and must remain fully readable rather than ellipsized - human QA found it cut off in
+     * compact mode. Extracted so the render call and the height estimate always agree on content.
+     */
+    static String unlockedBuildingLine(SettlementLevel level) {
+        return "Låser upp: " + level.unlockedBuildingName()
+                + (level.unlockedBuildingBonus() != null ? " (" + level.unlockedBuildingBonus() + ")" : "");
+    }
+
+    /**
+     * Whether this level is the profile's currently-planned settlement level - drives the
+     * "Sätt som nuvarande" button's immediate visible feedback (human QA found clicking it gave
+     * no indication anything happened until returning to Overview).
+     */
+    static boolean isCurrentLevel(SettlementPlannerProfile profile, int level) {
+        return profile.currentLevel() != null && profile.currentLevel() == level;
+    }
+
+    static boolean isTargetLevel(SettlementPlannerProfile profile, int level) {
+        return profile.targetLevel() != null && profile.targetLevel() == level;
+    }
+
+    static String currentButtonLabel(boolean isCurrent) {
+        return isCurrent ? "✓ Nuvarande" : "Sätt som nuvarande";
+    }
+
+    static String targetButtonLabel(boolean isTarget) {
+        return isTarget ? "✓ Mål" : "Sätt som mål";
+    }
+
     private void renderProgressionDetail(GuiGraphicsExtractor extractor, Font font, UiRect detailRect, SettlementCatalog catalog,
-                                          SettlementPlannerManager planner, String contextKey, int mouseX, int mouseY, boolean isCompact) {
+                                          SettlementPlannerManager planner, SettlementPlannerProfile profile, String contextKey,
+                                          int mouseX, int mouseY, boolean isCompact) {
         GZTheme.drawCard(extractor, detailRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         SettlementLevel level = catalog.byLevel(progressionSelectedLevel).orElse(null);
         if (level == null) return;
@@ -317,7 +356,7 @@ public class SettlementTabComponent implements TextInputHandler {
         int pad = 5;
         int maxW = contentArea.width() - (pad * 2);
 
-        int maxScroll = Math.max(0, estimateLevelDetailHeight(level) - contentArea.height());
+        int maxScroll = Math.max(0, estimateLevelDetailHeight(font, maxW, level) - contentArea.height());
         progressionDetailScroll = Math.max(0, Math.min(progressionDetailScroll, maxScroll));
 
         if (isCompact) {
@@ -345,11 +384,8 @@ public class SettlementTabComponent implements TextInputHandler {
             y += 10;
         }
         if (level.unlockedBuildingName() != null) {
-            String line = "Låser upp: " + level.unlockedBuildingName()
-                    + (level.unlockedBuildingBonus() != null ? " (" + level.unlockedBuildingBonus() + ")" : "");
-            TextUtil.drawScaledEllipsizedText(extractor, font, line, x, y, maxW,
-                    TypographyScale.SMALL.getScale(), GZTheme.COLOR_STATUS_YELLOW, false);
-            y += 10;
+            y += TextUtil.drawScaledWrappedText(extractor, font, unlockedBuildingLine(level), x, y, maxW,
+                    TypographyScale.SMALL.getScale(), UNLOCK_TEXT_MAX_LINES, 1, GZTheme.COLOR_STATUS_YELLOW, false) + 2;
         }
 
         TextUtil.drawScaledText(extractor, font, "MATERIAL", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
@@ -366,12 +402,21 @@ public class SettlementTabComponent implements TextInputHandler {
         extractor.disableScissor();
 
         // Planner action buttons live below the scissored content, in the fixed bottom strip.
+        // Human QA found "Sätt som nuvarande"/"Sätt som mål" gave no visible feedback once
+        // clicked - the label/state below now reflects the CURRENT profile every frame, so the
+        // moment a click actually updates the profile it is immediately visible, no chat/toast
+        // needed.
+        boolean isCurrent = isCurrentLevel(profile, level.level());
+        boolean isTarget = isTargetLevel(profile, level.level());
+
         int btnY = detailRect.bottom() - 14;
         int btnW = Math.max(40, (detailRect.width() - 12) / 2);
         UiRect setCurrentBtn = new UiRect(detailRect.x() + 4, btnY, btnW, 11);
         UiRect setTargetBtn = new UiRect(detailRect.x() + 8 + btnW, btnY, btnW, 11);
-        GZTheme.drawButton(extractor, font, setCurrentBtn, "Sätt som nuvarande", true, setCurrentBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
-        GZTheme.drawButton(extractor, font, setTargetBtn, "Sätt som mål", false, setTargetBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+        GZTheme.drawButton(extractor, font, setCurrentBtn, currentButtonLabel(isCurrent),
+                true, setCurrentBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+        GZTheme.drawButton(extractor, font, setTargetBtn, targetButtonLabel(isTarget),
+                isTarget, setTargetBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
 
         int selLevel = progressionSelectedLevel;
         hitTargets.add(new ListRowHit(setCurrentBtn, () -> planner.setCurrentLevel(contextKey, selLevel)));

@@ -71,11 +71,14 @@ public class BuildingsTabComponent implements TextInputHandler {
     }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
-        renderContent(extractor, font, bounds, mouseX, mouseY, mainScreen);
         // Byggplaner is GameZone-specific reference/planning data - show a small, unobtrusive note
         // when the current server/world isn't GameZoneMC, so verified requirements and local plans
-        // are never mistaken for the current server's actual state.
-        if (!CompanionSession.getInstance().isConnectedToGameZone()) {
+        // are never mistaken for the current server's actual state. The layout must RESERVE this
+        // strip rather than let the banner overlay live content (human QA found it drawn straight
+        // over the detail pane's "Bonus" line).
+        boolean showReferenceBanner = !CompanionSession.getInstance().isConnectedToGameZone();
+        renderContent(extractor, font, ReferenceModeBanner.reserveBottomSpace(bounds, showReferenceBanner), mouseX, mouseY, mainScreen);
+        if (showReferenceBanner) {
             ReferenceModeBanner.renderAtBottom(extractor, font, bounds);
         }
     }
@@ -615,6 +618,18 @@ public class BuildingsTabComponent implements TextInputHandler {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (layout == null) return false;
 
+        // In compact mode, listRect() and detailRect() are the SAME rectangle (only one pane is
+        // rendered at a time), so checking listRect() first would always win and silently eat
+        // every scroll event meant for the detail pane. Route explicitly on compactShowingDetail
+        // first so the two panes are never aliased.
+        if (layout.isCompact() && compactShowingDetail) {
+            if (selectedBuildingId != null && layout.detailRect().contains(mouseX, mouseY)) {
+                detailScrollOffset = Math.max(0, detailScrollOffset - (int) (scrollY * 14));
+                return true;
+            }
+            return false;
+        }
+
         if (layout.listRect().contains(mouseX, mouseY)) {
             listScrollOffset = Math.max(0, listScrollOffset - (int) (scrollY * 14));
             return true;
@@ -624,6 +639,24 @@ public class BuildingsTabComponent implements TextInputHandler {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Test-only: drives the compact list/detail scroll-routing state directly, since {@link #layout}
+     * is otherwise only ever set inside {@link #renderContent} which needs a live Font.
+     */
+    void setCompactStateForTesting(UiRect bounds, boolean compactShowingDetail, String selectedBuildingId) {
+        this.layout = BuildingLayout.calculate(bounds);
+        this.compactShowingDetail = compactShowingDetail;
+        this.selectedBuildingId = selectedBuildingId;
+    }
+
+    int detailScrollOffsetForTesting() {
+        return detailScrollOffset;
+    }
+
+    int listScrollOffsetForTesting() {
+        return listScrollOffset;
     }
 
     @Override
