@@ -97,6 +97,14 @@ public class BuildingPlanManager {
         return true;
     }
 
+    /** Deletes every local building plan for one context. Used by the Settings tab's "Rensa Byggplaner" action. */
+    public boolean clearContext(String contextKey) {
+        if (!requireLoaded() || contextKey == null) return false;
+        data = data.withPlans(contextKey, List.of());
+        store.save(data);
+        return true;
+    }
+
     private boolean mutatePlan(String contextKey, String planId, java.util.function.UnaryOperator<BuildingPlan> mutator) {
         if (!requireLoaded() || contextKey == null || planId == null) return false;
         BuildingPlan existing = getPlans(contextKey).stream().filter(p -> p.id().equals(planId)).findFirst().orElse(null);

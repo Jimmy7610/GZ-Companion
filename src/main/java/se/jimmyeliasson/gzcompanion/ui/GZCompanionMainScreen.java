@@ -20,6 +20,7 @@ import se.jimmyeliasson.gzcompanion.ui.tabs.BuildingsTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.KistorTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.MarketWatchTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.PlaceholderTabComponent;
+import se.jimmyeliasson.gzcompanion.ui.tabs.SettingsTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.SettlementTabComponent;
 
 /**
@@ -36,6 +37,7 @@ public class GZCompanionMainScreen extends Screen {
     private final SettlementTabComponent settlementTab = new SettlementTabComponent();
     private final BuildingsTabComponent buildingsTab = new BuildingsTabComponent();
     private final MarketWatchTabComponent marketWatchTab = new MarketWatchTabComponent();
+    private final SettingsTabComponent settingsTab = new SettingsTabComponent();
     private final PlaceholderTabComponent placeholderTab = new PlaceholderTabComponent();
 
     private MainScreenLayout layout;
@@ -154,6 +156,8 @@ public class GZCompanionMainScreen extends Screen {
             buildingsTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else if (activeTab == TabType.MARKETWATCH) {
             marketWatchTab.render(extractor, font, contentRect, mouseX, mouseY, this);
+        } else if (activeTab == TabType.INSTALLNINGAR) {
+            settingsTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else {
             placeholderTab.render(extractor, font, contentRect, mouseX, mouseY, activeTab, this);
         }
@@ -223,6 +227,10 @@ public class GZCompanionMainScreen extends Screen {
                 if (marketWatchTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
                 }
+            } else if (activeTab == TabType.INSTALLNINGAR) {
+                if (settingsTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
+                    return true;
+                }
             } else {
                 if (placeholderTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
@@ -261,6 +269,10 @@ public class GZCompanionMainScreen extends Screen {
             }
         } else if (activeTab == TabType.MARKETWATCH) {
             if (marketWatchTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+                return true;
+            }
+        } else if (activeTab == TabType.INSTALLNINGAR) {
+            if (settingsTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
         }

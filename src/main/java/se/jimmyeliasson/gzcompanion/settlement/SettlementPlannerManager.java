@@ -104,6 +104,13 @@ public class SettlementPlannerManager {
         return getProfile(contextKey).members();
     }
 
+    /** Clears every locally planned level/material/member selection for one context. Used by the Settings tab's "Rensa Settlement-planerare" action. */
+    public boolean clearContext(String contextKey) {
+        if (!requireLoaded() || contextKey == null) return false;
+        persist(contextKey, SettlementPlannerProfile.empty());
+        return true;
+    }
+
     private void persist(String contextKey, SettlementPlannerProfile updated) {
         data = data.withProfile(contextKey, updated);
         store.save(data);

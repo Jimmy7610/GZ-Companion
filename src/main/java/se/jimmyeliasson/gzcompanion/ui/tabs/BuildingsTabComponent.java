@@ -87,6 +87,12 @@ public class BuildingsTabComponent implements TextInputHandler {
         renderSearch(extractor, font, mouseX, mouseY);
 
         List<SettlementBuilding> entries = base.search(searchText);
+        boolean showUnverified = session.getSettingsManager().getSettings().showUnverifiedKnowledge();
+        if (!showUnverified) {
+            List<SettlementBuilding> verifiedOnly = entries.stream()
+                    .filter(b -> b.verification().status() == VerificationStatus.VERIFIED).toList();
+            if (!verifiedOnly.isEmpty()) entries = verifiedOnly;
+        }
         if (selectedBuildingId == null || entries.stream().noneMatch(b -> b.id().equals(selectedBuildingId))) {
             selectedBuildingId = entries.isEmpty() ? null : entries.get(0).id();
             compactShowingDetail = false;

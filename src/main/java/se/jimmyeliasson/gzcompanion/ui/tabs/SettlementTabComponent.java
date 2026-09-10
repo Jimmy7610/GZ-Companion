@@ -222,7 +222,11 @@ public class SettlementTabComponent implements TextInputHandler {
     private void renderProgression(GuiGraphicsExtractor extractor, Font font, SettlementCatalog catalog,
                                     SettlementPlannerManager planner, SettlementPlannerProfile profile, String contextKey,
                                     int mouseX, int mouseY) {
-        List<SettlementLevel> levels = catalog.levels();
+        boolean showUnverified = CompanionSession.getInstance().getSettingsManager().getSettings().showUnverifiedKnowledge();
+        List<SettlementLevel> levels = showUnverified ? catalog.levels()
+                : catalog.levels().stream().filter(l -> l.verification().status() == VerificationStatus.VERIFIED).toList();
+        if (levels.isEmpty()) levels = catalog.levels();
+
         if (progressionSelectedLevel == null || catalog.byLevel(progressionSelectedLevel).isEmpty()) {
             progressionSelectedLevel = profile.currentLevel() != null && catalog.byLevel(profile.currentLevel()).isPresent()
                     ? profile.currentLevel() : levels.get(0).level();
@@ -388,14 +392,19 @@ public class SettlementTabComponent implements TextInputHandler {
                 x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
         y += 12;
 
-        UiRect calcBtn = new UiRect(x, y, Math.min(150, area.width() - 8), 11);
-        boolean calcHov = calcBtn.contains(mouseX, mouseY);
-        GZTheme.drawButton(extractor, font, calcBtn, "Beräkna från sparade kistor", false, calcHov, TypographyScale.META.getScale());
-        hitTargets.add(new ListRowHit(calcBtn, () -> showingContainerPicker = !showingContainerPicker));
-        y += 13;
+        boolean chestEstimateEnabled = session.getSettingsManager().getSettings().useLastKnownChestDataInPlanners();
+        if (chestEstimateEnabled) {
+            UiRect calcBtn = new UiRect(x, y, Math.min(150, area.width() - 8), 11);
+            boolean calcHov = calcBtn.contains(mouseX, mouseY);
+            GZTheme.drawButton(extractor, font, calcBtn, "Beräkna från sparade kistor", false, calcHov, TypographyScale.META.getScale());
+            hitTargets.add(new ListRowHit(calcBtn, () -> showingContainerPicker = !showingContainerPicker));
+            y += 13;
 
-        y += TextUtil.drawScaledWrappedText(extractor, font, "Lokalt estimat från senast känt innehåll. Detta är inte serverns registrerade settlement inventory.",
-                x, y, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false) + 4;
+            y += TextUtil.drawScaledWrappedText(extractor, font, "Lokalt estimat från senast känt innehåll. Detta är inte serverns registrerade settlement inventory.",
+                    x, y, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false) + 4;
+        } else {
+            showingContainerPicker = false;
+        }
 
         if (showingContainerPicker) {
             y = renderContainerPicker(extractor, font, session, contextKey, x, y, maxW, mouseX, mouseY, summary);

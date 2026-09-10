@@ -33,14 +33,16 @@ class RulePackLoaderTest {
     }
 
     @Test
-    @DisplayName("Should parse feature flags from bundled pack with safe defaults")
+    @DisplayName("Should parse feature flags from bundled pack, reflecting actual current implementation status")
     void testFeatureFlags() {
         RulePack pack = loader.loadBundled();
         assertNotNull(pack.featureFlags());
         assertTrue(pack.featureFlags().containsKey("beginnerGuide"));
-        assertFalse(pack.featureFlags().get("beginnerGuide"), "Unimplemented guide flag must default to false");
+        assertTrue(pack.featureFlags().get("beginnerGuide"), "The Guide Engine (M2) is Completed - its flag must no longer read as unimplemented.");
         assertTrue(pack.featureFlags().containsKey("settlementTools"));
-        assertFalse(pack.featureFlags().get("settlementTools"));
+        assertTrue(pack.featureFlags().get("settlementTools"), "Settlement Companion (M6) is implemented - its flag must no longer read as unimplemented.");
+        assertTrue(pack.featureFlags().containsKey("deathRiskAdvisor"));
+        assertFalse(pack.featureFlags().get("deathRiskAdvisor"), "The death-risk survival advisor is a distinct, still-unimplemented feature from the M8 'what should I do' Advisor.");
     }
 
     @Test

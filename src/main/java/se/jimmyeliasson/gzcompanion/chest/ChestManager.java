@@ -385,6 +385,18 @@ public class ChestManager {
     }
 
     /**
+     * Clears every locally indexed container for one context, leaving other contexts untouched.
+     * Used by the Settings tab's "Rensa Kistor-index" action - never touches the actual
+     * Minecraft chests/containers, only this local JSON index.
+     */
+    public boolean clearContext(String contextKey) {
+        if (!requireLoaded() || contextKey == null) return false;
+        indexData = indexData.withContext(contextKey, ContextContainers.empty());
+        store.save(indexData);
+        return true;
+    }
+
+    /**
      * Sets a local-only custom label for an indexed container. Never writes signs, blocks,
      * server state, commands, or chat — the label exists only inside chest-index.json.
      */

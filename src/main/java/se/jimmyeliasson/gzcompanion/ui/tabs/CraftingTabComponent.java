@@ -625,6 +625,11 @@ public class CraftingTabComponent implements TextInputHandler {
         return h;
     }
 
+    /** Settings-driven: whether to show the raw Minecraft item id alongside the translated display name. Defaults to true, preserving M4's original always-shown behavior. */
+    private static boolean showTechnicalIds() {
+        return CompanionSession.getInstance().getSettingsManager().getSettings().showTechnicalIds();
+    }
+
     private void renderGameZoneRecipeDetail(GuiGraphicsExtractor extractor, Font font, UiRect contentArea, int pad, GameZoneCraftingEntry entry) {
         int currY = contentArea.y() + 2 - detailScrollOffset;
         int maxW = contentArea.width() - (pad * 2);
@@ -634,8 +639,10 @@ public class CraftingTabComponent implements TextInputHandler {
                 maxW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
         currY += 11;
 
-        TextUtil.drawScaledEllipsizedText(extractor, font, entry.outputItemId(), x, currY,
-                maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        if (showTechnicalIds()) {
+            TextUtil.drawScaledEllipsizedText(extractor, font, entry.outputItemId(), x, currY,
+                    maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        }
         currY += 9;
 
         TextUtil.drawScaledEllipsizedText(extractor, font, entry.source().getDisplayName(), x, currY,
@@ -675,8 +682,10 @@ public class CraftingTabComponent implements TextInputHandler {
                 maxW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
         currY += 11;
 
-        TextUtil.drawScaledEllipsizedText(extractor, font, snap.outputItemId(), x, currY,
-                maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        if (showTechnicalIds()) {
+            TextUtil.drawScaledEllipsizedText(extractor, font, snap.outputItemId(), x, currY,
+                    maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        }
         currY += 9;
 
         TextUtil.drawScaledEllipsizedText(extractor, font, "Tillgängligt Minecraft-recept (upplåst i din receptbok)", x, currY,

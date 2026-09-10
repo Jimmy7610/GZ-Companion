@@ -92,6 +92,21 @@ class SettlementPlannerManagerTest {
     }
 
     @Test
+    @DisplayName("clearContext resets one context's level selection, owned amounts, and members but leaves other contexts untouched")
+    void clearContextIsolatedToOneContext() {
+        SettlementPlannerManager manager = new SettlementPlannerManager(new InMemoryStore());
+        manager.initialize();
+        manager.setCurrentLevel("server:a", 5);
+        manager.addOrUpdateMember("server:a", new MemberNote("m1", "Alice", "note"));
+        manager.setCurrentLevel("singleplayer:b", 20);
+
+        assertTrue(manager.clearContext("server:a"));
+        assertNull(manager.getProfile("server:a").currentLevel());
+        assertTrue(manager.getMembers("server:a").isEmpty());
+        assertEquals(20, manager.getProfile("singleplayer:b").currentLevel(), "Clearing one context must never affect another.");
+    }
+
+    @Test
     @DisplayName("An INCOMPATIBLE_SCHEMA load result leaves the manager refusing all mutations")
     void incompatibleSchemaRefusesMutations() {
         InMemoryStore store = new InMemoryStore();

@@ -38,6 +38,8 @@ import se.jimmyeliasson.gzcompanion.marketwatch.storage.JsonMarketWatchNotesStor
 import se.jimmyeliasson.gzcompanion.minecraft.MinecraftBridge;
 import se.jimmyeliasson.gzcompanion.minecraft.VanillaMinecraftBridge;
 import se.jimmyeliasson.gzcompanion.profile.ServerProfile;
+import se.jimmyeliasson.gzcompanion.settings.JsonSettingsStore;
+import se.jimmyeliasson.gzcompanion.settings.SettingsManager;
 import se.jimmyeliasson.gzcompanion.settlement.SettlementPlannerManager;
 import se.jimmyeliasson.gzcompanion.settlement.storage.JsonSettlementPlannerStore;
 import se.jimmyeliasson.gzcompanion.storage.StorageManager;
@@ -75,6 +77,7 @@ public class CompanionSession {
     private MarketWatchInfo marketWatchInfo = MarketWatchInfo.empty();
     private KnowledgeModuleStatus marketWatchInfoStatus = KnowledgeModuleStatus.UNAVAILABLE;
     private final MarketWatchNotesManager marketWatchNotesManager;
+    private final SettingsManager settingsManager;
 
     private GameZoneParserCatalog parserCatalog = GameZoneParserCatalog.empty();
     private KnowledgeModuleStatus parserCatalogStatus = KnowledgeModuleStatus.UNAVAILABLE;
@@ -97,6 +100,7 @@ public class CompanionSession {
         this.settlementPlannerManager = new SettlementPlannerManager(new JsonSettlementPlannerStore(configDir.resolve("settlement-planner.json")));
         this.buildingPlanManager = new BuildingPlanManager(new JsonBuildingPlanStore(configDir.resolve("building-plans.json")));
         this.marketWatchNotesManager = new MarketWatchNotesManager(new JsonMarketWatchNotesStore(configDir.resolve("marketwatch-notes.json")));
+        this.settingsManager = new SettingsManager(new JsonSettingsStore(configDir.resolve("settings.json")));
 
         init();
     }
@@ -131,6 +135,10 @@ public class CompanionSession {
         settlementPlannerManager.initialize();
         buildingPlanManager.initialize();
         marketWatchNotesManager.initialize();
+        settingsManager.initialize();
+        featureManager.setSettingsStatusSupplier(() -> settingsManager.getStatus().isAvailable());
+        toastManager.setNotificationsEnabledSupplier(() -> settingsManager.getSettings().companionNotificationsEnabled());
+        toastManager.setGameZoneToastsEnabledSupplier(() -> settingsManager.getSettings().gameZoneToastsEnabled());
 
         loadParserCatalog();
 
@@ -316,6 +324,10 @@ public class CompanionSession {
 
     public MarketWatchNotesManager getMarketWatchNotesManager() {
         return marketWatchNotesManager;
+    }
+
+    public SettingsManager getSettingsManager() {
+        return settingsManager;
     }
 
     public GameZoneParserCatalog getParserCatalog() {

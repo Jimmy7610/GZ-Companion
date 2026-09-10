@@ -101,6 +101,19 @@ class MarketWatchNotesManagerTest {
     }
 
     @Test
+    @DisplayName("clearContext deletes every note for one context but leaves other contexts untouched")
+    void clearContextIsolatedToOneContext() {
+        MarketWatchNotesManager manager = new MarketWatchNotesManager(new InMemoryStore());
+        manager.initialize();
+        manager.addNote("server:a", null, "A", null, "", 0L);
+        manager.addNote("singleplayer:b", null, "B", null, "", 0L);
+
+        assertTrue(manager.clearContext("server:a"));
+        assertTrue(manager.getNotes("server:a").isEmpty());
+        assertEquals(1, manager.getNotes("singleplayer:b").size(), "Clearing one context must never affect another.");
+    }
+
+    @Test
     @DisplayName("Notes in different contexts never leak into each other")
     void contextIsolation() {
         MarketWatchNotesManager manager = new MarketWatchNotesManager(new InMemoryStore());

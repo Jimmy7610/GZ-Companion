@@ -92,6 +92,12 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Local Watchlist**: Track resources with a category, a free-text note, a favorite toggle, and a last-observed timestamp — always labeled "Mina anteckningar," never live server truth.
 - **Visible-GUI Capture Honestly Deferred**: The optional in-game MarketWatch menu capture was not implemented, since its exact screen structure isn't published — deferred rather than guessed.
 
+### Inställningar (Settings) *(Implemented, pending human gameplay QA)*
+- **Real Toggles, Conservative Defaults**: Every toggle defaults to exactly the behavior already shipping before Settings existed, so installing it never changes what a returning player sees. See [Settings](docs/SETTINGS.md).
+- **Local Data Management**: Per-category reset actions (Guide, Kistor, Settlement, Byggplaner, MarketWatch, Settings itself), each requiring confirmation — with a stronger, two-click confirmation for "Rensa ALLT".
+- **Redacted Diagnostics**: A copy-only technical summary (versions, module statuses) that never includes chat text, coordinates, or personal notes.
+- **Dynamic Keybind Display**: Shows the Companion's actual current key binding, not a hardcoded "G".
+
 ---
 
 ## 🚀 Building from Source

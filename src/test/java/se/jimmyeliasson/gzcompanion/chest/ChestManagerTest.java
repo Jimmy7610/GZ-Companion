@@ -718,4 +718,27 @@ class ChestManagerTest {
         // no-op by design - lastOpenedAtMs correctly reflects the last ACTUAL change (1090L).
         assertEquals(1090L, container.lastOpenedAtMs());
     }
+
+    // ------------------------------------------------------------------
+    // clearContext (M-Settings "Rensa Kistor-index" support)
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("clearContext removes every indexed container for one context but leaves other contexts untouched")
+    void testClearContextIsolatedToOneContext() {
+        ChestManager manager = newManager();
+        openAndCloseChest(manager, CTX_A, DIM_OVERWORLD, new StoragePosition(1, 64, 1), List.of(new ChestSlotEntry(0, "minecraft:iron_ingot", 1)), 1000L);
+        openAndCloseChest(manager, CTX_B, DIM_OVERWORLD, new StoragePosition(2, 64, 2), List.of(new ChestSlotEntry(0, "minecraft:gold_ingot", 1)), 1000L);
+
+        assertTrue(manager.clearContext(CTX_A));
+        assertEquals(0, manager.getIndexedCount(CTX_A));
+        assertEquals(1, manager.getIndexedCount(CTX_B), "Clearing one context must never affect another.");
+    }
+
+    @Test
+    @DisplayName("clearContext before initialize() is refused")
+    void testClearContextRefusedBeforeInitialize() {
+        ChestManager manager = new ChestManager(new JsonChestIndexStore(tempDir.resolve("uninitialized.json")));
+        assertFalse(manager.clearContext(CTX_A));
+    }
 }

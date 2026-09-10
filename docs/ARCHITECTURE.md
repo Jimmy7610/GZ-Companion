@@ -66,6 +66,9 @@ se.jimmyeliasson.gzcompanion
 ├── marketwatch/                   # M9: local MarketWatch watchlist state (see MARKETWATCH.md)
 │   ├── MarketWatchNotesManager.java # Runtime coordinator, mirrors BuildingPlanManager
 │   └── storage/                  # JsonMarketWatchNotesStore & marketwatch-notes.json schema
+├── settings/                      # Settings: global (never world/server-bound) preferences (see SETTINGS.md)
+│   ├── CompanionSettings.java, SettingsManager.java, JsonSettingsStore.java
+│   └── DiagnosticsTextBuilder.java # Builds the redacted "Kopiera diagnostik" text
 ├── gamezone/events/, gamezone/parsing/, gamezone/toast/, gamezone/bridge/  # M5: read-only GameZone
 │   │                              # event engine (see GAMEZONE-ADAPTER.md) - chat is only ever observed,
 │   │                              # never cancelled/rewritten/answered
@@ -94,7 +97,8 @@ se.jimmyeliasson.gzcompanion
         ├── SettlementTabComponent.java # M6: Översikt/Progression/Material/Medlemmar (implements TextInputHandler)
         ├── BuildingsTabComponent.java # M7: search/detail + Structure Calculator + local plans (implements TextInputHandler)
         ├── MarketWatchTabComponent.java # M9: reference card + local notes watchlist (implements TextInputHandler)
-        └── PlaceholderTabComponent.java # Placeholder sections
+        ├── SettingsTabComponent.java # Toggles + Privacy info + data management + diagnostics + keybind
+        └── PlaceholderTabComponent.java # Placeholder sections (now unused - every tab is implemented)
 ```
 
 ---

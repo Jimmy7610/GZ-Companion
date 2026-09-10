@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - Settings (Inställningar) - 2026-09-10
+
+### Added
+- Inställningar tab: general toggles (Companion notifications, GameZone toasts, show technical Minecraft IDs, show unverified knowledge, use last-known Chest Manager data in planners), a Privacy & Fair Play information block, local data management (per-category reset actions plus a two-click-stronger "Rensa ALLT"), a redacted diagnostics summary with "Kopiera diagnostik", and a dynamically-read keybind display.
+- `settings` package: `CompanionSettings`/`SettingsManager`/`JsonSettingsStore` (`config/gzcompanion/settings.json`, schema v1, atomic writes, corrupt-recovery, fail-closed on a future schema), `DiagnosticsTextBuilder`.
+- `clearContext(contextKey)` added to `ChestManager`, `SettlementPlannerManager`, `BuildingPlanManager`, and `MarketWatchNotesManager` to support the new per-category reset actions, each isolated to the player's current context.
+- Every setting defaults to exactly the behavior that already shipped before this milestone existed - installing it changes nothing for a returning player until they explicitly toggle something.
+- `docs/SETTINGS.md`: architecture, the real effect of every toggle, and why a "remember planner/search selections" toggle was intentionally NOT shipped (nothing to wire it to yet).
+
+### Changed
+- `gamezone-pack/feature-flags.json`: removed stale "(Coming Soon)" descriptions and `false` values for now-completed/implemented systems (Guide, Chest Manager, Settlement, Building Planner, MarketWatch); corrected MarketWatch's description from "marketplace price and auction tracker" to its real "resource demand" semantics. `deathRiskAdvisor` is left honestly unimplemented - it is a distinct feature from the M8 "Vad ska jag göra?" Advisor.
+
 ## [Unreleased] - Milestone 9: MarketWatch - 2026-09-10
 
 ### Added

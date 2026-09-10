@@ -108,6 +108,14 @@ public class MarketWatchNotesManager {
         return true;
     }
 
+    /** Deletes every local MarketWatch note for one context. Used by the Settings tab's "Rensa MarketWatch-anteckningar" action. */
+    public boolean clearContext(String contextKey) {
+        if (!requireLoaded() || contextKey == null) return false;
+        data = data.withNotes(contextKey, List.of());
+        store.save(data);
+        return true;
+    }
+
     /** Local-only search + sort: favorites first, then most recently observed. Never touches disk/network beyond the initial load. */
     public List<MarketWatchNote> search(String contextKey, String query) {
         String q = (query != null && !query.isBlank()) ? query.trim().toLowerCase(Locale.ROOT) : null;

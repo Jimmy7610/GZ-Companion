@@ -2,28 +2,28 @@
   "schemaVersion": "1.0.0",
   "flags": {
     "beginnerGuide": {
-      "enabled": false,
-      "description": "Interactive beginner guide for players (Coming Soon)"
+      "enabled": true,
+      "description": "Interactive beginner guide for players (Completed - confirmed via human gameplay QA)"
     },
     "chestManager": {
-      "enabled": false,
-      "description": "Fair-play tracking of legitimately opened player containers (Coming Soon)"
+      "enabled": true,
+      "description": "Fair-play tracking of legitimately opened player containers (Completed - confirmed via human gameplay QA)"
     },
     "settlementTools": {
-      "enabled": false,
-      "description": "Settlement progression and requirement helper (Coming Soon)"
+      "enabled": true,
+      "description": "Settlement progression and requirement helper (Implemented, pending human gameplay QA)"
     },
     "buildingPlanner": {
-      "enabled": false,
-      "description": "Building material and blueprint cost planner (Coming Soon)"
+      "enabled": true,
+      "description": "Building material and blueprint cost planner (Implemented, pending human gameplay QA)"
     },
     "marketWatch": {
-      "enabled": false,
-      "description": "Server marketplace price and auction tracker (Coming Soon)"
+      "enabled": true,
+      "description": "Settlement resource demand reference and local watchlist (Implemented, pending human gameplay QA)"
     },
     "deathRiskAdvisor": {
       "enabled": false,
-      "description": "Contextual survival reminders and advice (Coming Soon)"
+      "description": "Contextual survival/death-risk reminders (Coming Soon - not implemented in this pass; the separate 'Vad ska jag göra?' contextual Advisor shipped in Milestone 8 is a different feature, see docs/ADVISOR.md)"
     }
   }
 }

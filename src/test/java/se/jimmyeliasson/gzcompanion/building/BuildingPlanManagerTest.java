@@ -93,6 +93,19 @@ class BuildingPlanManagerTest {
     }
 
     @Test
+    @DisplayName("clearContext deletes every plan for one context but leaves other contexts untouched")
+    void clearContextIsolatedToOneContext() {
+        BuildingPlanManager manager = new BuildingPlanManager(new InMemoryStore());
+        manager.initialize();
+        manager.createPlan("server:a", "stadskarna", "A", 5, 5, 5, 0L);
+        manager.createPlan("singleplayer:b", "bank", "B", 6, 6, 6, 0L);
+
+        assertTrue(manager.clearContext("server:a"));
+        assertTrue(manager.getPlans("server:a").isEmpty());
+        assertEquals(1, manager.getPlans("singleplayer:b").size(), "Clearing one context must never affect another.");
+    }
+
+    @Test
     @DisplayName("Plans in different contexts never leak into each other")
     void contextIsolation() {
         BuildingPlanManager manager = new BuildingPlanManager(new InMemoryStore());
