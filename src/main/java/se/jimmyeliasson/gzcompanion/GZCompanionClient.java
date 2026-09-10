@@ -42,7 +42,8 @@ public class GZCompanionClient implements ClientModInitializer {
         ChestCaptureController.register(session.getChestManager());
         LOGGER.info(session.getChestManager().getDiagnostics(session.getCurrentStorageContext()).toSafeString());
 
-        // 5. Report the three independently-loaded M4 knowledge modules
+        // 5. Report every independently-loaded knowledge/local-state module
+        LOGGER.info("Guide: {}", session.getGuideEngine().getLoadStatus().getDisplayName());
         LOGGER.info("Kommandon: {} ({} kommandon, {} kategorier)",
                 session.getCommandCatalogStatus().getDisplayName(),
                 session.getCommandCatalog().size(),
@@ -53,6 +54,16 @@ public class GZCompanionClient implements ClientModInitializer {
         LOGGER.info("GameZone-föremål: {} ({} föremål)",
                 session.getItemKnowledgeStatus().getDisplayName(),
                 session.getItemKnowledgeBase().size());
+        LOGGER.info("Settlement: {} ({} nivåer)",
+                session.getSettlementCatalogStatus().getDisplayName(),
+                session.getSettlementCatalog().size());
+        LOGGER.info("Byggplaner: {} ({} byggnader)",
+                session.getBuildingKnowledgeStatus().getDisplayName(),
+                session.getBuildingKnowledgeBase().size());
+        LOGGER.info("MarketWatch: {} (kommando: {})",
+                session.getMarketWatchInfoStatus().getDisplayName(),
+                session.getMarketWatchInfo().command());
+        LOGGER.info("Inställningar: {}", session.getSettingsManager().getStatus().getDisplayName());
 
         // 6. Register the read-only GameZone chat/event observer and its local toast HUD element.
         // Only ever listens via the non-cancellable ClientReceiveMessageEvents.GAME/CHAT - never

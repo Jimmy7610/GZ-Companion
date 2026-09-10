@@ -284,27 +284,33 @@ public class MarketWatchTabComponent implements TextInputHandler {
         UiRect listRect = layout.listRect();
         GZTheme.drawCard(extractor, listRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
 
+        // A fixed, non-scrolling label: these are always the player's own local notes, never
+        // GameZone's actual live market/demand state - see docs/MARKETWATCH.md.
+        TextUtil.drawScaledText(extractor, font, "MINA ANTECKNINGAR (LOKALT)", listRect.x() + 4, listRect.y() + 2,
+                TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        int listTop = listRect.y() + 10;
+
         String contextKey = session.getCurrentStorageContext();
         MarketWatchNotesManager notesManager = session.getMarketWatchNotesManager();
         List<MarketWatchNote> notes = notesManager.search(contextKey, searchText);
 
         if (notes.isEmpty()) {
             TextUtil.drawCenteredText(extractor, font, "Inga lokala anteckningar ännu.", listRect.x() + (listRect.width() / 2),
-                    listRect.y() + (listRect.height() / 2) - 4, listRect.width(), GZTheme.COLOR_TEXT_MUTED, false);
+                    listTop + ((listRect.bottom() - listTop) / 2) - 4, listRect.width(), GZTheme.COLOR_TEXT_MUTED, false);
             return;
         }
 
-        int maxScroll = calculateMaxScroll(ROW_H, notes.size(), listRect.height() - 2);
+        int maxScroll = calculateMaxScroll(ROW_H, notes.size(), listRect.bottom() - listTop - 2);
         listScroll = Math.max(0, Math.min(listScroll, maxScroll));
 
-        extractor.enableScissor(listRect.x() + 1, listRect.y() + 1, listRect.right() - 1, listRect.bottom() - 1);
-        int currentY = listRect.y() + 2 - listScroll;
+        extractor.enableScissor(listRect.x() + 1, listTop, listRect.right() - 1, listRect.bottom() - 1);
+        int currentY = listTop + 1 - listScroll;
         int x = listRect.x() + 3;
         int maxW = listRect.width() - 6;
 
         long now = System.currentTimeMillis();
         for (MarketWatchNote note : notes) {
-            if (currentY + ROW_H >= listRect.y() && currentY <= listRect.bottom()) {
+            if (currentY + ROW_H >= listTop && currentY <= listRect.bottom()) {
                 renderNoteRow(extractor, font, x, currentY, maxW, note, notesManager, contextKey, mouseX, mouseY, now);
             }
             currentY += ROW_H;

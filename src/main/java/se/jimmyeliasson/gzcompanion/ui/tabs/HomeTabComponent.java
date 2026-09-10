@@ -249,7 +249,11 @@ public class HomeTabComponent {
         y += 14;
         extractor.enableScissor(card.x(), y, card.right(), card.bottom() - 4);
         for (AdvisorSuggestion suggestion : advisorSuggestions) {
-            GZTheme.drawCard(extractor, new UiRect(x, y, maxW, 2), 0, 0); // no-op spacer for readability
+            // There is no scroll here (at most MAX_SUGGESTIONS short entries) - but a suggestion
+            // that would render past the card's visible bottom must still never leave a clickable
+            // "Kopiera" button outside the scissored area, so stop drawing once we run out of room.
+            if (y >= card.bottom() - 14) break;
+
             TextUtil.drawScaledEllipsizedText(extractor, font, suggestion.title(), x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, true);
             y += 10;
             y += TextUtil.drawScaledWrappedText(extractor, font, "Varför: " + suggestion.reason(), x, y, maxW,

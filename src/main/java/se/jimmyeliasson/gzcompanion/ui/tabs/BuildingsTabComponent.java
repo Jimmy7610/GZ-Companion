@@ -232,6 +232,11 @@ public class BuildingsTabComponent implements TextInputHandler {
             hitTargets.add(new ListRowHit(backBtn, () -> compactShowingDetail = false));
         }
 
+        // Everything added to hitTargets from here on belongs to the scrolled content flow below -
+        // remember where it starts so the offscreen-row filter at the end never touches the back
+        // button above (which is deliberately outside the scissored/scrolled area).
+        int scrolledSectionStart = hitTargets.size();
+
         int maxScroll = Math.max(0, estimateDetailHeight(building, base.globalRules(), plans.getPlansForBuilding(contextKey, building.id())) - contentArea.height());
         detailScrollOffset = Math.max(0, Math.min(detailScrollOffset, maxScroll));
 
@@ -279,6 +284,14 @@ public class BuildingsTabComponent implements TextInputHandler {
         renderPlansSection(extractor, font, x, y, maxW, building, plans, contextKey, mouseX, mouseY);
 
         extractor.disableScissor();
+
+        // The calculator/plans rows above were added to hitTargets unconditionally as part of one
+        // continuous scrolled flow (unlike the list pane, which only adds a hit target when a row's
+        // own per-row visibility check passes). A row scrolled outside contentArea would otherwise
+        // stay clickable even though scissoring makes it invisible - filter those out here, but only
+        // within the scrolled section (never the back button added above it).
+        hitTargets.subList(scrolledSectionStart, hitTargets.size())
+                .removeIf(hit -> hit.rect().bottom() <= contentArea.y() || hit.rect().y() >= contentArea.bottom());
     }
 
     private int estimateDetailHeight(SettlementBuilding building, GlobalBuildingRules rules, List<BuildingPlan> buildingPlans) {

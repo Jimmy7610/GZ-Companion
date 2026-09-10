@@ -422,7 +422,14 @@ public class SettlementTabComponent implements TextInputHandler {
             return y + 12;
         }
 
-        for (StoredContainer container : containers) {
+        // Capped rather than scrolled: this picker is not inside a scissored/scrollable region, so
+        // an unbounded container list would visually overflow the tab (and remain clickable) past
+        // its actual visible bounds. A player with more indexed containers than this can still pick
+        // among the most recently opened ones; the rest can be added to the estimate in a later pass.
+        final int MAX_PICKER_ROWS = 8;
+        int shown = Math.min(containers.size(), MAX_PICKER_ROWS);
+        for (int i = 0; i < shown; i++) {
+            StoredContainer container = containers.get(i);
             String key = container.id().asStableKey();
             boolean checked = selectedContainerKeys.contains(key);
             UiRect rowRect = new UiRect(x, y, maxW, 10);
@@ -432,6 +439,11 @@ public class SettlementTabComponent implements TextInputHandler {
             hitTargets.add(new ListRowHit(rowRect, () -> {
                 if (!selectedContainerKeys.remove(key)) selectedContainerKeys.add(key);
             }));
+            y += 10;
+        }
+        if (containers.size() > shown) {
+            TextUtil.drawScaledText(extractor, font, "+" + (containers.size() - shown) + " fler (visas inte här)", x, y,
+                    TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
             y += 10;
         }
 

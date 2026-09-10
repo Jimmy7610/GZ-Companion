@@ -74,6 +74,13 @@ public class SettingsTabComponent {
 
         this.contentHeight = (y + scroll) - (content.y() + 3) + 6;
         extractor.disableScissor();
+
+        // Every row above was added to hitTargets unconditionally (unlike the other tabs' scrollable
+        // lists, which only add a hit target when a row's own visibility check passes). Since this
+        // content area is scrolled as one long flow rather than row-by-row, a row scrolled outside
+        // the visible content rect would otherwise stay clickable even though scissoring makes it
+        // invisible - filter those out here instead.
+        hitTargets.removeIf(hit -> hit.rect().bottom() <= content.y() || hit.rect().y() >= content.bottom());
     }
 
     private void renderHeader(GuiGraphicsExtractor extractor, Font font, UiRect headerRect, SettingsManager settingsManager) {
