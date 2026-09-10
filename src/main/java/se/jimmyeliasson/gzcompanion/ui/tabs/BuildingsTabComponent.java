@@ -209,7 +209,10 @@ public class BuildingsTabComponent implements TextInputHandler {
                 int bg = isSelected ? GZTheme.COLOR_NAV_ACTIVE : (isHovered ? GZTheme.COLOR_NAV_HOVER : 0);
                 if (bg != 0) GZTheme.drawCard(extractor, rowRect, bg, isSelected ? GZTheme.COLOR_BORDER_EMERALD : 0);
 
-                GZTheme.drawStatusDot(extractor, rowRect.x() + 4, rowRect.y() + 5, building.verification().status().getArgbColor());
+                int dotColor = building.hasLevelRequirementConflict()
+                        ? building.levelRequirementVerification().status().getArgbColor()
+                        : building.verification().status().getArgbColor();
+                GZTheme.drawStatusDot(extractor, rowRect.x() + 4, rowRect.y() + 5, dotColor);
                 TextUtil.drawScaledEllipsizedText(extractor, font, building.name(), rowRect.x() + 11, rowRect.y() + 2,
                         rowRect.width() - 15, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, isSelected);
                 TextUtil.drawScaledEllipsizedText(extractor, font, "Nivå " + building.levelRequirement() + " · " + building.licenseCost() + " Coins",
@@ -270,9 +273,25 @@ public class BuildingsTabComponent implements TextInputHandler {
 
         TextUtil.drawScaledEllipsizedText(extractor, font, building.name(), x, y, maxW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
         y += 11;
-        TextUtil.drawScaledEllipsizedText(extractor, font, "Nivåkrav: Settlementnivå " + building.levelRequirement(),
-                x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-        y += 10;
+
+        if (building.hasLevelRequirementConflict()) {
+            // Two current canonical GameZone sources make directly contradictory claims about
+            // when this building is actually available - never silently pick one number and
+            // present it as settled VERIFIED truth. Show both raw values and let the player see
+            // the disagreement themselves.
+            y += TextUtil.drawScaledWrappedText(extractor, font, "GameZones Wiki innehåller motstridiga nivåuppgifter för denna byggnad.",
+                    x, y, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_RED, false) + 2;
+            TextUtil.drawScaledEllipsizedText(extractor, font, "Byggnadssidan anger nivåkrav: Settlementnivå " + building.levelRequirement(),
+                    x, y, maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+            y += 9;
+            TextUtil.drawScaledEllipsizedText(extractor, font, "Krävs före nivå: " + building.progressionRequiredForUpgradeToLevel() + " (enligt Settlement Upgrade)",
+                    x, y, maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+            y += 10;
+        } else {
+            TextUtil.drawScaledEllipsizedText(extractor, font, "Nivåkrav: Settlementnivå " + building.levelRequirement(),
+                    x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+            y += 10;
+        }
         TextUtil.drawScaledEllipsizedText(extractor, font, "Licenskostnad: " + building.licenseCost() + " Coins",
                 x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
         y += 10;
@@ -340,7 +359,8 @@ public class BuildingsTabComponent implements TextInputHandler {
     }
 
     private int estimateDetailHeight(SettlementBuilding building, GlobalBuildingRules rules, List<BuildingPlan> buildingPlans) {
-        int h = 11 + 10 + 10; // heading, level requirement, license cost
+        int h = 11 + 10; // heading, license cost
+        h += building.hasLevelRequirementConflict() ? (20 + 9 + 10) : 10; // conflict warning block, or the plain "Nivåkrav" line
         if (building.hasPublishedMinimumFootprint()) h += 10; // "Minsta storlek"
         h += 9 + 11; // Väggkrav, Takkrav
         h += 10; // "SPECIALKRAV"

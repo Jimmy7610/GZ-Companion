@@ -116,16 +116,22 @@ public final class BuildingKnowledgeLoader {
 
                 String name = getString(obj, "name", id);
                 int levelRequirement = getInt(obj, "levelRequirement", 0);
+                Integer progressionRequiredForUpgradeToLevel = getNullableInt(obj, "progressionRequiredForUpgradeToLevel");
                 long licenseCost = obj.has("licenseCost") && obj.get("licenseCost").isJsonPrimitive() ? obj.get("licenseCost").getAsLong() : 0L;
                 String mainBonus = getString(obj, "mainBonus", "");
                 List<BuildingRequirement> specialRequirements = parseRequirements(obj, warnings, id);
                 Integer minWidth = getNullableInt(obj, "minWidth");
                 Integer minDepth = getNullableInt(obj, "minDepth");
                 Integer minHeight = getNullableInt(obj, "minHeight");
-                VerificationMetadata verification = parseVerification(obj);
+                VerificationMetadata verification = parseVerification(obj, "verification");
+                // Falls back to the main verification block when a fixture/older entry doesn't
+                // declare its own - a building that has no separate level dispute should not be
+                // forced to duplicate an identical block just to avoid defaulting to UNVERIFIED.
+                VerificationMetadata levelRequirementVerification = obj.has("levelRequirementVerification")
+                        ? parseVerification(obj, "levelRequirementVerification") : verification;
 
-                result.add(new SettlementBuilding(id, name, levelRequirement, licenseCost, mainBonus,
-                        specialRequirements, minWidth, minDepth, minHeight, verification));
+                result.add(new SettlementBuilding(id, name, levelRequirement, progressionRequiredForUpgradeToLevel, licenseCost, mainBonus,
+                        specialRequirements, minWidth, minDepth, minHeight, verification, levelRequirementVerification));
             } catch (Exception ex) {
                 warnings.add("Hoppar över felformad byggnadspost: " + ex.getMessage());
             }
@@ -155,10 +161,14 @@ public final class BuildingKnowledgeLoader {
     }
 
     private VerificationMetadata parseVerification(JsonObject obj) {
-        if (!obj.has("verification") || !obj.get("verification").isJsonObject()) {
+        return parseVerification(obj, "verification");
+    }
+
+    private VerificationMetadata parseVerification(JsonObject obj, String key) {
+        if (!obj.has(key) || !obj.get(key).isJsonObject()) {
             return VerificationMetadata.UNVERIFIED_DEFAULT;
         }
-        JsonObject v = obj.getAsJsonObject("verification");
+        JsonObject v = obj.getAsJsonObject(key);
         String status = getString(v, "status", null);
         String sourceName = getString(v, "sourceName", null);
         String sourceReference = getString(v, "sourceReference", null);

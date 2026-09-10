@@ -17,7 +17,17 @@ public enum VerificationStatus {
     /** Was once verified but the source has since changed or the fact is suspected outdated. */
     STALE("Inaktuell", 0xFFF59E0B),
     /** No usable verification information at all (e.g. a malformed status value). */
-    UNKNOWN("Okänd", 0xFF64748B);
+    UNKNOWN("Okänd", 0xFF64748B),
+    /**
+     * Two current, canonical official sources make directly contradictory claims about this
+     * exact fact (not merely "not yet checked" - actively checked and found inconsistent).
+     * Deliberately distinct from {@link #UNVERIFIED} (never checked) and {@link #STALE} (was
+     * correct once, source moved on): a fact must never be silently presented as one settled
+     * VERIFIED number when the canonical sources themselves disagree. See
+     * {@code se.jimmyeliasson.gzcompanion.knowledge.building.SettlementBuilding#hasLevelRequirementConflict()}
+     * for the first concrete use of this status.
+     */
+    CONFLICT("Motstridiga källor", 0xFFEF4444);
 
     private final String displayName;
     private final int argbColor;

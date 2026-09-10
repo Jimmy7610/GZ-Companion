@@ -20,11 +20,17 @@ never affects Guide or Kistor (M2/M3), which remain on their own, separately-app
 
 `se.jimmyeliasson.gzcompanion.knowledge.common`:
 
-- **`VerificationStatus`** — VERIFIED / UNVERIFIED / STALE / UNKNOWN. Answers "has this specific
-  fact been confirmed against a live/official GameZone source?" Deliberately separate from
+- **`VerificationStatus`** — VERIFIED / UNVERIFIED / STALE / UNKNOWN / CONFLICT. Answers "has this
+  specific fact been confirmed against a live/official GameZone source?" Deliberately separate from
   `se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityStatus`, which answers a different
   question ("is this file/module schema-valid and loadable?"). A schema can be perfectly
   compatible while every fact inside it is still UNVERIFIED — the two axes never collapse into one.
+  `CONFLICT` was added during the cross-server-safety/building-data completion pass for the one
+  case none of the other four values honestly describe: two current, canonical official sources
+  make directly contradictory claims about the exact same fact (not "never checked" like
+  UNVERIFIED, not "correct once, source moved on" like STALE) — see
+  `se.jimmyeliasson.gzcompanion.knowledge.building.SettlementBuilding.hasLevelRequirementConflict()`
+  and [Building Planner](BUILDING-PLANNER.md) for the concrete Stadskärna/Handelscentrum case.
 - **`VerificationMetadata`** — `(status, sourceName, sourceReference, lastVerified)`. Its canonical
   constructor enforces a hard trust rule: `VERIFIED` is automatically downgraded to `UNVERIFIED`
   unless `sourceName`, `sourceReference`, AND `lastVerified` are ALL present (hardened in the M4

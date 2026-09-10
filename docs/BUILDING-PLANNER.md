@@ -26,14 +26,58 @@ no documented height minimum and correctly leave `minHeight` `null` rather than 
 this: every building now has a real, checkable minimum, and the Structure Calculator's warning
 fires against it honestly (naming the building, e.g. "För litet för Stall").
 
-**A real data conflict found and fixed during this pass**: the overview page's "Byggnadsprogression"
-table numbers its rows 1, 2, 3, 5, 6, 7, 8, 10, 12... which an earlier pass had mistakenly read as
-each building's settlement level requirement. Cross-checking every individual page revealed that
-row number is NOT the level requirement for two buildings - Stadskärna's own page states
-`NIVÅKRAV: Settlementnivå 2` (not 1) and Handelscentrum's states `Settlementnivå 4` (not 3). Per
-this project's source-conflict policy, the individual page is authoritative; `levelRequirement`
-for both was corrected, and every building's `verification.sourceReference` now points at its own
-individual page (not the shared overview page) for every field verified there.
+Every building's `verification.sourceReference` points at its own individual page (not a shared
+summary page) for every footprint/cost/special-requirement field verified there.
+
+## A real, honestly-represented level-requirement conflict (Stadskärna, Handelscentrum)
+
+The **Settlement Upgrade** progression page (`https://www.gamezonemc.se/wiki/settlements/settlement-upgrades`)
+presents every building twice as the settlement progresses: once as "**BYGGNAD PÅ NIVÅ N**" ("once
+the settlement reaches level N, this building can be licensed and built") and again, one level
+later, as "**KRÄVS FÖR NIVÅ N+1**" ("this building must already be physically completed and active
+before the settlement can upgrade to level N+1"). Cross-checking all 19 buildings against their own
+individual pages confirms this pattern holds exactly for 17 of them (e.g. Bank: "byggnad på nivå
+6" → "krävs för nivå 7", and its own page's `NIVÅKRAV` correctly says 6).
+
+**For exactly 2 of the 19 - Stadskärna and Handelscentrum - the building's own individual page
+contradicts this pattern:**
+
+- **Stadskärna**: its own page states `NIVÅKRAV: Settlementnivå 2`. But the Settlement Upgrade
+  page shows Stadskärna only under "**KRÄVS FÖR NIVÅ 2**" ("this building must already be
+  physically completed and active before the settlement can perform the upgrade [to level 2]") -
+  meaning it must be built while the settlement is still at level 1, not after reaching level 2.
+  There is no "byggnad på nivå 1" card for it (level 1/Enstöring has no upgrade-unlock section at
+  all, being the starting level) - but requiring it to precede level 2 while also claiming it
+  needs level 2 to exist is circular.
+- **Handelscentrum**: its own page states `NIVÅKRAV: Settlementnivå 4`. The Settlement Upgrade
+  page explicitly shows Handelscentrum as "**BYGGNAD PÅ NIVÅ 3**" (licensable once the settlement
+  reaches level 3, license 20 000 Coins) and separately as "**KRÄVS FÖR NIVÅ 4**" (must be
+  complete before upgrading to level 4, same license cost, same special requirements). The
+  individual page's own stated availability level (4) is one higher than the progression page's
+  explicit availability level (3).
+
+**This is not silently resolved by picking one number.** Per this project's source-conflict
+policy, neither page is treated as unquestionably correct. Instead:
+
+- `SettlementBuilding.levelRequirement` keeps the individual page's own stated value (2 and 4,
+  unchanged) - it is never deleted or overwritten.
+- A new `progressionRequiredForUpgradeToLevel` field carries the Settlement Upgrade page's own
+  "krävs för nivå N" value for every building that has one (`null` for buildings, like
+  Laboratorium, that are never presented as a general upgrade gate - it only applies to Alkemi
+  settlements).
+- `hasLevelRequirementConflict()` is a general, data-driven rule - `levelRequirement >=
+  progressionRequiredForUpgradeToLevel` - not a hardcoded id check. Running it across all 19
+  bundled buildings finds exactly these two and no others (see
+  `BuildingKnowledgeLoaderTest.exactlyTwoBundledBuildingsHaveALevelConflict`).
+- Each building now carries **two independent verification trails**: `verification` (footprint,
+  cost, special requirements, bonus - confirmed consistent between both sources for all 19
+  buildings, including these two, and left fully `VERIFIED`) and a separate
+  `levelRequirementVerification`, which is a new `VerificationStatus.CONFLICT` value for these two
+  buildings specifically - added because none of the existing statuses (`VERIFIED`/`UNVERIFIED`/
+  `STALE`/`UNKNOWN`) honestly describe "two current canonical sources actively disagree."
+- The Byggplaner UI shows both raw numbers plus the natural-Swedish warning "GameZones Wiki
+  innehåller motstridiga nivåuppgifter för denna byggnad." instead of a single confident
+  "Nivåkrav: Settlementnivå X" line, for exactly these two buildings.
 
 ## Architecture
 

@@ -6,6 +6,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeLoadResult;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationStatus;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -146,15 +147,103 @@ class BuildingKnowledgeLoaderTest {
         }
     }
 
+    // ------------------------------------------------------------------
+    // Source-conflict handling: Stadskärna and Handelscentrum's individual pages state a
+    // levelRequirement that directly contradicts the Settlement Upgrade progression page's own
+    // "krävs för nivå N" cards for the exact same building. Neither number is asserted here as
+    // the uniquely correct interpretation - only that the conflict itself is represented honestly.
+    // ------------------------------------------------------------------
+
     @Test
-    @DisplayName("Stadskärna and Handelscentrum's level requirements were corrected against their individual pages, not the overview table's row order")
-    void levelRequirementsMatchIndividualPagesNotOverviewOrder() {
+    @DisplayName("Stadskärna's level-requirement conflict is represented honestly: CONFLICT status, not a silently-chosen VERIFIED number")
+    void stadskarnaConflictIsRepresentedHonestly() {
         BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
-        // The Fysiska byggnader overview table's "Nivå" column is a row index, not the actual
-        // settlement level requirement - confirmed by cross-checking each individual page.
-        assertEquals(2, base.byId("stadskarna").orElseThrow().levelRequirement(),
-                "Stadskärna's individual page states Settlementnivå 2, not the overview table's row-1 position.");
-        assertEquals(4, base.byId("handelscentrum").orElseThrow().levelRequirement(),
-                "Handelscentrum's individual page states Settlementnivå 4, not the overview table's row-3 position.");
+        SettlementBuilding stadskarna = base.byId("stadskarna").orElseThrow();
+
+        assertTrue(stadskarna.hasLevelRequirementConflict(),
+                "Stadskärna's own page (NIVÅKRAV 2) directly conflicts with the Settlement Upgrade page (krävs för nivå 2, i.e. must already exist at level 1).");
+        assertEquals(VerificationStatus.CONFLICT, stadskarna.levelRequirementVerification().status());
+        assertFalse(stadskarna.isLevelRequirementVerified());
+        // The raw, disputed numbers themselves are still preserved (not deleted/nulled) so the
+        // Byggplaner UI can show both sides of the conflict honestly.
+        assertEquals(2, stadskarna.levelRequirement());
+        assertEquals(2, stadskarna.progressionRequiredForUpgradeToLevel());
+    }
+
+    @Test
+    @DisplayName("Handelscentrum's level-requirement conflict is represented honestly: CONFLICT status, not a silently-chosen VERIFIED number")
+    void handelscentrumConflictIsRepresentedHonestly() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        SettlementBuilding handelscentrum = base.byId("handelscentrum").orElseThrow();
+
+        assertTrue(handelscentrum.hasLevelRequirementConflict(),
+                "Handelscentrum's own page (NIVÅKRAV 4) directly conflicts with the Settlement Upgrade page (available at level 3, per 'BYGGNAD PÅ NIVÅ 3').");
+        assertEquals(VerificationStatus.CONFLICT, handelscentrum.levelRequirementVerification().status());
+        assertFalse(handelscentrum.isLevelRequirementVerified());
+        assertEquals(4, handelscentrum.levelRequirement());
+        assertEquals(4, handelscentrum.progressionRequiredForUpgradeToLevel());
+    }
+
+    @Test
+    @DisplayName("Stadskärna and Handelscentrum's footprint/cost/special requirements remain fully VERIFIED despite the level conflict")
+    void conflictedBuildingsKeepTheirFootprintAndCostVerified() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        SettlementBuilding stadskarna = base.byId("stadskarna").orElseThrow();
+        SettlementBuilding handelscentrum = base.byId("handelscentrum").orElseThrow();
+
+        assertEquals(VerificationStatus.VERIFIED, stadskarna.verification().status(), "A disputed level field must never downgrade the building's confirmed footprint/cost.");
+        assertEquals(11, stadskarna.minWidth());
+        assertEquals(11, stadskarna.minDepth());
+        assertEquals(5000, stadskarna.licenseCost());
+
+        assertEquals(VerificationStatus.VERIFIED, handelscentrum.verification().status());
+        assertEquals(15, handelscentrum.minWidth());
+        assertEquals(15, handelscentrum.minDepth());
+        assertEquals(20000, handelscentrum.licenseCost());
+    }
+
+    @Test
+    @DisplayName("Exactly 2 of the 19 bundled buildings have a level-requirement conflict - scanning all 19 with the general rule finds no others")
+    void exactlyTwoBundledBuildingsHaveALevelConflict() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        List<String> conflicted = base.buildings().stream()
+                .filter(SettlementBuilding::hasLevelRequirementConflict)
+                .map(SettlementBuilding::id)
+                .toList();
+        assertEquals(List.of("stadskarna", "handelscentrum"), conflicted,
+                "The general circularity rule, scanned across all 19 bundled buildings, must find exactly these two - no more, no fewer.");
+    }
+
+    @Test
+    @DisplayName("All 17 unaffected buildings preserve their existing levelRequirement and are confirmed non-conflicting")
+    void unaffectedBuildingsPreserveExistingValuesAndHaveNoConflict() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        var expectedLevels = java.util.Map.ofEntries(
+                java.util.Map.entry("kategoribyggnad", 2), java.util.Map.entry("laboratorium", 5),
+                java.util.Map.entry("bank", 6), java.util.Map.entry("reliktempel", 7),
+                java.util.Map.entry("vindhamn", 8), java.util.Map.entry("gatukontor", 10),
+                java.util.Map.entry("turistbyra", 12), java.util.Map.entry("stall", 14),
+                java.util.Map.entry("kontor", 16), java.util.Map.entry("kyrka", 18),
+                java.util.Map.entry("marknadsplats", 20), java.util.Map.entry("myntforvaring", 22),
+                java.util.Map.entry("radhus", 25), java.util.Map.entry("slott", 30),
+                java.util.Map.entry("museum", 35), java.util.Map.entry("rustkammare", 40),
+                java.util.Map.entry("myntverk", 45)
+        );
+        assertEquals(17, expectedLevels.size());
+        for (var entry : expectedLevels.entrySet()) {
+            SettlementBuilding building = base.byId(entry.getKey()).orElseThrow(() -> new AssertionError("Missing building: " + entry.getKey()));
+            assertEquals(entry.getValue(), building.levelRequirement(), entry.getKey() + "'s levelRequirement must be unchanged.");
+            assertFalse(building.hasLevelRequirementConflict(), entry.getKey() + " must not be flagged as conflicting.");
+            assertEquals(VerificationStatus.VERIFIED, building.verification().status());
+        }
+    }
+
+    @Test
+    @DisplayName("Laboratorium is never presented as a general upgrade gate (Alkemi-only, conditional) and therefore never conflicts")
+    void laboratoriumHasNoGeneralUpgradeGate() {
+        BuildingKnowledgeBase base = new BuildingKnowledgeLoader().load().data();
+        SettlementBuilding laboratorium = base.byId("laboratorium").orElseThrow();
+        assertNull(laboratorium.progressionRequiredForUpgradeToLevel());
+        assertFalse(laboratorium.hasLevelRequirementConflict());
     }
 }
