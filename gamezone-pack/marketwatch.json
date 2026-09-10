@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "description": "Verified GameZone MarketWatch system facts. MarketWatch shows resource DEMAND for upcoming settlement upgrades - it is not an auction price list. The related but distinct /market command family (price lookup, company buy listings) is a separate GameZone system and is intentionally NOT modeled here.",
+  "command": "/marketwatch",
+  "categoryCount": 7,
+  "purpose": "MarketWatch hjälper spelare och företag att se vilka resurser som behövs för kommande settlementuppgraderingar. Systemet jämför settlementens sammanlagda behov med material som redan finns i registrerade settlement inventories.",
+  "usageSteps": [
+    "Skriv /marketwatch för att öppna menyn.",
+    "Välj en kategori för att se efterfrågan på resurser inom den kategorin."
+  ],
+  "verification": {
+    "status": "VERIFIED",
+    "sourceName": "GameZone Wiki — MarketWatch",
+    "sourceReference": "https://www.gamezonemc.se/wiki/economy/marketwatch",
+    "lastVerified": "2026-09-10"
+  }
+}

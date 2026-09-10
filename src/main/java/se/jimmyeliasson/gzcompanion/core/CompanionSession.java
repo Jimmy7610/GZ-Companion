@@ -27,10 +27,14 @@ import se.jimmyeliasson.gzcompanion.building.BuildingPlanManager;
 import se.jimmyeliasson.gzcompanion.building.storage.JsonBuildingPlanStore;
 import se.jimmyeliasson.gzcompanion.knowledge.building.BuildingKnowledgeBase;
 import se.jimmyeliasson.gzcompanion.knowledge.building.BuildingKnowledgeLoader;
+import se.jimmyeliasson.gzcompanion.knowledge.economy.MarketWatchInfo;
+import se.jimmyeliasson.gzcompanion.knowledge.economy.MarketWatchKnowledgeLoader;
 import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeBase;
 import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeLoader;
 import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementCatalog;
 import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementKnowledgeLoader;
+import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNotesManager;
+import se.jimmyeliasson.gzcompanion.marketwatch.storage.JsonMarketWatchNotesStore;
 import se.jimmyeliasson.gzcompanion.minecraft.MinecraftBridge;
 import se.jimmyeliasson.gzcompanion.minecraft.VanillaMinecraftBridge;
 import se.jimmyeliasson.gzcompanion.profile.ServerProfile;
@@ -68,6 +72,9 @@ public class CompanionSession {
     private BuildingKnowledgeBase buildingKnowledgeBase = BuildingKnowledgeBase.empty();
     private KnowledgeModuleStatus buildingKnowledgeStatus = KnowledgeModuleStatus.UNAVAILABLE;
     private final BuildingPlanManager buildingPlanManager;
+    private MarketWatchInfo marketWatchInfo = MarketWatchInfo.empty();
+    private KnowledgeModuleStatus marketWatchInfoStatus = KnowledgeModuleStatus.UNAVAILABLE;
+    private final MarketWatchNotesManager marketWatchNotesManager;
 
     private GameZoneParserCatalog parserCatalog = GameZoneParserCatalog.empty();
     private KnowledgeModuleStatus parserCatalogStatus = KnowledgeModuleStatus.UNAVAILABLE;
@@ -89,6 +96,7 @@ public class CompanionSession {
 
         this.settlementPlannerManager = new SettlementPlannerManager(new JsonSettlementPlannerStore(configDir.resolve("settlement-planner.json")));
         this.buildingPlanManager = new BuildingPlanManager(new JsonBuildingPlanStore(configDir.resolve("building-plans.json")));
+        this.marketWatchNotesManager = new MarketWatchNotesManager(new JsonMarketWatchNotesStore(configDir.resolve("marketwatch-notes.json")));
 
         init();
     }
@@ -118,9 +126,11 @@ public class CompanionSession {
         featureManager.setItemKnowledgeStatusSupplier(() -> itemKnowledgeStatus);
         featureManager.setSettlementKnowledgeStatusSupplier(() -> settlementCatalogStatus);
         featureManager.setBuildingKnowledgeStatusSupplier(() -> buildingKnowledgeStatus);
+        featureManager.setMarketWatchKnowledgeStatusSupplier(() -> marketWatchInfoStatus);
 
         settlementPlannerManager.initialize();
         buildingPlanManager.initialize();
+        marketWatchNotesManager.initialize();
 
         loadParserCatalog();
 
@@ -189,6 +199,15 @@ public class CompanionSession {
         } catch (Exception e) {
             this.buildingKnowledgeBase = BuildingKnowledgeBase.empty();
             this.buildingKnowledgeStatus = KnowledgeModuleStatus.ERROR;
+        }
+
+        try {
+            KnowledgeLoadResult<MarketWatchInfo> result = new MarketWatchKnowledgeLoader().load();
+            this.marketWatchInfo = result.data() != null ? result.data() : MarketWatchInfo.empty();
+            this.marketWatchInfoStatus = toModuleStatus(result.outcome());
+        } catch (Exception e) {
+            this.marketWatchInfo = MarketWatchInfo.empty();
+            this.marketWatchInfoStatus = KnowledgeModuleStatus.ERROR;
         }
     }
 
@@ -285,6 +304,18 @@ public class CompanionSession {
 
     public BuildingPlanManager getBuildingPlanManager() {
         return buildingPlanManager;
+    }
+
+    public MarketWatchInfo getMarketWatchInfo() {
+        return marketWatchInfo;
+    }
+
+    public KnowledgeModuleStatus getMarketWatchInfoStatus() {
+        return marketWatchInfoStatus;
+    }
+
+    public MarketWatchNotesManager getMarketWatchNotesManager() {
+        return marketWatchNotesManager;
     }
 
     public GameZoneParserCatalog getParserCatalog() {

@@ -86,6 +86,12 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Deterministic, Explainable Suggestions**: Each suggestion shows Vad/Varför/Nästa steg, with an optional copy-only clipboard button for an already-verified command.
 - **No New Tab**: The Advisor is reached from Home, keeping the 9-tab navigation exactly as designed.
 
+### Milestone 9 — MarketWatch *(Implemented, pending human gameplay QA)*
+- **The Real GameZone Concept**: MarketWatch represents resource demand for settlement upgrades, compared against registered settlement inventory — never an auction price list. See [MarketWatch](docs/MARKETWATCH.md).
+- **Always-Available Offline Reference**: The verified command, category count, purpose, and usage steps work fully offline, with "Kopiera /marketwatch" as a clipboard-only action.
+- **Local Watchlist**: Track resources with a category, a free-text note, a favorite toggle, and a last-observed timestamp — always labeled "Mina anteckningar," never live server truth.
+- **Visible-GUI Capture Honestly Deferred**: The optional in-game MarketWatch menu capture was not implemented, since its exact screen structure isn't published — deferred rather than guessed.
+
 ---
 
 ## 🚀 Building from Source

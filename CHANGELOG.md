@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - Milestone 9: MarketWatch - 2026-09-10
+
+### Added
+- MarketWatch tab: an always-available offline reference to the real GameZone MarketWatch system (resource demand for settlement upgrades, compared against registered settlement inventory - not an auction price list), sourced from the official Wiki, plus a purely local "Mina anteckningar" watchlist.
+- `knowledge.economy` package: `MarketWatchInfo`/`MarketWatchKnowledgeLoader` load `gamezone-pack/marketwatch.json` (verified command, category count, purpose, usage steps). The 7 demand categories are read from the already-loaded Settlement `productionCategories()` rather than duplicated, so the two lists can never drift apart.
+- `marketwatch`/`marketwatch.storage` package: local, per-context notes (`MarketWatchNote`, `MarketWatchNotesManager`) persisted atomically to `config/gzcompanion/marketwatch-notes.json`, with local search/sort (favorites first, then most recently observed).
+- "Kopiera /marketwatch" clipboard-only action; the command is never run automatically.
+- `docs/MARKETWATCH.md`: verified facts, the explicit distinction from the separate `/market` shop-price system, and an honest, documented decision to defer the optional visible-GUI capture feature (its exact screen structure is not published, so it was not guessed).
+
 ## [Unreleased] - Milestone 8: Contextual Advisor - 2026-09-10
 
 ### Added

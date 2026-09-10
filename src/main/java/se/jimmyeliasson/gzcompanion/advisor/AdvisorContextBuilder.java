@@ -71,10 +71,13 @@ public final class AdvisorContextBuilder {
             }
         }
 
+        boolean marketWatchHasNotes = session.getMarketWatchInfoStatus().isAvailable()
+                && !session.getMarketWatchNotesManager().getNotes(contextKey).isEmpty();
+
         boolean connectedToGameZone = session.getBridge().isConnectedToGameZone();
 
         return new AdvisorContext(guideObjectiveTitle, guideComplete, currentLevel, targetLevel,
                 missingMaterialsCount, activeBuildingPlanDisplayName, incompleteChecklistCount,
-                false, connectedToGameZone);
+                marketWatchHasNotes, connectedToGameZone);
     }
 }

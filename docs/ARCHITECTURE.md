@@ -51,7 +51,8 @@ se.jimmyeliasson.gzcompanion
 │   │   └── bridge/MinecraftRecipeDisplayAdapter.java  # ONLY place touching MC recipe/item classes
 │   ├── items/                    # ItemKnowledgeBase, ItemKnowledgeLoader (item-overrides.json - relics)
 │   ├── settlement/                # M6: SettlementCatalog, SettlementKnowledgeLoader (see SETTLEMENT-COMPANION.md)
-│   └── building/                  # M7: BuildingKnowledgeBase, BuildingKnowledgeLoader (see BUILDING-PLANNER.md)
+│   ├── building/                  # M7: BuildingKnowledgeBase, BuildingKnowledgeLoader (see BUILDING-PLANNER.md)
+│   └── economy/                   # M9: MarketWatchInfo, MarketWatchKnowledgeLoader (see MARKETWATCH.md)
 ├── settlement/                    # M6: local settlement planner state (see SETTLEMENT-COMPANION.md)
 │   ├── SettlementPlannerManager.java # Runtime coordinator, mirrors ChestManager's fail-closed pattern
 │   └── storage/                  # JsonSettlementPlannerStore & settlement-planner.json schema
@@ -62,6 +63,9 @@ se.jimmyeliasson.gzcompanion
 │   ├── AdvisorContext.java, AdvisorSuggestion.java  # plain data, no Minecraft types
 │   ├── AdvisorEngine.java        # pure, deterministic rule evaluator
 │   └── AdvisorContextBuilder.java # the ONLY class here touching CompanionSession
+├── marketwatch/                   # M9: local MarketWatch watchlist state (see MARKETWATCH.md)
+│   ├── MarketWatchNotesManager.java # Runtime coordinator, mirrors BuildingPlanManager
+│   └── storage/                  # JsonMarketWatchNotesStore & marketwatch-notes.json schema
 ├── gamezone/events/, gamezone/parsing/, gamezone/toast/, gamezone/bridge/  # M5: read-only GameZone
 │   │                              # event engine (see GAMEZONE-ADAPTER.md) - chat is only ever observed,
 │   │                              # never cancelled/rewritten/answered
@@ -89,6 +93,7 @@ se.jimmyeliasson.gzcompanion
         ├── CraftingTabComponent.java # Crafting tab: recipes + GameZone items (implements TextInputHandler)
         ├── SettlementTabComponent.java # M6: Översikt/Progression/Material/Medlemmar (implements TextInputHandler)
         ├── BuildingsTabComponent.java # M7: search/detail + Structure Calculator + local plans (implements TextInputHandler)
+        ├── MarketWatchTabComponent.java # M9: reference card + local notes watchlist (implements TextInputHandler)
         └── PlaceholderTabComponent.java # Placeholder sections
 ```
 

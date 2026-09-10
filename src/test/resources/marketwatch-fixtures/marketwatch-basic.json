@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "command": "/marketwatch",
+  "categoryCount": 7,
+  "purpose": "TEST ONLY purpose text.",
+  "usageSteps": ["Steg 1", "Steg 2"],
+  "verification": { "status": "VERIFIED", "sourceName": "TEST ONLY fixture", "sourceReference": "test://fixture", "lastVerified": "2026-09-10" }
+}
