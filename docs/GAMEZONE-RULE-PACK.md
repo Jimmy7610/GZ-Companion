@@ -88,3 +88,23 @@ Every fact-bearing entry in these three files carries a `verification` block:
 question ("is this file/module schema-valid") rather than "has this specific fact been confirmed against an official
 source." `VERIFIED` is only honored when `sourceName` and `lastVerified` are both present — see
 [Knowledge Base](KNOWLEDGE-BASE.md) for the full sourcing policy and schema reference.
+
+---
+
+## 6. M6/M7/M9 Modules (`settlement-levels.json`, `settlements.json`, `buildings.json`, `marketwatch.json`)
+
+These four files follow the exact same pattern as the M4 modules above: each is loaded by its own
+dedicated reader (`SettlementKnowledgeLoader`, `BuildingKnowledgeLoader`, `MarketWatchKnowledgeLoader`
+in `se.jimmyeliasson.gzcompanion.knowledge.*`), never by `RulePackLoader`, and never gated by
+`manifest.json`'s per-module `status` field — those entries (including the `marketwatch` entry added
+for this pass) remain legacy bookkeeping only. Each file declares its own numeric `schemaVersion`
+(currently `1`) and carries the same `VerificationMetadata` shape shown above.
+
+`settlement-levels.json` and `settlements.json` are loaded independently of each other by
+`SettlementKnowledgeLoader` even though both feed one `SettlementCatalog` — a malformed
+`settlements.json` never hides a valid level progression, and vice versa. `marketwatch.json`
+intentionally does NOT duplicate the 7 production categories — `MarketWatchTabComponent` reads
+those from the already-loaded `SettlementCatalog.productionCategories()` instead, so the two lists
+can never drift apart. See [Settlement Companion](SETTLEMENT-COMPANION.md),
+[Building Planner](BUILDING-PLANNER.md), and [MarketWatch](MARKETWATCH.md) for the full sourcing
+policy, schemas, and current verified counts.

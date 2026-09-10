@@ -37,6 +37,10 @@
       "file": "economy.json",
       "status": "UNVERIFIED"
     },
+    "marketwatch": {
+      "file": "marketwatch.json",
+      "status": "UNVERIFIED"
+    },
     "worldRules": {
       "file": "world-rules.json",
       "status": "UNVERIFIED"
