@@ -56,8 +56,11 @@ internal static class Program
         var launcher = EnvironmentDetection.CheckLauncher(paths);
         Log($"Minecraft Launcher hittad: {launcher.Found} (.minecraft: {launcher.DotMinecraftDir})");
 
-        bool running = options.TestRoot is null && EnvironmentDetection.IsMinecraftLikelyRunning(new RealProcessLister());
+        var realProcessLister = new RealProcessLister();
+        bool running = options.TestRoot is null && EnvironmentDetection.IsMinecraftLikelyRunning(realProcessLister);
         Log($"Minecraft körs just nu: {running}");
+        bool launcherAppRunning = options.TestRoot is null && EnvironmentDetection.IsMinecraftLauncherRunning(realProcessLister);
+        Log($"Minecraft Launcher öppen: {launcherAppRunning}");
 
         var existing = EnvironmentDetection.CheckExistingInstall(paths);
         Log($"Befintlig GZ Companion-installation: {existing.Found} (jar hittad: {existing.HasCompanionJar}, tidigare version: {existing.InstalledCompanionVersion ?? "okänd"})");
@@ -92,6 +95,10 @@ internal static class Program
                 return mem.ToArray();
             },
             Clock = () => DateTimeOffset.Now,
+            // A --test-root run is an isolated developer sandbox that never touches the real
+            // launcher_profiles.json, so the real "is the launcher open" safety check is moot
+            // there; a plain --dry-run against the real environment still honors it.
+            IsLauncherRunning = () => options.TestRoot is null && EnvironmentDetection.IsMinecraftLauncherRunning(realProcessLister),
         };
         var engine = new InstallEngine(deps);
         var progress = new Progress<string>(Log);

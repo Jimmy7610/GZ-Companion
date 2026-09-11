@@ -98,9 +98,18 @@ public class EnvironmentDetectionTests : IDisposable
     private sealed class FakeProcessLister : IProcessLister
     {
         private readonly Dictionary<string, IReadOnlyList<ProcessInfo>> _byName;
-        public FakeProcessLister(Dictionary<string, IReadOnlyList<ProcessInfo>> byName) => _byName = byName;
+        private readonly IReadOnlyList<ProcessInfo> _allWithWindows;
+
+        public FakeProcessLister(Dictionary<string, IReadOnlyList<ProcessInfo>> byName, IReadOnlyList<ProcessInfo>? allWithWindows = null)
+        {
+            _byName = byName;
+            _allWithWindows = allWithWindows ?? byName.Values.SelectMany(v => v).ToList();
+        }
+
         public IReadOnlyList<ProcessInfo> GetProcessesByName(string name)
             => _byName.TryGetValue(name, out var list) ? list : Array.Empty<ProcessInfo>();
+
+        public IReadOnlyList<ProcessInfo> GetAllProcessesWithWindowTitles() => _allWithWindows;
     }
 
     [Fact]
@@ -128,5 +137,45 @@ public class EnvironmentDetectionTests : IDisposable
     {
         var lister = new FakeProcessLister(new());
         Assert.False(EnvironmentDetection.IsMinecraftLikelyRunning(lister));
+    }
+
+    // ------------------------------------------------------------------
+    // Launcher-app detection (distinct from the game-process detection above). Confirmed
+    // empirically on a real machine: the official launcher's main window title is exactly
+    // "Minecraft Launcher", under a process literally named "Minecraft" - process name alone
+    // would collide with the game itself, so this matches on window title.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void DetectsLauncherRunningByExactWindowTitle()
+    {
+        var lister = new FakeProcessLister(new(), allWithWindows: new[] { new ProcessInfo(2448, "Minecraft Launcher") });
+        Assert.True(EnvironmentDetection.IsMinecraftLauncherRunning(lister));
+    }
+
+    [Fact]
+    public void DoesNotConfuseTheGameWindowWithTheLauncherWindow()
+    {
+        // The running GAME's window title looks like "Minecraft 26.1.2" or "Minecraft* 26.1.2" -
+        // it must never be mistaken for the launcher itself.
+        var lister = new FakeProcessLister(new(), allWithWindows: new[] { new ProcessInfo(999, "Minecraft* 26.1.2") });
+        Assert.False(EnvironmentDetection.IsMinecraftLauncherRunning(lister));
+    }
+
+    [Fact]
+    public void NoWindowsAtAllMeansLauncherNotRunning()
+    {
+        var lister = new FakeProcessLister(new(), allWithWindows: Array.Empty<ProcessInfo>());
+        Assert.False(EnvironmentDetection.IsMinecraftLauncherRunning(lister));
+    }
+
+    [Fact]
+    public void IgnoresTitlelessBackgroundHelperProcessesOfTheSameName()
+    {
+        // The real launcher spawns several background helper processes named "Minecraft" with no
+        // window at all - GetAllProcessesWithWindowTitles() never reports those, so this proves
+        // the detection isn't fooled by process COUNT, only by an actual launcher window.
+        var lister = new FakeProcessLister(new(), allWithWindows: Array.Empty<ProcessInfo>());
+        Assert.False(EnvironmentDetection.IsMinecraftLauncherRunning(lister));
     }
 }

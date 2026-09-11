@@ -15,15 +15,27 @@ public class InstallPathsTests
     }
 
     [Fact]
-    public void IsolatedDirsAreAllUnderTheGzCompanionRoot()
+    public void IsolatedGameDirsAreAllUnderTheGzCompanionRoot()
     {
         var paths = new InstallPaths(@"C:\a", @"C:\b");
-        foreach (var dir in new[] { paths.GzCompanionModsDir, paths.GzCompanionVersionsDir, paths.GzCompanionLibrariesDir, paths.GzCompanionConfigDir, paths.GzCompanionInstallerStateDir })
+        foreach (var dir in new[] { paths.GzCompanionModsDir, paths.GzCompanionConfigDir, paths.GzCompanionInstallerStateDir })
         {
             Assert.StartsWith(paths.GzCompanionRootDir, dir);
         }
         // Never touches the vanilla launcher's own directory.
         Assert.DoesNotContain(paths.DotMinecraftDir, paths.GzCompanionGameDir);
+    }
+
+    [Fact]
+    public void SharedFabricInfrastructureLivesUnderDotMinecraftNotTheIsolatedGameDir()
+    {
+        // Confirmed against the official Fabric Installer source: versions/libraries are always
+        // resolved from the launcher's own root, never from a profile's custom gameDir.
+        var paths = new InstallPaths(@"C:\a", @"C:\b");
+        Assert.StartsWith(paths.DotMinecraftDir, paths.SharedVersionsDir);
+        Assert.StartsWith(paths.DotMinecraftDir, paths.SharedLibrariesDir);
+        Assert.DoesNotContain(paths.GzCompanionRootDir, paths.SharedVersionsDir);
+        Assert.DoesNotContain(paths.GzCompanionRootDir, paths.SharedLibrariesDir);
     }
 
     [Theory]

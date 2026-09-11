@@ -69,8 +69,9 @@ public class LauncherProfilesEditorTests : IDisposable
         Assert.Contains("release-1.20.1", otherIds);
         Assert.Contains("my-forge-modpack", otherIds);
 
-        // The pre-existing profiles must be byte-for-byte equivalent - including a field this
-        // editor has never heard of.
+        // The pre-existing profiles must keep the same value and structure - including a field
+        // this editor has never heard of. (Re-serializing the JSON tree doesn't guarantee
+        // byte-identical whitespace/formatting, only unchanged values/keys/nesting.)
         Assert.Equal("Grass", updated["profiles"]!["release-1.20.1"]!["icon"]!.GetValue<string>());
         Assert.Equal(3, updated["profiles"]!["release-1.20.1"]!["someUnknownFutureField"]!["nested"]!.AsArray().Count);
         Assert.Equal("-Xmx4G", updated["profiles"]!["my-forge-modpack"]!["javaArgs"]!.GetValue<string>());
@@ -168,5 +169,25 @@ public class LauncherProfilesEditorTests : IDisposable
         string serialized = LauncherProfilesEditor.Serialize(root);
         var reparsed = LauncherProfilesEditor.ParseAndValidate(serialized);
         Assert.Equal(2, reparsed["profiles"]!.AsObject().Count);
+    }
+
+    [Fact]
+    public void BackupTwiceWithinTheSameSecondProducesTwoDistinctFilesInsteadOfThrowing()
+    {
+        // Found via a real install -> reinstall -> uninstall smoke test run back-to-back: the
+        // second-precision timestamp collided and File.Copy's overwrite:false threw, aborting an
+        // otherwise-safe uninstall. Must never happen again.
+        string path = Path.Combine(_tempRoot, "launcher_profiles.json");
+        File.WriteAllText(path, RealisticProfilesJson);
+        var now = DateTimeOffset.Parse("2026-09-11T08:01:54Z");
+
+        string? first = LauncherProfilesEditor.BackupIfExists(path, now);
+        string? second = LauncherProfilesEditor.BackupIfExists(path, now);
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.NotEqual(first, second);
+        Assert.True(File.Exists(first));
+        Assert.True(File.Exists(second));
     }
 }

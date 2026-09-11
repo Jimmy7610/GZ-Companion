@@ -26,10 +26,39 @@ GZCompanion.Installer.Core/    - all logic: manifest parsing, path/environment d
 GZCompanion.Installer.App/     - the WinForms UI (Program.cs, MainForm.cs, Theme.cs) plus the
                                   embedded resources (compatibility.json and, once copied in by
                                   build-installer.ps1, the GZ Companion mod jar itself).
-GZCompanion.Installer.Tests/   - xUnit tests against Core (68 tests as of this writing).
-build-installer.ps1            - builds the mod jar, embeds it, publishes the single-file exe,
-                                  and copies the result to distribution/dist/GZ-Companion-Setup.exe.
+GZCompanion.Installer.Tests/   - xUnit tests against Core (83 tests as of this writing).
+build-installer.ps1            - builds the mod jar, embeds it (HARD-FAILING if it doesn't match
+                                  compatibility.json), runs the test suite, publishes the
+                                  single-file exe, and copies the result to
+                                  distribution/dist/GZ-Companion-Setup.exe.
 ```
+
+## Filesystem layout: what's shared vs. isolated
+
+Confirmed against the **official Fabric Installer's own source** (`FabricMC/fabric-installer`,
+Apache-2.0 - `ClientInstaller.java` and `ProfileInstaller.java`): Fabric's own installer always
+writes the version JSON to `<mcDir>/versions/<id>/<id>.json` and every library to
+`<mcDir>/libraries/...`, where `<mcDir>` is the SAME root the launcher itself uses - and its
+`ProfileInstaller` never sets a `gameDir` on the profile it creates at all. A profile's `gameDir`
+only relocates the game's own working directory (mods/config/saves/logs); the launcher always
+resolves `lastVersionId` and its libraries from its own root, regardless of `gameDir`. Earlier
+revisions of this installer put Fabric's version JSON and libraries inside the isolated
+GZ Companion directory - this was wrong and has been corrected:
+
+```
+%APPDATA%\.minecraft\                          <- the launcher's own root (SHARED, never wiped)
+    launcher_profiles.json                     <- only file here we ever write to
+    versions\fabric-loader-0.19.5-26.1.2\...   <- Fabric's version JSON
+    libraries\...                              <- Fabric's loader libraries (asm, sponge-mixin, etc.)
+
+%LOCALAPPDATA%\GZ Companion\minecraft\          <- fully isolated GAME directory (gameDir)
+    mods\fabric-api-*.jar
+    mods\gzcompanion-*.jar
+    config\gzcompanion\...                     <- local user data, never wiped
+```
+
+This means Fabric's version/library store is **shared launcher infrastructure** another Fabric
+profile could reference - see the uninstall ownership rules below.
 
 ## How to rebuild
 
@@ -76,14 +105,14 @@ Remove-Item -Recurse -Force $test
 
 ## Which files are embedded vs. downloaded
 
-| File | Source | Verification |
-|---|---|---|
-| GZ Companion jar | **Embedded** in the exe (copied in by `build-installer.ps1` from this repo's own Gradle build) | SHA-256 checked against `compatibility.json` immediately after extracting it, before it's moved into place |
-| `compatibility.json` | **Embedded** in the exe | n/a (it IS the trust root) |
-| Fabric Loader version profile JSON | Downloaded live from `https://meta.fabricmc.net/v2/versions/loader/{mc}/{loader}/profile/json` at install time | The response's own `id` field is checked against `compatibility.json` before anything is written |
-| Fabric Loader's library jars (asm, sponge-mixin, fabric-loader itself, etc.) | Downloaded from `https://maven.fabricmc.net/` at install time, using the exact relative paths and hashes the Meta API response itself provides | SHA-256 from that same API response (Fabric's own authoritative source); the one jar Fabric's API doesn't hash - `fabric-loader-{version}.jar` - falls back to an independently-verified hash pinned in `compatibility.json` |
-| Fabric API mod jar | Downloaded from Modrinth's CDN (`https://cdn.modrinth.com/...`), URL pinned in `compatibility.json` | SHA-256 pinned in `compatibility.json`, independently computed from a real download whose SHA-512 was cross-checked against Modrinth's own published version metadata |
-| Vanilla Minecraft 26.1.2 itself (client jar, assets, libraries) | **Not touched by this installer at all.** The Fabric profile JSON has `"inheritsFrom": "26.1.2"`; the official Minecraft Launcher downloads the vanilla version natively (from Mojang's own servers) the first time the "GZ Companion - GameZone" profile is played. This is the same mechanism Fabric's own installer relies on. | Mojang's own launcher handles this end-to-end; we never fetch or verify it ourselves |
+| File | Source | Written to | Verification |
+|---|---|---|---|
+| GZ Companion jar | **Embedded** in the exe (copied in by `build-installer.ps1` from this repo's own Gradle build) | Isolated `mods\` | SHA-256 checked against `compatibility.json` immediately after extracting it, before it's moved into place. `build-installer.ps1` refuses to even produce the exe if the freshly-built jar doesn't match `compatibility.json` (hard failure, not a warning) - `EmbeddedResourceIntegrityTests` re-checks the same thing independently as part of the test suite |
+| `compatibility.json` | **Embedded** in the exe | n/a | n/a (it IS the trust root) |
+| Fabric Loader version profile JSON | Downloaded live from `https://meta.fabricmc.net/v2/versions/loader/{mc}/{loader}/profile/json` at install time | Shared `.minecraft\versions\` | The response's own `id` field is checked against `compatibility.json` before anything is written |
+| Fabric Loader's library jars (asm, sponge-mixin, fabric-loader itself, etc.) | Downloaded from `https://maven.fabricmc.net/` at install time, using the exact relative paths and hashes the Meta API response itself provides | Shared `.minecraft\libraries\` | SHA-256 from that same API response (Fabric's own authoritative source); the one jar Fabric's API doesn't hash - `fabric-loader-{version}.jar` - falls back to an independently-verified hash pinned in `compatibility.json` |
+| Fabric API mod jar | Downloaded from Modrinth's CDN (`https://cdn.modrinth.com/...`), URL pinned in `compatibility.json` | Isolated `mods\` | SHA-256 pinned in `compatibility.json`, independently computed from a real download whose SHA-512 was cross-checked against Modrinth's own published version metadata |
+| Vanilla Minecraft 26.1.2 itself (client jar, assets, libraries) | **Not touched by this installer at all.** The Fabric profile JSON has `"inheritsFrom": "26.1.2"`; the official Minecraft Launcher downloads the vanilla version natively (from Mojang's own servers) the first time the "GZ Companion - GameZone" profile is played. This is the same mechanism Fabric's own installer relies on. | Launcher-managed | Mojang's own launcher handles this end-to-end; we never fetch or verify it ourselves |
 
 Every download is HTTPS-only (`HttpsFileDownloader` throws if given a non-HTTPS URL). Nothing is
 ever executed - only jars and JSON are written to disk, and no downloaded script is ever run.
@@ -99,8 +128,9 @@ ever executed - only jars and JSON are written to disk, and no downloaded script
 3. Set `"status": "VERIFIED"` only once you've actually real-launcher QA tested that combination -
    until then leave it `"COMPATIBLE"` (believed to work, not yet verified) so the installer won't
    offer it. `"UNSUPPORTED"` marks a combination explicitly known NOT to work.
-4. Rebuild: `.\build-installer.ps1` (it will warn if the freshly-built mod jar's hash doesn't
-   match what you put in the manifest - update the manifest, not the warning).
+4. Rebuild: `.\build-installer.ps1` - it HARD-FAILS (no exe produced) if the freshly-built mod
+   jar's SHA-256/size don't exactly match what you put in the manifest. Update the manifest, not
+   the check.
 
 The installer will **never** install a Minecraft version whose manifest entry isn't exactly
 `VERIFIED` - a missing entry and an `UNSUPPORTED`/`COMPATIBLE` one are both refused the same way.
@@ -109,7 +139,9 @@ The installer will **never** install a Minecraft version whose manifest entry is
 
 - `LauncherProfilesEditor` works on a generic `JsonNode` tree, never a strongly-typed model of the
   whole file - every key this editor doesn't own (other profiles, unknown future fields, the
-  launcher's own `clientToken`/`settings`) is round-tripped untouched. It aborts with
+  launcher's own `clientToken`/`settings`) keeps the same value and structure. (Re-serializing the
+  whole document does not guarantee byte-identical whitespace/formatting - only that no value,
+  key, or nesting is lost, added, or reordered.) It aborts with
   `UnsupportedLauncherProfileSchemaException` rather than guessing if the file isn't shaped the
   way every known launcher version shapes it.
 - Every write to an existing file goes through `AtomicFileWriter` (write to a temp file, then
@@ -119,3 +151,23 @@ The installer will **never** install a Minecraft version whose manifest entry is
 - `InstallEngine` never deletes GZ Companion's own `config/gzcompanion` directory - reinstalling
   or updating never wipes Guide progress, Settlement plans, chest data, notes, or settings.
   Uninstalling asks first (`keepUserData`, defaulting to true in the UI).
+- **The launcher app itself must be closed.** Official Fabric installation guidance requires this
+  before editing `launcher_profiles.json`. `EnvironmentDetection.IsMinecraftLauncherRunning`
+  checks for any process whose main window title contains "Minecraft Launcher" (confirmed
+  empirically: the modern Microsoft Store launcher's main window has exactly that title, running
+  under a process literally named "Minecraft" - window title is channel-independent, unlike
+  process name). `InstallEngine.RunAsync`/`UninstallAsync` re-check this themselves as the very
+  first thing, before any download or file write, closing the race where the player opens the
+  launcher between the GUI's own pre-flight check and clicking the button. A `--test-root`
+  developer smoke test wires this check to always report "not running", since it never touches a
+  real `launcher_profiles.json` anyway.
+- **Shared Fabric infrastructure is never bulk-deleted on uninstall.** Fabric's version JSON and
+  libraries live under the launcher's own `.minecraft` root (see above) and may be used by another
+  Fabric profile the player set up themselves. `InstallEngine.UninstallAsync` therefore:
+  - **Never** deletes anything under `.minecraft\libraries` - leaving a cached jar behind is
+    strictly safer than risking another installation that might still need it.
+  - Only deletes our own specific Fabric version directory (e.g.
+    `versions\fabric-loader-0.19.5-26.1.2\`) if it can positively confirm - by reading
+    `launcher_profiles.json` - that no OTHER profile still has that exact `lastVersionId`. If
+    `launcher_profiles.json` is missing/unreadable, or our own `installed.json` can't say which
+    version we installed, the version directory is left alone rather than guessed at.

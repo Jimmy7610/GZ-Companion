@@ -225,7 +225,9 @@ public sealed class MainForm : Form
 
         var windows = EnvironmentDetection.CheckWindowsVersion(Environment.OSVersion.Version);
         var launcher = EnvironmentDetection.CheckLauncher(_paths);
-        bool minecraftRunning = EnvironmentDetection.IsMinecraftLikelyRunning(new RealProcessLister());
+        var processLister = new RealProcessLister();
+        bool minecraftRunning = EnvironmentDetection.IsMinecraftLikelyRunning(processLister);
+        bool launcherAppRunning = EnvironmentDetection.IsMinecraftLauncherRunning(processLister);
 
         _rowWindows.SetStatus(
             windows.Level == WindowsSupportLevel.Unsupported ? StatusIcon.Fail : StatusIcon.Ok,
@@ -237,6 +239,11 @@ public sealed class MainForm : Form
 
         if (_options.Uninstall)
         {
+            if (launcherAppRunning)
+            {
+                ShowBlocked("Minecraft Launcher är öppen.\nStäng Minecraft Launcher innan installationen fortsätter.");
+                return;
+            }
             bool existing = Directory.Exists(_paths.GzCompanionGameDir);
             _subLabel.Text = existing ? "Redo att avinstallera." : "GZ Companion verkar inte vara installerat.";
             _actionButton.Enabled = existing && windows.Level != WindowsSupportLevel.Unsupported;
@@ -251,6 +258,13 @@ public sealed class MainForm : Form
         if (!launcher.Found)
         {
             ShowBlocked("Minecraft Launcher hittades inte.\nInstallera/starta den officiella Minecraft Launcher först.");
+            return;
+        }
+        if (launcherAppRunning)
+        {
+            // Official Fabric installation guidance requires the launcher itself to be closed
+            // before launcher_profiles.json is edited - distinct from "the game is running" below.
+            ShowBlocked("Minecraft Launcher är öppen.\nStäng Minecraft Launcher innan installationen fortsätter.");
             return;
         }
         if (minecraftRunning)
@@ -313,6 +327,10 @@ public sealed class MainForm : Form
             Downloader = downloader,
             LoadEmbeddedCompanionJar = LoadEmbeddedCompanionJar,
             Clock = () => DateTimeOffset.Now,
+            // The GUI already gated "Installera"/"Avinstallera" on this in DetectAsync, but the
+            // engine re-checks it right before touching launcher_profiles.json to close the race
+            // where the player opens the launcher between detection and clicking the button.
+            IsLauncherRunning = () => EnvironmentDetection.IsMinecraftLauncherRunning(new RealProcessLister()),
         };
         var engine = new InstallEngine(deps);
         var progress = new Progress<string>(AppendLog);

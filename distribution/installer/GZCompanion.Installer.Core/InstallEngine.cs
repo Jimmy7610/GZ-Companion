@@ -13,6 +13,15 @@ public sealed class InstallEngineDependencies
     public required IFileDownloader Downloader { get; init; }
     public required Func<byte[]> LoadEmbeddedCompanionJar { get; init; }
     public required Func<DateTimeOffset> Clock { get; init; }
+
+    /// <summary>
+    /// Checked first, before any step of install or uninstall. Wire this to
+    /// <see cref="EnvironmentDetection.IsMinecraftLauncherRunning"/> for a real run against a real
+    /// launcher; an isolated developer smoke test (a throwaway --test-root that never touches a
+    /// real launcher_profiles.json) should wire <c>() => false</c> instead, since there is nothing
+    /// real for this safety check to protect there.
+    /// </summary>
+    public required Func<bool> IsLauncherRunning { get; init; }
 }
 
 /// <summary>
@@ -26,6 +35,12 @@ public sealed class InstallEngine
     private const string ProfileName = "GZ Companion - GameZone";
     private const string UserAgent = "GZCompanionInstaller/0.1.0-alpha.1 (+https://github.com/Jimmy7610/GZ-Companion)";
 
+    /// <summary>Thrown (and turned into a clean, non-stack-trace InstallOutcome) when the launcher app itself is open.</summary>
+    public sealed class LauncherRunningException : Exception
+    {
+        public LauncherRunningException() : base("Minecraft Launcher är öppen. Stäng Minecraft Launcher innan installationen fortsätter.") { }
+    }
+
     private readonly InstallEngineDependencies _deps;
 
     public InstallEngine(InstallEngineDependencies deps) => _deps = deps;
@@ -38,23 +53,35 @@ public sealed class InstallEngine
 
         try
         {
+            // Official Fabric installation guidance requires the launcher to be closed before
+            // touching launcher_profiles.json. Checked first, before any download even starts.
+            if (_deps.IsLauncherRunning())
+            {
+                throw new LauncherRunningException();
+            }
+
             var paths = _deps.Paths;
 
-            // 1. Isolated directories.
-            Emit("Skapar isolerad spelkatalog...");
+            // 1. Directories. GzCompanion's own mods/config are isolated; Fabric's version JSON
+            //    and libraries are launcher-owned shared infrastructure (see InstallPaths.DotMinecraftDir)
+            //    and simply need to exist - they are never exclusively "ours".
+            Emit("Skapar kataloger...");
             if (!dryRun)
             {
                 Directory.CreateDirectory(paths.GzCompanionModsDir);
-                Directory.CreateDirectory(paths.GzCompanionVersionsDir);
-                Directory.CreateDirectory(paths.GzCompanionLibrariesDir);
                 Directory.CreateDirectory(paths.GzCompanionConfigDir);
                 Directory.CreateDirectory(paths.GzCompanionInstallerStateDir);
+                Directory.CreateDirectory(paths.SharedVersionsDir);
+                Directory.CreateDirectory(paths.SharedLibrariesDir);
             }
             Record("directories", paths.GzCompanionGameDir);
 
-            // 2. Fabric loader version profile - fetched live from the official Fabric Meta API.
+            // 2. Fabric loader version profile - fetched live from the official Fabric Meta API,
+            //    and written under the launcher's OWN versions directory (confirmed against the
+            //    official Fabric Installer source: it always resolves versions/libraries from the
+            //    same root the launcher itself uses, never from a profile's custom gameDir).
             Emit("Hämtar Fabric Loader-profil...");
-            string versionDir = Path.Combine(paths.GzCompanionVersionsDir, target.FabricLoader.ProfileId);
+            string versionDir = Path.Combine(paths.SharedVersionsDir, target.FabricLoader.ProfileId);
             string versionJsonPath = Path.Combine(versionDir, $"{target.FabricLoader.ProfileId}.json");
             string profileJson = await _deps.Downloader.DownloadTextAsync(new Uri(target.FabricLoader.ProfileJsonUrl), ct).ConfigureAwait(false);
             var loaderProfile = FabricLoaderProfile.Parse(profileJson);
@@ -72,12 +99,13 @@ public sealed class InstallEngine
 
             // 3. Every library the profile lists, verified against the hash IT provides (falling
             //    back to our own independently-verified hash only for the one entry Fabric's API
-            //    itself doesn't hash - the loader jar).
+            //    itself doesn't hash - the loader jar). Written into the launcher's shared library
+            //    cache, exactly like Fabric's own installer and the launcher's own downloader do.
             foreach (var lib in loaderProfile.Libraries)
             {
                 ct.ThrowIfCancellationRequested();
                 string relPath = lib.ToMavenPath();
-                string destPath = Path.Combine(paths.GzCompanionLibrariesDir, relPath.Replace('/', Path.DirectorySeparatorChar));
+                string destPath = Path.Combine(paths.SharedLibrariesDir, relPath.Replace('/', Path.DirectorySeparatorChar));
                 string? expectedSha256 = lib.Sha256;
                 if (expectedSha256 is null && lib.Name == target.FabricLoader.KnownGoodFallback?.MavenCoordinate)
                 {
@@ -89,8 +117,8 @@ public sealed class InstallEngine
                 {
                     if (File.Exists(destPath) && expectedSha256 is not null && HashMatches(destPath, expectedSha256))
                     {
-                        // Already present and verified from a previous install - avoid a
-                        // redundant download.
+                        // Already present and verified - possibly from another Fabric profile
+                        // entirely, since this cache is shared. Avoid a redundant download.
                     }
                     else
                     {
@@ -105,8 +133,8 @@ public sealed class InstallEngine
                 Record("library", lib.Name);
             }
 
-            // 4. Fabric API - downloaded from the official Modrinth CDN URL pinned (with its own
-            //    independently-verified checksum) in our manifest.
+            // 4. Fabric API - a MOD jar, so it belongs in GZ Companion's own isolated mods
+            //    directory (unlike the loader itself, this is never shared launcher infrastructure).
             Emit("Hämtar Fabric API...");
             string fabricApiPath = Path.Combine(paths.GzCompanionModsDir, target.FabricApi.FileName);
             if (!dryRun)
@@ -147,8 +175,8 @@ public sealed class InstallEngine
             Record("companion-jar", target.CompanionJar.FileName);
 
             // 6. Launcher profile - the only file outside our isolated directory this installer
-            //    ever writes. Backed up first, parsed/merged as JSON (never regex), and every
-            //    other profile is preserved untouched.
+            //    ever writes. Backed up first, parsed/merged as JSON (never regex); every other
+            //    profile and every field this editor doesn't own keeps its value and structure.
             Emit("Uppdaterar Minecraft Launcher-profil...");
             if (!dryRun)
             {
@@ -181,10 +209,22 @@ public sealed class InstallEngine
     }
 
     /// <summary>
-    /// Removes the launcher profile and (unless the caller asks to keep it) the isolated game
-    /// directory. GZ Companion's own local user data lives under the same game directory - callers
-    /// that want "Behåll mina GZ Companion-data" must pass keepUserData=true, which preserves the
-    /// config directory tree while still removing mods/versions/libraries.
+    /// Removes the launcher profile and GZ Companion's own isolated files. Fabric's version JSON
+    /// and libraries live in the launcher's SHARED versions/libraries directories (see
+    /// <see cref="InstallPaths.DotMinecraftDir"/>) and may be used by another Fabric profile the
+    /// player set up themselves, or another mod's installer - so this uses conservative ownership
+    /// rules rather than deleting them outright:
+    /// - The shared library cache (<see cref="InstallPaths.SharedLibrariesDir"/>) is NEVER deleted
+    ///   or touched by uninstall, under any circumstance. Leaving cached jars behind is strictly
+    ///   safer than risking another installation.
+    /// - Our specific Fabric version directory (e.g. versions/fabric-loader-0.19.5-26.1.2/) is
+    ///   only removed if we can positively confirm no OTHER profile in launcher_profiles.json
+    ///   still references that exact version id. If launcher_profiles.json is missing, unreadable,
+    ///   or our own installed.json can't tell us which version we installed, the version directory
+    ///   is left alone rather than guessed at.
+    /// GZ Companion's own local user data lives under the isolated game directory - callers that
+    /// want "Behåll mina GZ Companion-data" must pass keepUserData=true, which preserves the
+    /// config directory tree while still removing our own mods.
     /// </summary>
     public async Task<InstallOutcome> UninstallAsync(bool keepUserData, bool dryRun, IProgress<string>? log, CancellationToken ct)
     {
@@ -193,28 +233,57 @@ public sealed class InstallEngine
         var paths = _deps.Paths;
         try
         {
+            if (_deps.IsLauncherRunning())
+            {
+                throw new LauncherRunningException();
+            }
+
+            string? ownedVersionId = InstalledStateStore.TryRead(paths.InstalledManifestPath) is { } installed
+                ? $"fabric-loader-{installed.FabricLoaderVersion}-{installed.MinecraftVersion}"
+                : null;
+
             log?.Report("Tar bort Minecraft Launcher-profil...");
+            bool versionSafeToRemove = false;
             if (File.Exists(paths.LauncherProfilesPath))
             {
+                var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
+                versionSafeToRemove = ownedVersionId is not null
+                    && !LauncherProfilesEditor.AnyOtherProfileUsesVersion(root, ownedVersionId, ProfileId);
+
                 if (!dryRun)
                 {
                     LauncherProfilesEditor.BackupIfExists(paths.LauncherProfilesPath, _deps.Clock());
-                    var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
                     var updated = LauncherProfilesEditor.RemoveGzCompanionProfile(root, ProfileId);
                     AtomicFileWriter.WriteAllTextAtomically(paths.LauncherProfilesPath, LauncherProfilesEditor.Serialize(updated));
                 }
             }
             steps.Add(new InstallStepResult("launcher-profile-removed", true, ProfileId));
 
-            log?.Report(keepUserData ? "Tar bort installationsfiler (behåller dina data)..." : "Tar bort alla GZ Companion-filer...");
+            // The shared library cache is NEVER touched - see doc comment above.
+            steps.Add(new InstallStepResult("shared-libraries-preserved", true, paths.SharedLibrariesDir));
+
+            if (ownedVersionId is not null && versionSafeToRemove)
+            {
+                string versionDir = Path.Combine(paths.SharedVersionsDir, ownedVersionId);
+                log?.Report($"Tar bort Fabric-versionen {ownedVersionId} (används inte av någon annan profil)...");
+                if (!dryRun && Directory.Exists(versionDir))
+                {
+                    Directory.Delete(versionDir, recursive: true);
+                }
+                steps.Add(new InstallStepResult("fabric-version-removed", true, ownedVersionId));
+            }
+            else if (ownedVersionId is not null)
+            {
+                log?.Report($"Behåller Fabric-versionen {ownedVersionId} (används fortfarande av en annan profil eller kunde inte bekräftas säker att ta bort).");
+                steps.Add(new InstallStepResult("fabric-version-kept", true, ownedVersionId));
+            }
+
+            log?.Report(keepUserData ? "Tar bort GZ Companions installationsfiler (behåller dina data)..." : "Tar bort alla GZ Companion-filer...");
             if (!dryRun && Directory.Exists(paths.GzCompanionGameDir))
             {
                 if (keepUserData)
                 {
-                    foreach (var dir in new[] { paths.GzCompanionModsDir, paths.GzCompanionVersionsDir, paths.GzCompanionLibrariesDir })
-                    {
-                        if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
-                    }
+                    if (Directory.Exists(paths.GzCompanionModsDir)) Directory.Delete(paths.GzCompanionModsDir, recursive: true);
                 }
                 else
                 {

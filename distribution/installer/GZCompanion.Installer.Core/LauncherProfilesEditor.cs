@@ -14,9 +14,12 @@ public sealed record GzCompanionProfileSpec(string ProfileId, string Name, strin
 /// <summary>
 /// Safely reads, backs up, and rewrites the official launcher's launcher_profiles.json.
 /// Deliberately works on the generic <see cref="JsonNode"/> tree rather than a strongly-typed
-/// model of the whole file: every field this installer doesn't itself own is round-tripped
-/// byte-for-byte-equivalent, and only the one profile keyed by <see cref="GzCompanionProfileSpec.ProfileId"/>
-/// is ever touched. Never uses regex or string surgery on the JSON text.
+/// model of the whole file: every field this installer doesn't itself own keeps the same value
+/// and structure, and only the one profile keyed by <see cref="GzCompanionProfileSpec.ProfileId"/>
+/// is ever touched. Re-serializing the whole document does NOT guarantee byte-identical output
+/// (whitespace/formatting can differ from whatever the launcher itself last wrote) - only that no
+/// value, key, or nesting is lost, added, or reordered in a way that changes meaning. Never uses
+/// regex or string surgery on the JSON text.
 /// </summary>
 public static class LauncherProfilesEditor
 {
@@ -109,6 +112,27 @@ public static class LauncherProfilesEditor
             ? profiles.Select(kv => kv.Key).Where(id => id != excludingProfileId).ToList()
             : new List<string>();
 
+    /// <summary>
+    /// Whether any profile OTHER than <paramref name="excludingProfileId"/> has this exact
+    /// <c>lastVersionId</c>. Fabric versions/libraries live in the launcher's own shared
+    /// versions/libraries directories (see <see cref="InstallPaths.DotMinecraftDir"/>), so before
+    /// uninstall deletes our specific Fabric version directory, it must confirm no other profile
+    /// - one the player created themselves, or another mod's installer - still points at it.
+    /// </summary>
+    public static bool AnyOtherProfileUsesVersion(JsonObject root, string versionId, string excludingProfileId)
+    {
+        if (root["profiles"] is not JsonObject profiles) return false;
+        foreach (var (id, node) in profiles)
+        {
+            if (id == excludingProfileId) continue;
+            if (node is JsonObject profile && profile["lastVersionId"]?.GetValue<string>() == versionId)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static string Serialize(JsonObject root) => root.ToJsonString(WriteOptions);
 
     /// <summary>
@@ -119,7 +143,17 @@ public static class LauncherProfilesEditor
     public static string? BackupIfExists(string launcherProfilesPath, DateTimeOffset now)
     {
         if (!File.Exists(launcherProfilesPath)) return null;
-        string backupPath = $"{launcherProfilesPath}.backup-{now:yyyyMMdd-HHmmss}.json";
+
+        // The timestamp alone is only second-precision, so install -> reinstall -> uninstall run
+        // back-to-back (as a smoke test, or a fast-fingered user) can request two backups within
+        // the same second. Fall back to a numeric suffix rather than letting File.Copy's
+        // overwrite:false throw and abort an otherwise-safe operation.
+        string basePath = $"{launcherProfilesPath}.backup-{now:yyyyMMdd-HHmmss}";
+        string backupPath = $"{basePath}.json";
+        for (int suffix = 2; File.Exists(backupPath); suffix++)
+        {
+            backupPath = $"{basePath}-{suffix}.json";
+        }
         File.Copy(launcherProfilesPath, backupPath, overwrite: false);
         return backupPath;
     }

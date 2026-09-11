@@ -40,10 +40,13 @@ public class InstallEngineTests : IDisposable
     private const string ProfileJsonUrl = "https://meta.fabricmc.net/v2/versions/loader/26.1.2/0.19.5/profile/json";
     private const string LibraryBaseUrl = "https://maven.fabricmc.net/";
     private const string FabricApiUrl = "https://cdn.modrinth.com/data/P7dR8mSH/versions/x/fabric-api-0.155.3+26.1.2.jar";
+    private const string OwnedVersionId = "fabric-loader-0.19.5-26.1.2";
 
     private static readonly byte[] LibraryBytes = { 10, 20, 30, 40 };
     private static readonly byte[] FabricApiBytes = { 1, 2, 3, 4, 5 };
     private static readonly byte[] CompanionJarBytes = { 9, 9, 9 };
+
+    private bool _launcherRunning;
 
     private (InstallPaths paths, SupportedEntry target, FakeDownloader downloader, InstallEngine engine) Build()
     {
@@ -77,6 +80,7 @@ public class InstallEngineTests : IDisposable
             Downloader = downloader,
             LoadEmbeddedCompanionJar = () => CompanionJarBytes,
             Clock = () => DateTimeOffset.Parse("2026-09-11T12:00:00Z"),
+            IsLauncherRunning = () => _launcherRunning,
         };
         return (paths, target, downloader, new InstallEngine(deps));
     }
@@ -102,15 +106,22 @@ public class InstallEngineTests : IDisposable
         var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
 
         Assert.True(outcome.Success, outcome.ErrorMessage);
+        // Mods (including Fabric API, a mod jar) are isolated under GZ Companion's own game dir.
         Assert.True(File.Exists(Path.Combine(paths.GzCompanionModsDir, "gzcompanion-0.1.0-alpha.1.jar")));
         Assert.True(File.Exists(Path.Combine(paths.GzCompanionModsDir, "fabric-api-0.155.3+26.1.2.jar")));
-        Assert.True(File.Exists(Path.Combine(paths.GzCompanionLibrariesDir, "org", "ow2", "asm", "asm", "9.10.1", "asm-9.10.1.jar")));
-        Assert.True(File.Exists(Path.Combine(paths.GzCompanionVersionsDir, "fabric-loader-0.19.5-26.1.2", "fabric-loader-0.19.5-26.1.2.json")));
+        // Fabric's own version JSON and libraries are launcher-owned shared infrastructure -
+        // confirmed against the official Fabric Installer source - and must live under the
+        // launcher's own .minecraft root, NOT the isolated GZ Companion game directory.
+        Assert.True(File.Exists(Path.Combine(paths.SharedLibrariesDir, "org", "ow2", "asm", "asm", "9.10.1", "asm-9.10.1.jar")));
+        Assert.True(File.Exists(Path.Combine(paths.SharedVersionsDir, "fabric-loader-0.19.5-26.1.2", "fabric-loader-0.19.5-26.1.2.json")));
         Assert.True(File.Exists(paths.LauncherProfilesPath));
 
         var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
         Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(root, "gzcompanion-gameZone"));
+        // gameDir still points at the isolated directory (mods/config/saves) - only versions/
+        // libraries moved to the shared root, per the corrected architecture.
         Assert.Equal(paths.GzCompanionGameDir, root["profiles"]!["gzcompanion-gameZone"]!["gameDir"]!.GetValue<string>());
+        Assert.Equal("fabric-loader-0.19.5-26.1.2", root["profiles"]!["gzcompanion-gameZone"]!["lastVersionId"]!.GetValue<string>());
 
         Assert.True(File.Exists(paths.InstalledManifestPath));
     }
@@ -187,6 +198,141 @@ public class InstallEngineTests : IDisposable
         Assert.Equal("""{"completedSteps": 7}""", File.ReadAllText(userDataFile));
     }
 
+    // ------------------------------------------------------------------
+    // Critical issue 2: the launcher app itself must be closed before any profile mutation.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task LauncherRunning_BlocksInstallBeforeAnyDownloadOrWrite()
+    {
+        var (paths, target, downloader, engine) = Build();
+        _launcherRunning = true;
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.False(outcome.Success);
+        Assert.Contains("Minecraft Launcher är öppen", outcome.ErrorMessage);
+        Assert.Empty(downloader.RequestedUrls);
+        Assert.False(Directory.Exists(paths.GzCompanionGameDir), "Nothing should be touched at all once the launcher is detected as open.");
+    }
+
+    [Fact]
+    public async Task LauncherRunning_BlocksUninstall()
+    {
+        var (paths, target, _, engine) = Build();
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        _launcherRunning = true;
+
+        var outcome = await engine.UninstallAsync(keepUserData: true, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.False(outcome.Success);
+        Assert.Contains("Minecraft Launcher är öppen", outcome.ErrorMessage);
+        Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(
+            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath)), "gzcompanion-gameZone"),
+            "Nothing should be removed once the launcher is detected as open.");
+    }
+
+    [Fact]
+    public async Task LauncherNotRunning_InstallProceedsNormally()
+    {
+        var (_, target, _, engine) = Build();
+        _launcherRunning = false;
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+    }
+
+    // ------------------------------------------------------------------
+    // Uninstall: shared Fabric library/version ownership safety.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Uninstall_NeverDeletesTheSharedLibrariesCache()
+    {
+        var (paths, target, _, engine) = Build();
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        Assert.True(Directory.Exists(paths.SharedLibrariesDir));
+
+        await engine.UninstallAsync(keepUserData: false, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(Directory.Exists(paths.SharedLibrariesDir), "The shared library cache must never be deleted by uninstall, under any circumstance.");
+        Assert.True(File.Exists(Path.Combine(paths.SharedLibrariesDir, "org", "ow2", "asm", "asm", "9.10.1", "asm-9.10.1.jar")),
+            "A cached library jar must survive uninstall even when nothing else claims it - leaving it cached is safer than risking another installation.");
+    }
+
+    [Fact]
+    public async Task Uninstall_RemovesOwnedFabricVersionDirectoryWhenNoOtherProfileReferencesIt()
+    {
+        var (paths, target, _, engine) = Build();
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        string versionDir = Path.Combine(paths.SharedVersionsDir, OwnedVersionId);
+        Assert.True(Directory.Exists(versionDir));
+
+        var outcome = await engine.UninstallAsync(keepUserData: false, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.False(Directory.Exists(versionDir), "Our own exact Fabric version directory is safe to remove once no other profile references it.");
+        Assert.Contains(outcome.Steps, s => s.Step == "fabric-version-removed");
+    }
+
+    [Fact]
+    public async Task Uninstall_KeepsOwnedFabricVersionDirectoryWhenAnotherProfileStillReferencesIt()
+    {
+        var (paths, target, _, engine) = Build();
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        string versionDir = Path.Combine(paths.SharedVersionsDir, OwnedVersionId);
+
+        // Simulate the player having a second, unrelated profile that happens to use the exact
+        // same Fabric loader/Minecraft version combination.
+        var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
+        var withOther = LauncherProfilesEditor.UpsertGzCompanionProfile(root,
+            new GzCompanionProfileSpec("my-other-fabric-profile", "My Other Fabric Profile", @"C:\Users\test\.minecraft", OwnedVersionId, null),
+            DateTimeOffset.UtcNow);
+        File.WriteAllText(paths.LauncherProfilesPath, LauncherProfilesEditor.Serialize(withOther));
+
+        var outcome = await engine.UninstallAsync(keepUserData: false, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.True(Directory.Exists(versionDir), "A Fabric version directory still referenced by another profile must never be deleted.");
+        Assert.Contains(outcome.Steps, s => s.Step == "fabric-version-kept");
+        Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(
+            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath)), "my-other-fabric-profile"));
+    }
+
+    [Fact]
+    public async Task Uninstall_LeavesFabricVersionDirectoryAloneWhenOwnershipCannotBeConfirmed()
+    {
+        // No installed.json (e.g. a foreign/pre-existing install this installer didn't create) -
+        // must never guess which version directory is "ours" to delete.
+        var (paths, target, _, engine) = Build();
+        Directory.CreateDirectory(paths.GzCompanionGameDir);
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.LauncherProfilesPath)!);
+        string versionDir = Path.Combine(paths.SharedVersionsDir, OwnedVersionId);
+        Directory.CreateDirectory(versionDir);
+        File.WriteAllText(Path.Combine(versionDir, OwnedVersionId + ".json"), "{}");
+        File.WriteAllText(paths.LauncherProfilesPath, """{"profiles":{}}""");
+
+        var outcome = await engine.UninstallAsync(keepUserData: false, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.True(Directory.Exists(versionDir), "Without installed.json telling us which version we own, never guess and delete.");
+        Assert.DoesNotContain(outcome.Steps, s => s.Step is "fabric-version-removed" or "fabric-version-kept");
+    }
+
+    [Fact]
+    public async Task DryRunUninstall_NeverRemovesTheFabricVersionDirectoryEitherWayEvenWhenSafe()
+    {
+        var (paths, target, _, engine) = Build();
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        string versionDir = Path.Combine(paths.SharedVersionsDir, OwnedVersionId);
+
+        var outcome = await engine.UninstallAsync(keepUserData: false, dryRun: true, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success);
+        Assert.True(Directory.Exists(versionDir), "Dry-run must change nothing, even a directory it determined would be safe to remove.");
+    }
+
     [Fact]
     public async Task Uninstall_KeepUserData_RemovesModsButPreservesConfig()
     {
@@ -205,7 +351,7 @@ public class InstallEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task Uninstall_WithoutKeepUserData_RemovesEverything()
+    public async Task Uninstall_WithoutKeepUserData_RemovesIsolatedGameDirEntirely()
     {
         var (paths, target, _, engine) = Build();
         await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
@@ -214,6 +360,8 @@ public class InstallEngineTests : IDisposable
 
         Assert.True(outcome.Success, outcome.ErrorMessage);
         Assert.False(Directory.Exists(paths.GzCompanionGameDir));
+        // The shared launcher infrastructure is a separate concern from the isolated game dir -
+        // covered by the dedicated shared-library/version tests above.
     }
 
     [Fact]
@@ -263,5 +411,44 @@ public class InstallEngineTests : IDisposable
 
         Assert.False(outcome.Success);
         Assert.Contains("mismatched profile", outcome.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task InstalledFilesystemLayout_MatchesOfficialLauncherFabricRequirements()
+    {
+        // Validates the corrected architecture end-to-end: Fabric's version JSON/libraries under
+        // the launcher's OWN root, mods isolated in GZ Companion's own game dir, and the profile
+        // pointing lastVersionId/gameDir at exactly those two locations respectively - the shape
+        // Fabric's official installer itself produces (minus the isolated gameDir, which is a
+        // legitimate, separate launcher feature Fabric's installer simply doesn't use).
+        var (paths, target, _, engine) = Build();
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+
+        // Fabric version JSON lives at <.minecraft>/versions/<id>/<id>.json.
+        string versionJson = Path.Combine(paths.SharedVersionsDir, OwnedVersionId, OwnedVersionId + ".json");
+        Assert.True(File.Exists(versionJson));
+        Assert.StartsWith(paths.DotMinecraftDir, versionJson);
+
+        // Fabric libraries live at <.minecraft>/libraries/<maven path>.
+        string libraryJar = Path.Combine(paths.SharedLibrariesDir, "org", "ow2", "asm", "asm", "9.10.1", "asm-9.10.1.jar");
+        Assert.True(File.Exists(libraryJar));
+        Assert.StartsWith(paths.DotMinecraftDir, libraryJar);
+
+        // Mods (Fabric API + GZ Companion) live in the ISOLATED game dir, not under .minecraft.
+        string modsDir = paths.GzCompanionModsDir;
+        Assert.True(Directory.Exists(modsDir));
+        Assert.DoesNotContain(paths.DotMinecraftDir, modsDir);
+        Assert.Equal(2, Directory.GetFiles(modsDir, "*.jar").Length);
+
+        // The profile's lastVersionId matches the shared version directory name exactly, and
+        // gameDir points at the isolated directory - never at .minecraft itself.
+        var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
+        var profile = root["profiles"]!["gzcompanion-gameZone"]!;
+        string lastVersionId = profile["lastVersionId"]!.GetValue<string>();
+        Assert.True(Directory.Exists(Path.Combine(paths.SharedVersionsDir, lastVersionId)));
+        Assert.Equal(paths.GzCompanionGameDir, profile["gameDir"]!.GetValue<string>());
+        Assert.NotEqual(paths.DotMinecraftDir, profile["gameDir"]!.GetValue<string>());
     }
 }

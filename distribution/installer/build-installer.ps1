@@ -5,15 +5,20 @@
 
 .DESCRIPTION
     1. Builds the GZ Companion mod jar via the main Gradle project (.\gradlew.bat build).
-    2. Copies that jar into the installer's Assets folder as an embedded resource.
-    3. Publishes GZCompanion.Installer.App as a self-contained, single-file win-x64 executable -
+    2. Copies that jar into the installer's Assets folder as an embedded resource, and HARD-FAILS
+       (does not produce an exe) if its SHA-256/size don't exactly match distribution\compatibility.json -
+       an installer must never silently embed a jar its own manifest doesn't vouch for.
+    3. Runs the installer's own test suite (dotnet test), which re-verifies the embedded jar's hash
+       independently of this script.
+    4. Publishes GZCompanion.Installer.App as a self-contained, single-file win-x64 executable -
        the end user needs no .NET runtime, no Java, nothing beyond Windows itself.
-    4. Copies the published exe to distribution\dist\GZ-Companion-Setup.exe and prints its SHA-256.
+    5. Copies the published exe to distribution\dist\GZ-Companion-Setup.exe and prints its SHA-256.
 
     Run from anywhere; paths are resolved relative to this script's own location.
 #>
 param(
-    [switch]$SkipModBuild
+    [switch]$SkipModBuild,
+    [switch]$SkipTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +28,7 @@ $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
 $distributionDir = Join-Path $repoRoot "distribution"
 $installerDir = $scriptDir
 $appProject = Join-Path $installerDir "GZCompanion.Installer.App\GZCompanion.Installer.App.csproj"
+$testsProject = Join-Path $installerDir "GZCompanion.Installer.Tests\GZCompanion.Installer.Tests.csproj"
 $assetsDir = Join-Path $installerDir "GZCompanion.Installer.App\Assets"
 $distDir = Join-Path $distributionDir "dist"
 
@@ -50,20 +56,46 @@ New-Item -ItemType Directory -Force -Path $assetsDir | Out-Null
 Copy-Item $modJar.FullName (Join-Path $assetsDir "gzcompanion.jar") -Force
 
 $modJarHash = (Get-FileHash $modJar.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-Write-Host "Mod jar SHA-256: $modJarHash"
-$manifestJar = (Get-Content (Join-Path $distributionDir "compatibility.json") -Raw | ConvertFrom-Json).supported[0].companionJar.sha256
-if ($modJarHash -ne $manifestJar) {
-    Write-Warning "The freshly-built mod jar's SHA-256 ($modJarHash) does not match distribution\compatibility.json ($manifestJar)."
-    Write-Warning "If you intentionally changed the mod, update compatibility.json's companionJar.sha256/sizeBytes before publishing."
+$modJarSize = (Get-Item $modJar.FullName).Length
+$manifest = (Get-Content (Join-Path $distributionDir "compatibility.json") -Raw | ConvertFrom-Json).supported[0].companionJar
+Write-Host "Freshly built mod jar: sha256=$modJarHash size=$modJarSize"
+Write-Host "compatibility.json expects: sha256=$($manifest.sha256) size=$($manifest.sizeBytes)"
+
+if ($modJarHash -ne $manifest.sha256 -or $modJarSize -ne $manifest.sizeBytes) {
+    Remove-Item (Join-Path $assetsDir "gzcompanion.jar") -Force -ErrorAction SilentlyContinue
+    Write-Host ""
+    Write-Host "BUILD FAILED: embedded jar does not match distribution\compatibility.json." -ForegroundColor Red
+    if ($modJarHash -ne $manifest.sha256) {
+        Write-Host "  sha256 mismatch: built=$modJarHash  manifest=$($manifest.sha256)" -ForegroundColor Red
+    }
+    if ($modJarSize -ne $manifest.sizeBytes) {
+        Write-Host "  size mismatch:   built=$modJarSize  manifest=$($manifest.sizeBytes)" -ForegroundColor Red
+    }
+    Write-Host "GZ-Companion-Setup.exe was NOT produced. If this mod change is intentional, update" -ForegroundColor Red
+    Write-Host "distribution\compatibility.json's companionJar.sha256/sizeBytes to match, then re-run." -ForegroundColor Red
+    exit 1
+}
+Write-Host "Embedded jar verified against compatibility.json." -ForegroundColor Green
+
+Write-Host "== 3. Running installer test suite ==" -ForegroundColor Cyan
+if (-not $SkipTests) {
+    dotnet test $testsProject -c Release
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "BUILD FAILED: installer test suite did not pass. GZ-Companion-Setup.exe was NOT produced." -ForegroundColor Red
+        exit 1
+    }
+} else {
+    Write-Host "Skipped (-SkipTests)." -ForegroundColor Yellow
 }
 
-Write-Host "== 3. Publishing self-contained single-file installer ==" -ForegroundColor Cyan
+Write-Host "== 4. Publishing self-contained single-file installer ==" -ForegroundColor Cyan
 $publishDir = Join-Path $installerDir "GZCompanion.Installer.App\bin\Release\net10.0-windows\win-x64\publish"
 dotnet publish $appProject -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
 
-Write-Host "== 4. Copying final installer to distribution\dist ==" -ForegroundColor Cyan
+Write-Host "== 5. Copying final installer to distribution\dist ==" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 $finalExe = Join-Path $distDir "GZ-Companion-Setup.exe"
 Copy-Item (Join-Path $publishDir "GZ-Companion-Setup.exe") $finalExe -Force

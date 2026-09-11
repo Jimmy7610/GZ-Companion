@@ -24,24 +24,40 @@ public sealed class InstallPaths
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
 
-    /// <summary>The official Minecraft Launcher's own data directory - never written to except launcher_profiles.json.</summary>
+    /// <summary>
+    /// The official Minecraft Launcher's own data/install directory. Confirmed against the
+    /// official Fabric Installer's own source (FabricMC/fabric-installer, Apache-2.0):
+    /// <c>ClientInstaller.install(Path mcDir, ...)</c> writes the Fabric version JSON to
+    /// <c>mcDir/versions/&lt;id&gt;/&lt;id&gt;.json</c> and every library to
+    /// <c>mcDir/libraries/...</c>, and <c>ProfileInstaller</c> never sets a <c>gameDir</c> on the
+    /// profile it creates at all - Fabric's own installer always resolves versions/libraries from
+    /// this same root the launcher itself uses, never from a profile's custom game directory. A
+    /// profile's <c>gameDir</c> only relocates the game's OWN working directory (mods/config/
+    /// saves/logs) - the launcher resolves <c>lastVersionId</c> and its libraries from here
+    /// regardless of what <c>gameDir</c> says. This is why Fabric versions/libraries are shared,
+    /// launcher-owned infrastructure and must never be bulk-deleted on uninstall (see
+    /// <see cref="InstallEngine.UninstallAsync"/>).
+    /// </summary>
     public string DotMinecraftDir => Path.Combine(AppDataDir, ".minecraft");
 
     public string LauncherProfilesPath => Path.Combine(DotMinecraftDir, "launcher_profiles.json");
 
+    /// <summary>Shared with every other Fabric/vanilla profile on this machine - the launcher's own version store. Never bulk-deleted; see uninstall.</summary>
+    public string SharedVersionsDir => Path.Combine(DotMinecraftDir, "versions");
+
+    /// <summary>Shared with every other Fabric/vanilla profile on this machine - the launcher's own library cache. Never deleted by this installer under any circumstance.</summary>
+    public string SharedLibrariesDir => Path.Combine(DotMinecraftDir, "libraries");
+
     /// <summary>
-    /// GZ Companion's fully isolated game directory - never shared with the player's real/other
-    /// modded .minecraft instance. Chosen per-user, no admin rights required.
+    /// GZ Companion's fully isolated GAME directory - mods/config/saves/logs only, never shared
+    /// with the player's real/other modded .minecraft instance. Chosen per-user, no admin rights
+    /// required. Does NOT host Fabric's version JSON or libraries - see <see cref="DotMinecraftDir"/>.
     /// </summary>
     public string GzCompanionRootDir => Path.Combine(LocalAppDataDir, "GZ Companion");
 
     public string GzCompanionGameDir => Path.Combine(GzCompanionRootDir, "minecraft");
 
     public string GzCompanionModsDir => Path.Combine(GzCompanionGameDir, "mods");
-
-    public string GzCompanionVersionsDir => Path.Combine(GzCompanionGameDir, "versions");
-
-    public string GzCompanionLibrariesDir => Path.Combine(GzCompanionGameDir, "libraries");
 
     /// <summary>GZ Companion's own local user data (Guide/Settlement/chest/notes/settings) - never wiped on reinstall/update.</summary>
     public string GzCompanionConfigDir => Path.Combine(GzCompanionGameDir, "config", "gzcompanion");

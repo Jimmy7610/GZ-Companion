@@ -98,12 +98,35 @@ public static class EnvironmentDetection
         }
         return false;
     }
+
+    /// <summary>
+    /// Best-effort "is the official Minecraft Launcher app itself open" check - separate from
+    /// <see cref="IsMinecraftLikelyRunning"/>, which detects the GAME process, not the launcher
+    /// UI. Official Fabric installation guidance requires the launcher to be closed before
+    /// editing launcher_profiles.json, so this is checked immediately before every profile
+    /// mutation (see <see cref="InstallEngine"/>), not just once during pre-flight.
+    ///
+    /// Empirically confirmed on a real machine: the modern (Microsoft Store) launcher's main
+    /// window has the exact title "Minecraft Launcher", running under the process name
+    /// "Minecraft" (plus several titleless background helper processes of the same name) -
+    /// process name alone is therefore an unreliable signal (it collides with the actual game's
+    /// process name on some install channels, and "Minecraft" alone is too generic). Matching on
+    /// window title instead is channel-independent: it also covers the older standalone launcher,
+    /// which uses the same "Minecraft Launcher" window title. This is a best-effort heuristic, not
+    /// a guarantee - a minimized-to-tray or otherwise titleless launcher instance could be missed.
+    /// </summary>
+    public static bool IsMinecraftLauncherRunning(IProcessLister processLister)
+        => processLister.GetAllProcessesWithWindowTitles()
+            .Any(p => p.MainWindowTitle.Contains("Minecraft Launcher", StringComparison.OrdinalIgnoreCase));
 }
 
-/// <summary>Minimal process-listing seam so IsMinecraftLikelyRunning is testable without real processes.</summary>
+/// <summary>Minimal process-listing seam so process-based detection is testable without real processes.</summary>
 public interface IProcessLister
 {
     IReadOnlyList<ProcessInfo> GetProcessesByName(string name);
+
+    /// <summary>Every process on the system that currently has a non-empty main window title.</summary>
+    IReadOnlyList<ProcessInfo> GetAllProcessesWithWindowTitles();
 }
 
 public sealed record ProcessInfo(int Id, string MainWindowTitle);
@@ -122,6 +145,32 @@ public sealed class RealProcessLister : IProcessLister
             catch
             {
                 // A process that exits mid-enumeration, or one we can't query (permissions),
+                // must never take the whole detection down.
+            }
+            finally
+            {
+                p.Dispose();
+            }
+        }
+        return results;
+    }
+
+    public IReadOnlyList<ProcessInfo> GetAllProcessesWithWindowTitles()
+    {
+        var results = new List<ProcessInfo>();
+        foreach (var p in Process.GetProcesses())
+        {
+            try
+            {
+                string title = p.MainWindowTitle;
+                if (!string.IsNullOrEmpty(title))
+                {
+                    results.Add(new ProcessInfo(p.Id, title));
+                }
+            }
+            catch
+            {
+                // Same rationale as GetProcessesByName - a single unqueryable/exiting process
                 // must never take the whole detection down.
             }
             finally
