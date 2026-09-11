@@ -43,10 +43,12 @@ public sealed class MainForm : Form
     private readonly InstallPaths _paths = InstallPaths.FromEnvironment();
     private CompatibilityManifest? _manifest;
     private SupportedEntry? _target;
+    private LauncherCheckResult? _launcherCheck;
 
     private Label _subLabel = null!;
     private Panel _statusCard = null!;
     private StatusRow _rowWindows = null!;
+    private StatusRow _rowLauncher = null!;
     private StatusRow _rowMcVersion = null!;
     private StatusRow _rowLoader = null!;
     private StatusRow _rowApi = null!;
@@ -67,7 +69,7 @@ public sealed class MainForm : Form
     {
         _options = options;
         Text = _options.Uninstall ? "Avinstallera GZ Companion" : "GZ Companion Setup";
-        ClientSize = new Size(480, 520);
+        ClientSize = new Size(480, 540);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -114,23 +116,29 @@ public sealed class MainForm : Form
         {
             BackColor = Theme.CardBg,
             Location = new Point(24, 106),
-            Size = new Size(ClientSize.Width - 48, 150),
+            Size = new Size(ClientSize.Width - 48, 170),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
         };
         Controls.Add(_statusCard);
 
-        _rowWindows = new StatusRow(_statusCard, 8, "Minecraft Java-utgåvan");
-        _rowMcVersion = new StatusRow(_statusCard, 36, "Minecraft 26.1.2");
-        _rowLoader = new StatusRow(_statusCard, 64, "Fabric Loader 0.19.5");
-        _rowApi = new StatusRow(_statusCard, 92, "Fabric API 0.155.3+26.1.2");
-        _rowCompanion = new StatusRow(_statusCard, 120, $"GZ Companion v{Program.InstallerVersion}");
+        // "Windows" only ever reports OS version support - it is NOT a claim that Minecraft Java
+        // Edition ownership/entitlement was verified (this installer never checks that). Minecraft
+        // Launcher is reported separately, since the two are genuinely different signals.
+        _rowWindows = new StatusRow(_statusCard, 8, "Windows");
+        _rowLauncher = new StatusRow(_statusCard, 34, "Minecraft Launcher");
+        // "(målversion)" makes clear this is the version this installer TARGETS/supports, not a
+        // claim that Minecraft 26.1.2 is already installed on this machine.
+        _rowMcVersion = new StatusRow(_statusCard, 60, "Minecraft 26.1.2 (målversion)");
+        _rowLoader = new StatusRow(_statusCard, 86, "Fabric Loader 0.19.5");
+        _rowApi = new StatusRow(_statusCard, 112, "Fabric API 0.155.3+26.1.2");
+        _rowCompanion = new StatusRow(_statusCard, 138, $"GZ Companion v{Program.InstallerVersion}");
 
         _warningLabel = new Label
         {
             Text = string.Empty,
             Font = Theme.SmallFont,
             ForeColor = Theme.StatusYellow,
-            Location = new Point(24, 266),
+            Location = new Point(24, 286),
             Size = new Size(ClientSize.Width - 48, 60),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             Visible = false,
@@ -138,7 +146,7 @@ public sealed class MainForm : Form
         Controls.Add(_warningLabel);
 
         _actionButton = Theme.PrimaryButton(_options.Uninstall ? "AVINSTALLERA" : "INSTALLERA");
-        _actionButton.Location = new Point(24, 330);
+        _actionButton.Location = new Point(24, 350);
         _actionButton.Size = new Size(ClientSize.Width - 48, 40);
         _actionButton.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _actionButton.Enabled = false;
@@ -146,7 +154,7 @@ public sealed class MainForm : Form
         Controls.Add(_actionButton);
 
         _retryButton = Theme.SecondaryLinkButton("Försök igen");
-        _retryButton.Location = new Point(24, 330);
+        _retryButton.Location = new Point(24, 350);
         _retryButton.Size = new Size(ClientSize.Width - 48, 32);
         _retryButton.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _retryButton.Visible = false;
@@ -154,13 +162,13 @@ public sealed class MainForm : Form
         Controls.Add(_retryButton);
 
         _advancedLink = Theme.SecondaryLinkButton("Avancerat ▾");
-        _advancedLink.Location = new Point(24, 380);
+        _advancedLink.Location = new Point(24, 400);
         _advancedLink.AutoSize = true;
         _advancedLink.Click += (_, _) => ToggleAdvanced();
         Controls.Add(_advancedLink);
 
         _diagnosticsButton = Theme.SecondaryLinkButton("Kopiera diagnostik");
-        _diagnosticsButton.Location = new Point(200, 380);
+        _diagnosticsButton.Location = new Point(200, 400);
         _diagnosticsButton.AutoSize = true;
         _diagnosticsButton.Click += (_, _) => CopyDiagnostics();
         Controls.Add(_diagnosticsButton);
@@ -174,7 +182,7 @@ public sealed class MainForm : Form
             BackColor = Theme.CardInner,
             ForeColor = Theme.TextSecondary,
             BorderStyle = BorderStyle.FixedSingle,
-            Location = new Point(24, 412),
+            Location = new Point(24, 432),
             Size = new Size(ClientSize.Width - 48, 96),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             Visible = false,
@@ -215,7 +223,7 @@ public sealed class MainForm : Form
         _actionButton.Enabled = false;
         _warningLabel.Visible = false;
         _subLabel.Text = "Kontrollerar din dator...";
-        foreach (var row in new[] { _rowWindows, _rowMcVersion, _rowLoader, _rowApi, _rowCompanion }) row.SetPending();
+        foreach (var row in new[] { _rowWindows, _rowLauncher, _rowMcVersion, _rowLoader, _rowApi, _rowCompanion }) row.SetPending();
 
         await Task.Run(() =>
         {
@@ -225,13 +233,15 @@ public sealed class MainForm : Form
 
         var windows = EnvironmentDetection.CheckWindowsVersion(Environment.OSVersion.Version);
         var launcher = EnvironmentDetection.CheckLauncher(_paths);
+        _launcherCheck = launcher;
         var processLister = new RealProcessLister();
         bool minecraftRunning = EnvironmentDetection.IsMinecraftLikelyRunning(processLister);
         bool launcherAppRunning = EnvironmentDetection.IsMinecraftLauncherRunning(processLister);
 
         _rowWindows.SetStatus(
             windows.Level == WindowsSupportLevel.Unsupported ? StatusIcon.Fail : StatusIcon.Ok,
-            windows.Level == WindowsSupportLevel.Unsupported ? $"{windows.DisplayVersion} - stöds ej" : $"{windows.DisplayVersion} Hittad");
+            windows.Level == WindowsSupportLevel.Unsupported ? $"{windows.DisplayVersion} - stöds ej" : windows.DisplayVersion);
+        _rowLauncher.SetStatus(launcher.Found ? StatusIcon.Ok : StatusIcon.Fail, launcher.Found ? "Hittad" : "Hittades inte");
         _rowMcVersion.SetStatus(_target is not null ? StatusIcon.Ok : StatusIcon.Fail, _target is not null ? "Stöds" : "Ingen kompatibel version hittades");
         _rowLoader.SetStatus(StatusIcon.Ok, "Installeras automatiskt");
         _rowApi.SetStatus(StatusIcon.Ok, "Installeras automatiskt");
@@ -257,7 +267,11 @@ public sealed class MainForm : Form
         }
         if (!launcher.Found)
         {
-            ShowBlocked("Minecraft Launcher hittades inte.\nInstallera/starta den officiella Minecraft Launcher först.");
+            // A bare .minecraft directory is not enough evidence the launcher has ever actually
+            // been run - mirrors Fabric's own installer, which refuses to create a profile when
+            // it finds neither official profile file (launcher_profiles.json or
+            // launcher_profiles_microsoft_store.json).
+            ShowBlocked("Minecraft Launcher är inte färdigkonfigurerad.\nStarta den officiella Minecraft Launcher en gång och försök igen.");
             return;
         }
         if (launcherAppRunning)
@@ -439,7 +453,8 @@ public sealed class MainForm : Form
             _lastStep,
             _lastStatus,
             null,
-            _lastErrorMessage);
+            _lastErrorMessage,
+            _launcherCheck?.ExistingProfilePaths.Select(p => Path.GetFileName(p)!).ToList());
         string text = DiagnosticsBuilder.Build(info);
         try
         {

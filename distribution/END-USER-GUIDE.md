@@ -21,8 +21,9 @@ Minecraft-profiler och andra moddar rörs aldrig.
 
 ## Om något går fel
 
-- **"Minecraft Launcher hittades inte"** - installera/starta den officiella Minecraft Launcher
-  först, kör sedan installeraren igen.
+- **"Minecraft Launcher är inte färdigkonfigurerad"** - starta den officiella Minecraft Launcher
+  en gång (du behöver inte spela, bara öppna den), stäng den igen och kör installeraren en gång till.
+- **"Minecraft Launcher är öppen"** - stäng Minecraft Launcher helt och klicka **Försök igen**.
 - **"Minecraft körs"** - stäng Minecraft helt och klicka **Försök igen**.
 - Klicka **Kopiera diagnostik** och skicka texten till den som hjälper dig felsöka. Den innehåller
   bara versionsnummer och sökvägar - aldrig lösenord, inloggningsuppgifter eller dina egna

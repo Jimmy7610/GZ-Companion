@@ -15,7 +15,8 @@ public sealed record DiagnosticsInfo(
     string Step,
     string Status,
     string? ErrorCode,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    IReadOnlyList<string>? DetectedLauncherProfileFileNames = null);
 
 /// <summary>
 /// Builds the plain-text block behind the "Kopiera diagnostik" button. Never includes secrets
@@ -37,6 +38,19 @@ public static class DiagnosticsBuilder
         sb.AppendLine($"GZ Companion: {info.CompanionVersion}");
         sb.AppendLine($".minecraft: {RedactUserName(info.DetectedDotMinecraftDir)}");
         sb.AppendLine($"Spelkatalog: {RedactUserName(info.DetectedGameDir)}");
+        var files = info.DetectedLauncherProfileFileNames;
+        if (files is { Count: > 0 })
+        {
+            sb.AppendLine(files.Count == 1 ? "Launcherprofil:" : "Launcherprofiler:");
+            foreach (var name in files)
+            {
+                sb.AppendLine($"  {name}");
+            }
+        }
+        else
+        {
+            sb.AppendLine("Launcherprofil: ingen hittades");
+        }
         sb.AppendLine($"Steg: {info.Step}");
         sb.AppendLine($"Status: {info.Status}");
         if (info.ErrorCode is not null)

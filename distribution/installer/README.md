@@ -26,7 +26,7 @@ GZCompanion.Installer.Core/    - all logic: manifest parsing, path/environment d
 GZCompanion.Installer.App/     - the WinForms UI (Program.cs, MainForm.cs, Theme.cs) plus the
                                   embedded resources (compatibility.json and, once copied in by
                                   build-installer.ps1, the GZ Companion mod jar itself).
-GZCompanion.Installer.Tests/   - xUnit tests against Core (83 tests as of this writing).
+GZCompanion.Installer.Tests/   - xUnit tests against Core (101 tests as of this writing).
 build-installer.ps1            - builds the mod jar, embeds it (HARD-FAILING if it doesn't match
                                   compatibility.json), runs the test suite, publishes the
                                   single-file exe, and copies the result to
@@ -47,7 +47,8 @@ GZ Companion directory - this was wrong and has been corrected:
 
 ```
 %APPDATA%\.minecraft\                          <- the launcher's own root (SHARED, never wiped)
-    launcher_profiles.json                     <- only file here we ever write to
+    launcher_profiles.json                     <- Win32/standalone launcher profile file
+    launcher_profiles_microsoft_store.json     <- Microsoft Store/Xbox app launcher profile file
     versions\fabric-loader-0.19.5-26.1.2\...   <- Fabric's version JSON
     libraries\...                              <- Fabric's loader libraries (asm, sponge-mixin, etc.)
 
@@ -59,6 +60,40 @@ GZ Companion directory - this was wrong and has been corrected:
 
 This means Fabric's version/library store is **shared launcher infrastructure** another Fabric
 profile could reference - see the uninstall ownership rules below.
+
+## Two official profile files: Win32 vs. Microsoft Store
+
+Confirmed against `ProfileInstaller.LauncherType` in the official Fabric Installer source: the
+official Minecraft Launcher actually supports **two independent** profile files, and which one(s)
+exist depends entirely on which launcher channel the player has actually run at least once:
+
+- `launcher_profiles.json` - the standalone/legacy ("Win32") launcher.
+- `launcher_profiles_microsoft_store.json` - the Microsoft Store/Xbox app launcher.
+
+`EnvironmentDetection.CheckLauncher` only ever considers the launcher "found" when **at least one**
+of these files already exists - a bare `.minecraft` directory alone is not enough evidence the
+launcher has ever actually been run (mirrors `ProfileInstaller.getInstalledLauncherTypes()`
+returning zero types, which makes Fabric's own installer refuse to create a profile at all).
+
+`InstallEngine` never invents either file. It only ever writes into files that already exist:
+
+- **Neither exists** → install is blocked before any download, with
+  *"Minecraft Launcher är inte färdigkonfigurerad. Starta den officiella Minecraft Launcher en
+  gång och försök igen."*
+- **Exactly one exists** → that one is updated. Nothing is written to the other.
+- **Both exist** → **both are updated independently** (each backed up and merged on its own).
+  Fabric's own GUI installer instead *asks the player to pick one* in this case
+  (`ClientHandler.showLauncherTypeSelection`, an "Xbox or Win32?" dialog) - this installer
+  deliberately diverges from that for a zero-knowledge friend installer: no technical corruption
+  risk was found in updating both (they are fully independent files, each safely merged on its
+  own), and doing so guarantees the profile shows up in whichever launcher the friend actually
+  opens without them ever needing to know or guess which "type" they have.
+
+Uninstall mirrors this: it removes the GZ Companion profile from **every** profile file that
+currently exists, tolerates any of them being absent, and never creates one just to remove
+something from it. When deciding whether the shared Fabric version directory is safe to delete,
+it checks for another profile referencing it in **either** file - a reference in just one is
+enough to keep the version directory.
 
 ## How to rebuild
 
@@ -167,7 +202,11 @@ The installer will **never** install a Minecraft version whose manifest entry is
   - **Never** deletes anything under `.minecraft\libraries` - leaving a cached jar behind is
     strictly safer than risking another installation that might still need it.
   - Only deletes our own specific Fabric version directory (e.g.
-    `versions\fabric-loader-0.19.5-26.1.2\`) if it can positively confirm - by reading
-    `launcher_profiles.json` - that no OTHER profile still has that exact `lastVersionId`. If
-    `launcher_profiles.json` is missing/unreadable, or our own `installed.json` can't say which
-    version we installed, the version directory is left alone rather than guessed at.
+    `versions\fabric-loader-0.19.5-26.1.2\`) if it can positively confirm - by reading **every**
+    existing profile file (Win32 and/or Microsoft Store) - that no OTHER profile, in EITHER file,
+    still has that exact `lastVersionId`. A reference from just one of the two files is enough to
+    keep it. If neither profile file exists, or our own `installed.json` can't say which version
+    we installed, the version directory is left alone rather than guessed at.
+- **Both official profile files are handled, independently.** See "Two official profile files"
+  above - install/uninstall touch every existing one (never inventing a missing one), each backed
+  up and merged/removed-from on its own.

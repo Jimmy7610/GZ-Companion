@@ -41,6 +41,18 @@ public sealed class InstallEngine
         public LauncherRunningException() : base("Minecraft Launcher är öppen. Stäng Minecraft Launcher innan installationen fortsätter.") { }
     }
 
+    /// <summary>
+    /// Thrown when neither official profile file exists yet. Mirrors Fabric's own installer
+    /// (<c>ClientHandler.doInstall</c> throws "no.launcher.profile" when
+    /// <c>ProfileInstaller.getInstalledLauncherTypes()</c> returns zero types) - a bare
+    /// <c>.minecraft</c> directory is not evidence the launcher has ever actually been run, and we
+    /// must never invent a profile file for a launcher channel the player doesn't use.
+    /// </summary>
+    public sealed class LauncherNotInitializedException : Exception
+    {
+        public LauncherNotInitializedException() : base("Minecraft Launcher är inte färdigkonfigurerad. Starta den officiella Minecraft Launcher en gång och försök igen.") { }
+    }
+
     private readonly InstallEngineDependencies _deps;
 
     public InstallEngine(InstallEngineDependencies deps) => _deps = deps;
@@ -61,6 +73,15 @@ public sealed class InstallEngine
             }
 
             var paths = _deps.Paths;
+
+            // At least one of the two official profile files must already exist - see
+            // LauncherNotInitializedException. Determined up front, before any download, exactly
+            // like the launcher-running check above.
+            var existingProfilePaths = paths.AllLauncherProfilePaths.Where(File.Exists).ToList();
+            if (existingProfilePaths.Count == 0)
+            {
+                throw new LauncherNotInitializedException();
+            }
 
             // 1. Directories. GzCompanion's own mods/config are isolated; Fabric's version JSON
             //    and libraries are launcher-owned shared infrastructure (see InstallPaths.DotMinecraftDir)
@@ -174,22 +195,28 @@ public sealed class InstallEngine
             }
             Record("companion-jar", target.CompanionJar.FileName);
 
-            // 6. Launcher profile - the only file outside our isolated directory this installer
-            //    ever writes. Backed up first, parsed/merged as JSON (never regex); every other
-            //    profile and every field this editor doesn't own keeps its value and structure.
+            // 6. Launcher profile(s) - the only files outside our isolated directory this
+            //    installer ever writes. Fabric's own GUI installer asks the player to pick ONE
+            //    launcher when both profile files exist (ClientHandler.showLauncherTypeSelection);
+            //    we deliberately diverge for this zero-knowledge friend installer and update
+            //    every existing one instead, so the profile appears in whichever launcher the
+            //    player actually opens without them needing to know or guess which "type" they
+            //    have. No technical corruption risk was found in doing this - the two files are
+            //    fully independent, each backed up and merged on its own. Every other profile and
+            //    every field this editor doesn't own keeps its value and structure (never regex).
             Emit("Uppdaterar Minecraft Launcher-profil...");
-            if (!dryRun)
+            var spec = new GzCompanionProfileSpec(ProfileId, ProfileName, paths.GzCompanionGameDir, loaderProfile.Id, IconBase64: null);
+            foreach (var profilePath in existingProfilePaths)
             {
-                LauncherProfilesEditor.BackupIfExists(paths.LauncherProfilesPath, _deps.Clock());
-                JsonObject root = File.Exists(paths.LauncherProfilesPath)
-                    ? LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath))
-                    : LauncherProfilesEditor.NewEmptyDocument();
-
-                var spec = new GzCompanionProfileSpec(ProfileId, ProfileName, paths.GzCompanionGameDir, loaderProfile.Id, IconBase64: null);
-                JsonObject updated = LauncherProfilesEditor.UpsertGzCompanionProfile(root, spec, _deps.Clock());
-                AtomicFileWriter.WriteAllTextAtomically(paths.LauncherProfilesPath, LauncherProfilesEditor.Serialize(updated));
+                if (!dryRun)
+                {
+                    LauncherProfilesEditor.BackupIfExists(profilePath, _deps.Clock());
+                    JsonObject root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(profilePath));
+                    JsonObject updated = LauncherProfilesEditor.UpsertGzCompanionProfile(root, spec, _deps.Clock());
+                    AtomicFileWriter.WriteAllTextAtomically(profilePath, LauncherProfilesEditor.Serialize(updated));
+                }
+                Record("launcher-profile", Path.GetFileName(profilePath));
             }
-            Record("launcher-profile", ProfileName);
 
             // 7. Our own install-state bookkeeping (for future reinstall/update/uninstall).
             if (!dryRun)
@@ -209,19 +236,21 @@ public sealed class InstallEngine
     }
 
     /// <summary>
-    /// Removes the launcher profile and GZ Companion's own isolated files. Fabric's version JSON
-    /// and libraries live in the launcher's SHARED versions/libraries directories (see
-    /// <see cref="InstallPaths.DotMinecraftDir"/>) and may be used by another Fabric profile the
-    /// player set up themselves, or another mod's installer - so this uses conservative ownership
-    /// rules rather than deleting them outright:
+    /// Removes the launcher profile from EVERY existing official profile file, and GZ Companion's
+    /// own isolated files. Fabric's version JSON and libraries live in the launcher's SHARED
+    /// versions/libraries directories (see <see cref="InstallPaths.DotMinecraftDir"/>) and may be
+    /// used by another Fabric profile the player set up themselves, or another mod's installer -
+    /// so this uses conservative ownership rules rather than deleting them outright:
     /// - The shared library cache (<see cref="InstallPaths.SharedLibrariesDir"/>) is NEVER deleted
     ///   or touched by uninstall, under any circumstance. Leaving cached jars behind is strictly
     ///   safer than risking another installation.
     /// - Our specific Fabric version directory (e.g. versions/fabric-loader-0.19.5-26.1.2/) is
-    ///   only removed if we can positively confirm no OTHER profile in launcher_profiles.json
-    ///   still references that exact version id. If launcher_profiles.json is missing, unreadable,
-    ///   or our own installed.json can't tell us which version we installed, the version directory
-    ///   is left alone rather than guessed at.
+    ///   only removed if we can positively confirm no OTHER profile, in EITHER existing profile
+    ///   file, still references that exact version id. If neither profile file exists, or our own
+    ///   installed.json can't tell us which version we installed, the version directory is left
+    ///   alone rather than guessed at.
+    /// Each existing profile file is backed up and rewritten independently; a missing profile
+    /// file is simply skipped (never created) and does not fail the uninstall.
     /// GZ Companion's own local user data lives under the isolated game directory - callers that
     /// want "Behåll mina GZ Companion-data" must pass keepUserData=true, which preserves the
     /// config directory tree while still removing our own mods.
@@ -242,22 +271,26 @@ public sealed class InstallEngine
                 ? $"fabric-loader-{installed.FabricLoaderVersion}-{installed.MinecraftVersion}"
                 : null;
 
-            log?.Report("Tar bort Minecraft Launcher-profil...");
-            bool versionSafeToRemove = false;
-            if (File.Exists(paths.LauncherProfilesPath))
-            {
-                var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
-                versionSafeToRemove = ownedVersionId is not null
-                    && !LauncherProfilesEditor.AnyOtherProfileUsesVersion(root, ownedVersionId, ProfileId);
+            var existingProfilePaths = paths.AllLauncherProfilePaths.Where(File.Exists).ToList();
+            var parsedProfilesByPath = existingProfilePaths.ToDictionary(p => p, p => LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(p)));
 
+            // Safe to remove our Fabric version directory only if NO other profile, in ANY
+            // existing profile file, still references it.
+            bool versionStillReferenced = ownedVersionId is not null
+                && parsedProfilesByPath.Values.Any(root => LauncherProfilesEditor.AnyOtherProfileUsesVersion(root, ownedVersionId, ProfileId));
+            bool versionSafeToRemove = ownedVersionId is not null && !versionStillReferenced;
+
+            log?.Report("Tar bort Minecraft Launcher-profil...");
+            foreach (var (profilePath, root) in parsedProfilesByPath)
+            {
                 if (!dryRun)
                 {
-                    LauncherProfilesEditor.BackupIfExists(paths.LauncherProfilesPath, _deps.Clock());
+                    LauncherProfilesEditor.BackupIfExists(profilePath, _deps.Clock());
                     var updated = LauncherProfilesEditor.RemoveGzCompanionProfile(root, ProfileId);
-                    AtomicFileWriter.WriteAllTextAtomically(paths.LauncherProfilesPath, LauncherProfilesEditor.Serialize(updated));
+                    AtomicFileWriter.WriteAllTextAtomically(profilePath, LauncherProfilesEditor.Serialize(updated));
                 }
+                steps.Add(new InstallStepResult("launcher-profile-removed", true, Path.GetFileName(profilePath)));
             }
-            steps.Add(new InstallStepResult("launcher-profile-removed", true, ProfileId));
 
             // The shared library cache is NEVER touched - see doc comment above.
             steps.Add(new InstallStepResult("shared-libraries-preserved", true, paths.SharedLibrariesDir));

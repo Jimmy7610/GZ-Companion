@@ -11,7 +11,9 @@ public class InstallPathsTests
         var paths = new InstallPaths(@"C:\Users\test\AppData\Roaming", @"C:\Users\test\AppData\Local");
         Assert.Equal(@"C:\Users\test\AppData\Local\GZ Companion\minecraft", paths.GzCompanionGameDir);
         Assert.Equal(@"C:\Users\test\AppData\Roaming\.minecraft", paths.DotMinecraftDir);
-        Assert.Equal(@"C:\Users\test\AppData\Roaming\.minecraft\launcher_profiles.json", paths.LauncherProfilesPath);
+        Assert.Equal(@"C:\Users\test\AppData\Roaming\.minecraft\launcher_profiles.json", paths.Win32LauncherProfilesPath);
+        Assert.Equal(@"C:\Users\test\AppData\Roaming\.minecraft\launcher_profiles_microsoft_store.json", paths.MicrosoftStoreLauncherProfilesPath);
+        Assert.Equal(new[] { paths.Win32LauncherProfilesPath, paths.MicrosoftStoreLauncherProfilesPath }, paths.AllLauncherProfilePaths);
     }
 
     [Fact]

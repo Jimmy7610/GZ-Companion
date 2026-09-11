@@ -40,7 +40,22 @@ public sealed class InstallPaths
     /// </summary>
     public string DotMinecraftDir => Path.Combine(AppDataDir, ".minecraft");
 
-    public string LauncherProfilesPath => Path.Combine(DotMinecraftDir, "launcher_profiles.json");
+    /// <summary>
+    /// The official Minecraft Launcher supports TWO independent profile files, confirmed against
+    /// <c>ProfileInstaller.LauncherType</c> in the official Fabric Installer source:
+    /// <c>WIN32("launcher_profiles.json")</c> for the standalone/legacy launcher, and
+    /// <c>MICROSOFT_STORE("launcher_profiles_microsoft_store.json")</c> for the Microsoft
+    /// Store/Xbox app launcher. A machine only has the launcher(s) it actually installed
+    /// initialized, so only whichever of these files already exists is ever touched - see
+    /// <see cref="AllLauncherProfilePaths"/> and <see cref="EnvironmentDetection.CheckLauncher"/>.
+    /// </summary>
+    public string Win32LauncherProfilesPath => Path.Combine(DotMinecraftDir, "launcher_profiles.json");
+
+    /// <summary>See <see cref="Win32LauncherProfilesPath"/>.</summary>
+    public string MicrosoftStoreLauncherProfilesPath => Path.Combine(DotMinecraftDir, "launcher_profiles_microsoft_store.json");
+
+    /// <summary>Both recognized official profile file paths, whether or not they currently exist - callers filter to existing ones themselves (see <see cref="EnvironmentDetection.CheckLauncher"/>).</summary>
+    public IReadOnlyList<string> AllLauncherProfilePaths => new[] { Win32LauncherProfilesPath, MicrosoftStoreLauncherProfilesPath };
 
     /// <summary>Shared with every other Fabric/vanilla profile on this machine - the launcher's own version store. Never bulk-deleted; see uninstall.</summary>
     public string SharedVersionsDir => Path.Combine(DotMinecraftDir, "versions");

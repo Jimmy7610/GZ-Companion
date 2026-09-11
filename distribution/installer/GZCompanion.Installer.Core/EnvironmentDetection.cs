@@ -11,7 +11,15 @@ public enum WindowsSupportLevel
 
 public sealed record WindowsCheckResult(WindowsSupportLevel Level, string DisplayVersion);
 
-public sealed record LauncherCheckResult(bool Found, bool DotMinecraftExists, bool LauncherProfilesExists, string DotMinecraftDir);
+/// <summary>
+/// <paramref name="ExistingProfilePaths"/> lists whichever of the two official profile files
+/// (<see cref="InstallPaths.Win32LauncherProfilesPath"/>, <see cref="InstallPaths.MicrosoftStoreLauncherProfilesPath"/>)
+/// actually exist right now - zero, one, or both. <see cref="Found"/> is true only when at least
+/// one does: a bare <c>.minecraft</c> directory with neither profile file is NOT enough evidence
+/// the launcher has ever actually been run, mirroring Fabric's own installer, which refuses to
+/// create a profile when it finds zero recognized launcher types.
+/// </summary>
+public sealed record LauncherCheckResult(bool Found, bool DotMinecraftExists, IReadOnlyList<string> ExistingProfilePaths, string DotMinecraftDir);
 
 public sealed record ExistingInstallCheckResult(bool Found, string GameDir, bool HasCompanionJar, string? InstalledCompanionVersion);
 
@@ -48,15 +56,17 @@ public static class EnvironmentDetection
     }
 
     /// <summary>
-    /// Detects the official Minecraft Launcher by its data directory, not by trying to locate its
-    /// executable (which varies by install channel - Microsoft Store vs. standalone installer).
-    /// Fabric's own installer uses the same signal.
+    /// Detects the official Minecraft Launcher by which of its two possible profile files
+    /// actually exist, not by trying to locate its executable (which varies by install channel -
+    /// Microsoft Store vs. standalone installer) and not by the bare presence of the
+    /// <c>.minecraft</c> directory alone. Fabric's own installer (<c>ProfileInstaller.getInstalledLauncherTypes</c>)
+    /// uses this exact signal.
     /// </summary>
     public static LauncherCheckResult CheckLauncher(InstallPaths paths)
     {
         bool dotMinecraftExists = Directory.Exists(paths.DotMinecraftDir);
-        bool profilesExist = File.Exists(paths.LauncherProfilesPath);
-        return new LauncherCheckResult(dotMinecraftExists || profilesExist, dotMinecraftExists, profilesExist, paths.DotMinecraftDir);
+        var existingProfilePaths = paths.AllLauncherProfilePaths.Where(File.Exists).ToList();
+        return new LauncherCheckResult(existingProfilePaths.Count > 0, dotMinecraftExists, existingProfilePaths, paths.DotMinecraftDir);
     }
 
     public static ExistingInstallCheckResult CheckExistingInstall(InstallPaths paths)

@@ -41,19 +41,23 @@ public class EnvironmentDetectionTests : IDisposable
     }
 
     [Fact]
-    public void LauncherFoundWhenDotMinecraftDirExists()
+    public void BareDotMinecraftDirWithNoProfileFileIsNotEnoughEvidence()
     {
+        // The exact regression this test locks in: a .minecraft directory can exist (e.g. from a
+        // partial/aborted setup) without the launcher ever having actually been run. Mirrors
+        // Fabric's own installer, which refuses to create a profile when it finds zero
+        // recognized launcher types.
         var appData = Path.Combine(_tempRoot, "roaming");
         Directory.CreateDirectory(Path.Combine(appData, ".minecraft"));
         var paths = new InstallPaths(appData, Path.Combine(_tempRoot, "local"));
         var result = EnvironmentDetection.CheckLauncher(paths);
-        Assert.True(result.Found);
+        Assert.False(result.Found);
         Assert.True(result.DotMinecraftExists);
-        Assert.False(result.LauncherProfilesExists);
+        Assert.Empty(result.ExistingProfilePaths);
     }
 
     [Fact]
-    public void LauncherFoundWhenOnlyProfilesFileExists()
+    public void LauncherFoundWhenOnlyWin32ProfileFileExists()
     {
         var appData = Path.Combine(_tempRoot, "roaming");
         Directory.CreateDirectory(Path.Combine(appData, ".minecraft"));
@@ -61,7 +65,32 @@ public class EnvironmentDetectionTests : IDisposable
         var paths = new InstallPaths(appData, Path.Combine(_tempRoot, "local"));
         var result = EnvironmentDetection.CheckLauncher(paths);
         Assert.True(result.Found);
-        Assert.True(result.LauncherProfilesExists);
+        Assert.Equal(new[] { paths.Win32LauncherProfilesPath }, result.ExistingProfilePaths);
+    }
+
+    [Fact]
+    public void LauncherFoundWhenOnlyMicrosoftStoreProfileFileExists()
+    {
+        var appData = Path.Combine(_tempRoot, "roaming");
+        Directory.CreateDirectory(Path.Combine(appData, ".minecraft"));
+        File.WriteAllText(Path.Combine(appData, ".minecraft", "launcher_profiles_microsoft_store.json"), "{\"profiles\":{}}");
+        var paths = new InstallPaths(appData, Path.Combine(_tempRoot, "local"));
+        var result = EnvironmentDetection.CheckLauncher(paths);
+        Assert.True(result.Found);
+        Assert.Equal(new[] { paths.MicrosoftStoreLauncherProfilesPath }, result.ExistingProfilePaths);
+    }
+
+    [Fact]
+    public void LauncherFoundListsBothWhenBothProfileFilesExist()
+    {
+        var appData = Path.Combine(_tempRoot, "roaming");
+        Directory.CreateDirectory(Path.Combine(appData, ".minecraft"));
+        File.WriteAllText(Path.Combine(appData, ".minecraft", "launcher_profiles.json"), "{\"profiles\":{}}");
+        File.WriteAllText(Path.Combine(appData, ".minecraft", "launcher_profiles_microsoft_store.json"), "{\"profiles\":{}}");
+        var paths = new InstallPaths(appData, Path.Combine(_tempRoot, "local"));
+        var result = EnvironmentDetection.CheckLauncher(paths);
+        Assert.True(result.Found);
+        Assert.Equal(2, result.ExistingProfilePaths.Count);
     }
 
     [Fact]

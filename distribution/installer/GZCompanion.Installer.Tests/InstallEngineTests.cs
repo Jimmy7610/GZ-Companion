@@ -30,6 +30,9 @@ internal sealed class FakeDownloader : IFileDownloader
     }
 }
 
+/// <summary>Which official launcher profile file(s) exist before a test runs - mirrors the real four possible machine states.</summary>
+public enum LauncherSetup { Win32Only, MicrosoftStoreOnly, Both, Neither }
+
 public class InstallEngineTests : IDisposable
 {
     private readonly string _tempRoot = Directory.CreateTempSubdirectory("gzc-engine-test-").FullName;
@@ -41,6 +44,7 @@ public class InstallEngineTests : IDisposable
     private const string LibraryBaseUrl = "https://maven.fabricmc.net/";
     private const string FabricApiUrl = "https://cdn.modrinth.com/data/P7dR8mSH/versions/x/fabric-api-0.155.3+26.1.2.jar";
     private const string OwnedVersionId = "fabric-loader-0.19.5-26.1.2";
+    private const string EmptyProfilesDoc = """{"profiles":{}}""";
 
     private static readonly byte[] LibraryBytes = { 10, 20, 30, 40 };
     private static readonly byte[] FabricApiBytes = { 1, 2, 3, 4, 5 };
@@ -48,10 +52,19 @@ public class InstallEngineTests : IDisposable
 
     private bool _launcherRunning;
 
-    private (InstallPaths paths, SupportedEntry target, FakeDownloader downloader, InstallEngine engine) Build()
+    private (InstallPaths paths, SupportedEntry target, FakeDownloader downloader, InstallEngine engine) Build(LauncherSetup setup = LauncherSetup.Win32Only)
     {
         var paths = new InstallPaths(Path.Combine(_tempRoot, "roaming"), Path.Combine(_tempRoot, "local"));
-        Directory.CreateDirectory(Path.Combine(paths.AppDataDir, ".minecraft"));
+        Directory.CreateDirectory(paths.DotMinecraftDir);
+
+        if (setup is LauncherSetup.Win32Only or LauncherSetup.Both)
+        {
+            File.WriteAllText(paths.Win32LauncherProfilesPath, EmptyProfilesDoc);
+        }
+        if (setup is LauncherSetup.MicrosoftStoreOnly or LauncherSetup.Both)
+        {
+            File.WriteAllText(paths.MicrosoftStoreLauncherProfilesPath, EmptyProfilesDoc);
+        }
 
         var downloader = new FakeDownloader();
         string loaderProfileJson = $$"""
@@ -95,7 +108,7 @@ public class InstallEngineTests : IDisposable
         Assert.True(outcome.Success);
         Assert.True(outcome.DryRun);
         Assert.False(Directory.Exists(paths.GzCompanionGameDir), "Dry-run must create no directories at all.");
-        Assert.False(File.Exists(paths.LauncherProfilesPath), "Dry-run must never write launcher_profiles.json.");
+        Assert.Equal(EmptyProfilesDoc, File.ReadAllText(paths.Win32LauncherProfilesPath), ignoreLineEndingDifferences: true);
     }
 
     [Fact]
@@ -114,9 +127,8 @@ public class InstallEngineTests : IDisposable
         // launcher's own .minecraft root, NOT the isolated GZ Companion game directory.
         Assert.True(File.Exists(Path.Combine(paths.SharedLibrariesDir, "org", "ow2", "asm", "asm", "9.10.1", "asm-9.10.1.jar")));
         Assert.True(File.Exists(Path.Combine(paths.SharedVersionsDir, "fabric-loader-0.19.5-26.1.2", "fabric-loader-0.19.5-26.1.2.json")));
-        Assert.True(File.Exists(paths.LauncherProfilesPath));
 
-        var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
+        var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath));
         Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(root, "gzcompanion-gameZone"));
         // gameDir still points at the isolated directory (mods/config/saves) - only versions/
         // libraries moved to the shared root, per the corrected architecture.
@@ -130,13 +142,12 @@ public class InstallEngineTests : IDisposable
     public async Task RealRun_PreservesExistingOtherLauncherProfiles()
     {
         var (paths, target, _, engine) = Build();
-        Directory.CreateDirectory(Path.GetDirectoryName(paths.LauncherProfilesPath)!);
-        File.WriteAllText(paths.LauncherProfilesPath, """{"profiles":{"vanilla":{"name":"Vanilla","type":"latest-release"}},"version":3}""");
+        File.WriteAllText(paths.Win32LauncherProfilesPath, """{"profiles":{"vanilla":{"name":"Vanilla","type":"latest-release"}},"version":3}""");
 
         var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
 
         Assert.True(outcome.Success, outcome.ErrorMessage);
-        var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
+        var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath));
         Assert.NotNull(root["profiles"]!["vanilla"]);
         Assert.Equal("Vanilla", root["profiles"]!["vanilla"]!["name"]!.GetValue<string>());
     }
@@ -145,12 +156,10 @@ public class InstallEngineTests : IDisposable
     public async Task RealRun_BacksUpLauncherProfilesBeforeWriting()
     {
         var (paths, target, _, engine) = Build();
-        Directory.CreateDirectory(Path.GetDirectoryName(paths.LauncherProfilesPath)!);
-        File.WriteAllText(paths.LauncherProfilesPath, """{"profiles":{}}""");
 
         await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
 
-        string dir = Path.GetDirectoryName(paths.LauncherProfilesPath)!;
+        string dir = Path.GetDirectoryName(paths.Win32LauncherProfilesPath)!;
         Assert.Contains(Directory.GetFiles(dir), f => f.Contains(".backup-"));
     }
 
@@ -165,7 +174,7 @@ public class InstallEngineTests : IDisposable
 
         Assert.False(outcome.Success);
         Assert.Contains("Checksum mismatch", outcome.ErrorMessage);
-        Assert.False(File.Exists(paths.LauncherProfilesPath), "A failed install must never reach (or partially write) the launcher profile step.");
+        Assert.Equal(EmptyProfilesDoc, File.ReadAllText(paths.Win32LauncherProfilesPath), ignoreLineEndingDifferences: true);
     }
 
     [Fact]
@@ -199,7 +208,7 @@ public class InstallEngineTests : IDisposable
     }
 
     // ------------------------------------------------------------------
-    // Critical issue 2: the launcher app itself must be closed before any profile mutation.
+    // The launcher app itself must be closed before any profile mutation.
     // ------------------------------------------------------------------
 
     [Fact]
@@ -228,7 +237,7 @@ public class InstallEngineTests : IDisposable
         Assert.False(outcome.Success);
         Assert.Contains("Minecraft Launcher är öppen", outcome.ErrorMessage);
         Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(
-            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath)), "gzcompanion-gameZone"),
+            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath)), "gzcompanion-gameZone"),
             "Nothing should be removed once the launcher is detected as open.");
     }
 
@@ -241,6 +250,116 @@ public class InstallEngineTests : IDisposable
         var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
 
         Assert.True(outcome.Success, outcome.ErrorMessage);
+    }
+
+    // ------------------------------------------------------------------
+    // Multi-launcher-profile support (Win32 launcher_profiles.json vs. Microsoft Store
+    // launcher_profiles_microsoft_store.json), confirmed against ProfileInstaller.LauncherType /
+    // ClientHandler in the official Fabric Installer source.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Win32Only_InstallsThereOnlyAndNeverCreatesTheStoreFile()
+    {
+        var (paths, target, _, engine) = Build(LauncherSetup.Win32Only);
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(
+            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath)), "gzcompanion-gameZone"));
+        Assert.False(File.Exists(paths.MicrosoftStoreLauncherProfilesPath), "Must never invent a profile file for a launcher channel that isn't actually installed.");
+    }
+
+    [Fact]
+    public async Task MicrosoftStoreOnly_InstallsThereOnlyAndNeverCreatesTheWin32File()
+    {
+        var (paths, target, _, engine) = Build(LauncherSetup.MicrosoftStoreOnly);
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(
+            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.MicrosoftStoreLauncherProfilesPath)), "gzcompanion-gameZone"));
+        Assert.False(File.Exists(paths.Win32LauncherProfilesPath), "Must never invent a profile file for a launcher channel that isn't actually installed.");
+    }
+
+    [Fact]
+    public async Task BothExist_InstallsIntoBothIndependently()
+    {
+        var (paths, target, _, engine) = Build(LauncherSetup.Both);
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        foreach (var path in paths.AllLauncherProfilePaths)
+        {
+            Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(path)), "gzcompanion-gameZone"),
+                $"Expected the GZ Companion profile in {Path.GetFileName(path)}");
+        }
+        Assert.Contains(outcome.Steps, s => s.Step == "launcher-profile" && s.Detail == "launcher_profiles.json");
+        Assert.Contains(outcome.Steps, s => s.Step == "launcher-profile" && s.Detail == "launcher_profiles_microsoft_store.json");
+    }
+
+    [Fact]
+    public async Task BothExist_BacksUpEachFileIndependently()
+    {
+        var (paths, target, _, engine) = Build(LauncherSetup.Both);
+
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        string dir = paths.DotMinecraftDir;
+        Assert.Contains(Directory.GetFiles(dir), f => f.Contains("launcher_profiles.json.backup-"));
+        Assert.Contains(Directory.GetFiles(dir), f => f.Contains("launcher_profiles_microsoft_store.json.backup-"));
+    }
+
+    [Fact]
+    public async Task BothExist_PreservesUnrelatedProfilesAndUnknownFieldsInBothFilesIndependently()
+    {
+        var (paths, target, _, engine) = Build(LauncherSetup.Both);
+        File.WriteAllText(paths.Win32LauncherProfilesPath,
+            """{"profiles":{"win32-only-profile":{"name":"Win32 Thing","type":"custom","someUnknownField":"keep-me-1"}},"clientToken":"win32-token"}""");
+        File.WriteAllText(paths.MicrosoftStoreLauncherProfilesPath,
+            """{"profiles":{"store-only-profile":{"name":"Store Thing","type":"custom","someUnknownField":"keep-me-2"}},"clientToken":"store-token"}""");
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+
+        var win32Root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath));
+        Assert.Equal("keep-me-1", win32Root["profiles"]!["win32-only-profile"]!["someUnknownField"]!.GetValue<string>());
+        Assert.Equal("win32-token", win32Root["clientToken"]!.GetValue<string>());
+        Assert.Null(win32Root["profiles"]!["store-only-profile"]); // never leaked across files
+
+        var storeRoot = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.MicrosoftStoreLauncherProfilesPath));
+        Assert.Equal("keep-me-2", storeRoot["profiles"]!["store-only-profile"]!["someUnknownField"]!.GetValue<string>());
+        Assert.Equal("store-token", storeRoot["clientToken"]!.GetValue<string>());
+        Assert.Null(storeRoot["profiles"]!["win32-only-profile"]); // never leaked across files
+    }
+
+    [Fact]
+    public async Task NeitherProfileFileExists_BlocksInstallBeforeAnyDownload()
+    {
+        var (paths, target, downloader, engine) = Build(LauncherSetup.Neither);
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.False(outcome.Success);
+        Assert.Contains("inte färdigkonfigurerad", outcome.ErrorMessage);
+        Assert.Empty(downloader.RequestedUrls);
+        Assert.False(File.Exists(paths.Win32LauncherProfilesPath), "Must never invent either profile file.");
+        Assert.False(File.Exists(paths.MicrosoftStoreLauncherProfilesPath), "Must never invent either profile file.");
+    }
+
+    [Fact]
+    public async Task NeitherProfileFileExists_EvenDryRunReportsBlocked()
+    {
+        var (_, target, downloader, engine) = Build(LauncherSetup.Neither);
+
+        var outcome = await engine.RunAsync(target, dryRun: true, log: null, CancellationToken.None);
+
+        Assert.False(outcome.Success);
+        Assert.Contains("inte färdigkonfigurerad", outcome.ErrorMessage);
+        Assert.Empty(downloader.RequestedUrls);
     }
 
     // ------------------------------------------------------------------
@@ -285,11 +404,11 @@ public class InstallEngineTests : IDisposable
 
         // Simulate the player having a second, unrelated profile that happens to use the exact
         // same Fabric loader/Minecraft version combination.
-        var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
+        var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath));
         var withOther = LauncherProfilesEditor.UpsertGzCompanionProfile(root,
             new GzCompanionProfileSpec("my-other-fabric-profile", "My Other Fabric Profile", @"C:\Users\test\.minecraft", OwnedVersionId, null),
             DateTimeOffset.UtcNow);
-        File.WriteAllText(paths.LauncherProfilesPath, LauncherProfilesEditor.Serialize(withOther));
+        File.WriteAllText(paths.Win32LauncherProfilesPath, LauncherProfilesEditor.Serialize(withOther));
 
         var outcome = await engine.UninstallAsync(keepUserData: false, dryRun: false, log: null, CancellationToken.None);
 
@@ -297,7 +416,29 @@ public class InstallEngineTests : IDisposable
         Assert.True(Directory.Exists(versionDir), "A Fabric version directory still referenced by another profile must never be deleted.");
         Assert.Contains(outcome.Steps, s => s.Step == "fabric-version-kept");
         Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(
-            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath)), "my-other-fabric-profile"));
+            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath)), "my-other-fabric-profile"));
+    }
+
+    [Fact]
+    public async Task Uninstall_KeepsOwnedFabricVersionDirectoryWhenReferencedOnlyFromTheOtherProfileFile()
+    {
+        // Installed via Win32 only, but the player ALSO has a Microsoft Store launcher with an
+        // unrelated profile that happens to reference the exact same Fabric version - the version
+        // directory must be kept even though the reference lives in the OTHER file entirely.
+        var (paths, target, _, engine) = Build(LauncherSetup.Win32Only);
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        string versionDir = Path.Combine(paths.SharedVersionsDir, OwnedVersionId);
+
+        var storeProfile = LauncherProfilesEditor.UpsertGzCompanionProfile(LauncherProfilesEditor.NewEmptyDocument(),
+            new GzCompanionProfileSpec("someone-elses-store-profile", "Someone Else's Store Profile", @"C:\Users\test\other-instance", OwnedVersionId, null),
+            DateTimeOffset.UtcNow);
+        File.WriteAllText(paths.MicrosoftStoreLauncherProfilesPath, LauncherProfilesEditor.Serialize(storeProfile));
+
+        var outcome = await engine.UninstallAsync(keepUserData: false, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.True(Directory.Exists(versionDir), "A reference from the OTHER profile file must still protect the shared Fabric version directory.");
+        Assert.Contains(outcome.Steps, s => s.Step == "fabric-version-kept");
     }
 
     [Fact]
@@ -307,11 +448,9 @@ public class InstallEngineTests : IDisposable
         // must never guess which version directory is "ours" to delete.
         var (paths, target, _, engine) = Build();
         Directory.CreateDirectory(paths.GzCompanionGameDir);
-        Directory.CreateDirectory(Path.GetDirectoryName(paths.LauncherProfilesPath)!);
         string versionDir = Path.Combine(paths.SharedVersionsDir, OwnedVersionId);
         Directory.CreateDirectory(versionDir);
         File.WriteAllText(Path.Combine(versionDir, OwnedVersionId + ".json"), "{}");
-        File.WriteAllText(paths.LauncherProfilesPath, """{"profiles":{}}""");
 
         var outcome = await engine.UninstallAsync(keepUserData: false, dryRun: false, log: null, CancellationToken.None);
 
@@ -347,7 +486,7 @@ public class InstallEngineTests : IDisposable
         Assert.False(Directory.Exists(paths.GzCompanionModsDir));
         Assert.True(File.Exists(userDataFile), "keepUserData=true must preserve the config directory.");
         Assert.False(LauncherProfilesEditor.HasGzCompanionProfile(
-            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath)), "gzcompanion-gameZone"));
+            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath)), "gzcompanion-gameZone"));
     }
 
     [Fact]
@@ -369,13 +508,13 @@ public class InstallEngineTests : IDisposable
     {
         var (paths, target, _, engine) = Build();
         await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
-        var beforeRoot = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
+        var beforeRoot = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath));
         var updated = LauncherProfilesEditor.UpsertGzCompanionProfile(beforeRoot, new GzCompanionProfileSpec("someone-elses-modpack", "Someone Else's Modpack", @"D:\Other\Dir", "forge-1.20.1", null), DateTimeOffset.UtcNow);
-        File.WriteAllText(paths.LauncherProfilesPath, LauncherProfilesEditor.Serialize(updated));
+        File.WriteAllText(paths.Win32LauncherProfilesPath, LauncherProfilesEditor.Serialize(updated));
 
         await engine.UninstallAsync(keepUserData: true, dryRun: false, log: null, CancellationToken.None);
 
-        var afterRoot = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
+        var afterRoot = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath));
         Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(afterRoot, "someone-elses-modpack"));
         Assert.False(LauncherProfilesEditor.HasGzCompanionProfile(afterRoot, "gzcompanion-gameZone"));
     }
@@ -391,7 +530,7 @@ public class InstallEngineTests : IDisposable
         Assert.True(outcome.Success);
         Assert.True(Directory.Exists(paths.GzCompanionGameDir), "Dry-run uninstall must not remove anything.");
         Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(
-            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath)), "gzcompanion-gameZone"));
+            LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath)), "gzcompanion-gameZone"));
     }
 
     [Fact]
@@ -411,6 +550,47 @@ public class InstallEngineTests : IDisposable
 
         Assert.False(outcome.Success);
         Assert.Contains("mismatched profile", outcome.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ------------------------------------------------------------------
+    // Uninstall from each of the three "something exists" launcher setups.
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(LauncherSetup.Win32Only)]
+    [InlineData(LauncherSetup.MicrosoftStoreOnly)]
+    [InlineData(LauncherSetup.Both)]
+    public async Task Uninstall_RemovesTheProfileFromEveryExistingProfileFile(LauncherSetup setup)
+    {
+        var (paths, target, _, engine) = Build(setup);
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        var outcome = await engine.UninstallAsync(keepUserData: true, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        foreach (var path in paths.AllLauncherProfilePaths.Where(File.Exists))
+        {
+            Assert.False(LauncherProfilesEditor.HasGzCompanionProfile(LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(path)), "gzcompanion-gameZone"),
+                $"Expected the GZ Companion profile removed from {Path.GetFileName(path)}");
+        }
+    }
+
+    [Fact]
+    public async Task Uninstall_NeitherProfileFileExists_StillCleansUpIsolatedFilesWithoutError()
+    {
+        // Tolerate both being absent (e.g. the player wiped .minecraft themselves) - uninstall's
+        // job is still to clean up OUR isolated files, and it must never try to create either
+        // profile file just to remove something from it.
+        var (paths, target, _, engine) = Build(LauncherSetup.Win32Only);
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        File.Delete(paths.Win32LauncherProfilesPath);
+
+        var outcome = await engine.UninstallAsync(keepUserData: false, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.False(File.Exists(paths.Win32LauncherProfilesPath), "Uninstall must never create a launcher profile file that doesn't exist.");
+        Assert.False(File.Exists(paths.MicrosoftStoreLauncherProfilesPath));
+        Assert.False(Directory.Exists(paths.GzCompanionGameDir), "The isolated game dir must still be cleaned up even with no profile file to edit.");
     }
 
     [Fact]
@@ -444,7 +624,7 @@ public class InstallEngineTests : IDisposable
 
         // The profile's lastVersionId matches the shared version directory name exactly, and
         // gameDir points at the isolated directory - never at .minecraft itself.
-        var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.LauncherProfilesPath));
+        var root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(paths.Win32LauncherProfilesPath));
         var profile = root["profiles"]!["gzcompanion-gameZone"]!;
         string lastVersionId = profile["lastVersionId"]!.GetValue<string>();
         Assert.True(Directory.Exists(Path.Combine(paths.SharedVersionsDir, lastVersionId)));

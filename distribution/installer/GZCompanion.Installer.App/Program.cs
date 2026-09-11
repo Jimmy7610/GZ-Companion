@@ -55,6 +55,18 @@ internal static class Program
 
         var launcher = EnvironmentDetection.CheckLauncher(paths);
         Log($"Minecraft Launcher hittad: {launcher.Found} (.minecraft: {launcher.DotMinecraftDir})");
+        if (launcher.ExistingProfilePaths.Count > 0)
+        {
+            Log(launcher.ExistingProfilePaths.Count == 1 ? "Launcherprofil:" : "Launcherprofiler:");
+            foreach (var p in launcher.ExistingProfilePaths)
+            {
+                Log($"  {Path.GetFileName(p)}");
+            }
+        }
+        else
+        {
+            Log("Launcherprofil: ingen hittades");
+        }
 
         var realProcessLister = new RealProcessLister();
         bool running = options.TestRoot is null && EnvironmentDetection.IsMinecraftLikelyRunning(realProcessLister);

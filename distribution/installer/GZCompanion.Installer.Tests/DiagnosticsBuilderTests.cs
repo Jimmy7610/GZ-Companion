@@ -59,4 +59,32 @@ public class DiagnosticsBuilderTests
         Assert.Contains("0.19.5", text);
         Assert.Contains("fabric-api", text);
     }
+
+    [Fact]
+    public void ReportsSingleDetectedLauncherProfileFile()
+    {
+        var info = SampleInfo() with { DetectedLauncherProfileFileNames = new[] { "launcher_profiles.json" } };
+        string text = DiagnosticsBuilder.Build(info);
+        Assert.Contains("Launcherprofil:", text);
+        Assert.Contains("launcher_profiles.json", text);
+        Assert.DoesNotContain("Launcherprofiler:", text);
+    }
+
+    [Fact]
+    public void ReportsBothDetectedLauncherProfileFiles()
+    {
+        var info = SampleInfo() with { DetectedLauncherProfileFileNames = new[] { "launcher_profiles.json", "launcher_profiles_microsoft_store.json" } };
+        string text = DiagnosticsBuilder.Build(info);
+        Assert.Contains("Launcherprofiler:", text);
+        Assert.Contains("launcher_profiles.json", text);
+        Assert.Contains("launcher_profiles_microsoft_store.json", text);
+    }
+
+    [Fact]
+    public void ReportsNoneFoundWhenNeitherProfileFileExists()
+    {
+        var info = SampleInfo() with { DetectedLauncherProfileFileNames = Array.Empty<string>() };
+        string text = DiagnosticsBuilder.Build(info);
+        Assert.Contains("ingen hittades", text);
+    }
 }
