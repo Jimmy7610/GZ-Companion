@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-11T00:00:00Z",
+  "supported": [
+    {
+      "status": "VERIFIED",
+      "companionVersion": "0.1.0-alpha.1",
+      "minecraftVersion": "26.1.2",
+      "fabricLoaderVersion": "0.19.5",
+      "fabricApiVersion": "0.155.3+26.1.2",
+      "companionJar": {
+        "fileName": "gzcompanion-0.1.0-alpha.1.jar",
+        "sha256": "b34cb4e3d9490803eb33a32c7a1d3b9c843bb9cb4faf84b35854ca55c17134a6",
+        "sizeBytes": 573489,
+        "source": "embedded",
+        "note": "Bundled inside the installer as an embedded resource - built from this repository via .\\gradlew.bat build. Never downloaded."
+      },
+      "fabricLoader": {
+        "profileId": "fabric-loader-0.19.5-26.1.2",
+        "profileJsonUrl": "https://meta.fabricmc.net/v2/versions/loader/26.1.2/0.19.5/profile/json",
+        "note": "Official Fabric Meta API. The returned JSON is the exact launcher version profile - it is fetched live at install time (not baked into this manifest) so library coordinates/hashes always come from Fabric's own authoritative source. Each library it lists is downloaded from https://maven.fabricmc.net/ and verified against the sha256 that same response provides.",
+        "knownGoodFallback": {
+          "note": "Fabric's profile response does not include a hash for the fabric-loader jar itself. This is our own independently-verified fallback hash, computed once from a real download, used only if the live response omits it again.",
+          "mavenCoordinate": "net.fabricmc:fabric-loader:0.19.5",
+          "fileName": "fabric-loader-0.19.5.jar",
+          "sha256": "93044e4dd46de5d8136701292f05e868da096d2c9fddb4793e4fdbcc63efc695",
+          "sizeBytes": 1984980
+        }
+      },
+      "fabricApi": {
+        "fileName": "fabric-api-0.155.3+26.1.2.jar",
+        "downloadUrl": "https://cdn.modrinth.com/data/P7dR8mSH/versions/3dM0X6ou/fabric-api-0.155.3%2B26.1.2.jar",
+        "source": "https://modrinth.com/mod/fabric-api/version/0.155.3+26.1.2",
+        "sha256": "7fe7bea3dbb7b2e9ff998ab583130cd62fab22ab8a5229656ff14b2e648c91dd",
+        "sha512": "fa0308b42e9cd0dc3ff946f246d199d74547e0c946d7e3c9780a2537155307baf25129f69bd1349273babf879ffb4608b7e4af0740938f9c0f7b371b1c67d6ca",
+        "sizeBytes": 2521340,
+        "note": "sha256/sizeBytes computed locally from a file whose sha512 was independently verified to match the value Modrinth's API itself publishes for this exact version."
+      }
+    }
+  ],
+  "statusLegend": {
+    "VERIFIED": "Built, real-launcher QA tested, and the only target this installer will actually install.",
+    "COMPATIBLE": "Reserved for future releases believed to work but not yet fully QA-verified.",
+    "UNSUPPORTED": "Reserved for future releases explicitly known not to work - the installer must refuse these."
+  },
+  "policy": "The installer must never install a Minecraft version/entry that is not present in this manifest with status VERIFIED. For this release, Minecraft 26.1.2 is the only supported target."
+}

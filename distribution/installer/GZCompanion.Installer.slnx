@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="GZCompanion.Installer.App/GZCompanion.Installer.App.csproj" />
+  <Project Path="GZCompanion.Installer.Core/GZCompanion.Installer.Core.csproj" />
+  <Project Path="GZCompanion.Installer.Tests/GZCompanion.Installer.Tests.csproj" />
+</Solution>

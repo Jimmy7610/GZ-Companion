@@ -30,3 +30,9 @@ Desktop.ini
 # Logs
 logs/
 *.log
+
+# .NET installer build outputs (distribution/installer) - built locally via build-installer.ps1,
+# never committed. The mod jar it embeds is copied in from the main Gradle build at build time.
+obj/
+distribution/installer/GZCompanion.Installer.App/Assets/gzcompanion.jar
+distribution/dist/

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>GZCompanion.Installer.App</RootNamespace>
+    <AssemblyName>GZ-Companion-Setup</AssemblyName>
+    <Version>0.1.0.0</Version>
+    <FileVersion>0.1.0.0</FileVersion>
+    <Product>GZ Companion Setup</Product>
+    <AssemblyTitle>GZ Companion Setup</AssemblyTitle>
+    <Company>GZ Companion (community project)</Company>
+    <Copyright>Copyright (c) 2026 Jimmy Eliasson. Not affiliated with or endorsed by GameZoneMC or Mojang/Microsoft.</Copyright>
+
+    <!-- Self-contained single-file publish so the friend never needs a .NET runtime installed. -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GZCompanion.Installer.Core\GZCompanion.Installer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The exact mod jar this installer places - built via `..\..\..\gradlew.bat build` and
+         copied here by build-installer.ps1 before publishing. Never downloaded. -->
+    <EmbeddedResource Include="Assets\gzcompanion.jar" Condition="Exists('Assets\gzcompanion.jar')" LogicalName="gzcompanion.jar" />
+    <EmbeddedResource Include="..\..\compatibility.json" LogicalName="compatibility.json" />
+  </ItemGroup>
+
+</Project>
