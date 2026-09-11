@@ -238,6 +238,11 @@ public sealed class MainForm : Form
         bool minecraftRunning = EnvironmentDetection.IsMinecraftLikelyRunning(processLister);
         bool launcherAppRunning = EnvironmentDetection.IsMinecraftLauncherRunning(processLister);
 
+        // Uses the exact same validation InstallEngine's own pre-write gate uses (never a
+        // separately re-implemented parser), so a malformed profile file is surfaced here, before
+        // the button is even enabled, instead of only failing once the player clicks it.
+        string? unreadableProfile = await Task.Run(() => LauncherProfilesEditor.FindFirstUnreadableProfile(launcher.ExistingProfilePaths));
+
         _rowWindows.SetStatus(
             windows.Level == WindowsSupportLevel.Unsupported ? StatusIcon.Fail : StatusIcon.Ok,
             windows.Level == WindowsSupportLevel.Unsupported ? $"{windows.DisplayVersion} - stöds ej" : windows.DisplayVersion);
@@ -252,6 +257,11 @@ public sealed class MainForm : Form
             if (launcherAppRunning)
             {
                 ShowBlocked("Minecraft Launcher är öppen.\nStäng Minecraft Launcher innan installationen fortsätter.");
+                return;
+            }
+            if (unreadableProfile is not null)
+            {
+                ShowBlocked($"{unreadableProfile} kunde inte läsas säkert.\nIngen ändring har gjorts.");
                 return;
             }
             bool existing = Directory.Exists(_paths.GzCompanionGameDir);
@@ -272,6 +282,14 @@ public sealed class MainForm : Form
             // it finds neither official profile file (launcher_profiles.json or
             // launcher_profiles_microsoft_store.json).
             ShowBlocked("Minecraft Launcher är inte färdigkonfigurerad.\nStarta den officiella Minecraft Launcher en gång och försök igen.");
+            return;
+        }
+        if (unreadableProfile is not null)
+        {
+            // Surfaced here, before Installera is even enabled, using the exact same validation
+            // InstallEngine itself re-checks right before writing anything - never repaired,
+            // overwritten, or guessed at.
+            ShowBlocked($"{unreadableProfile} kunde inte läsas säkert.\nIngen installation har gjorts.");
             return;
         }
         if (launcherAppRunning)

@@ -53,6 +53,19 @@ public sealed class InstallEngine
         public LauncherNotInitializedException() : base("Minecraft Launcher är inte färdigkonfigurerad. Starta den officiella Minecraft Launcher en gång och försök igen.") { }
     }
 
+    /// <summary>
+    /// Thrown when an existing profile file can't be safely parsed. With two independent profile
+    /// files, the first could be perfectly valid while the second is corrupt/unsupported - this is
+    /// why EVERY existing file is pre-parsed and validated before any directory is created, any
+    /// byte is downloaded, or any file (including the OTHER, valid profile file) is written. We
+    /// never repair, overwrite, or guess at malformed launcher data.
+    /// </summary>
+    public sealed class LauncherProfileUnreadableException : Exception
+    {
+        public LauncherProfileUnreadableException(string fileName)
+            : base($"{fileName} kunde inte läsas säkert. Ingen installation har gjorts.") { }
+    }
+
     private readonly InstallEngineDependencies _deps;
 
     public InstallEngine(InstallEngineDependencies deps) => _deps = deps;
@@ -81,6 +94,26 @@ public sealed class InstallEngine
             if (existingProfilePaths.Count == 0)
             {
                 throw new LauncherNotInitializedException();
+            }
+
+            // Pre-parse and validate EVERY existing profile file now, before creating a single
+            // directory or downloading a single byte. With two independent files, one could be
+            // valid while the other is corrupt/unsupported - if we only discovered that while
+            // writing (step 6, after everything else already happened), we could leave a partial
+            // install and/or have already updated the FIRST (valid) file before failing on the
+            // second. Validated documents are kept in memory and reused verbatim in step 6 rather
+            // than re-read, so what we validate here is exactly what gets written later.
+            var parsedProfilesByPath = new Dictionary<string, JsonObject>();
+            foreach (var profilePath in existingProfilePaths)
+            {
+                try
+                {
+                    parsedProfilesByPath[profilePath] = LauncherProfilesEditor.ParseAndValidateFile(profilePath);
+                }
+                catch (Exception)
+                {
+                    throw new LauncherProfileUnreadableException(Path.GetFileName(profilePath));
+                }
             }
 
             // 1. Directories. GzCompanion's own mods/config are isolated; Fabric's version JSON
@@ -206,12 +239,11 @@ public sealed class InstallEngine
             //    every field this editor doesn't own keeps its value and structure (never regex).
             Emit("Uppdaterar Minecraft Launcher-profil...");
             var spec = new GzCompanionProfileSpec(ProfileId, ProfileName, paths.GzCompanionGameDir, loaderProfile.Id, IconBase64: null);
-            foreach (var profilePath in existingProfilePaths)
+            foreach (var (profilePath, root) in parsedProfilesByPath)
             {
                 if (!dryRun)
                 {
                     LauncherProfilesEditor.BackupIfExists(profilePath, _deps.Clock());
-                    JsonObject root = LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(profilePath));
                     JsonObject updated = LauncherProfilesEditor.UpsertGzCompanionProfile(root, spec, _deps.Clock());
                     AtomicFileWriter.WriteAllTextAtomically(profilePath, LauncherProfilesEditor.Serialize(updated));
                 }
@@ -272,13 +304,29 @@ public sealed class InstallEngine
                 : null;
 
             var existingProfilePaths = paths.AllLauncherProfilePaths.Where(File.Exists).ToList();
-            var parsedProfilesByPath = existingProfilePaths.ToDictionary(p => p, p => LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(p)));
+            var parsedProfilesByPath = new Dictionary<string, JsonObject>();
+            foreach (var profilePath in existingProfilePaths)
+            {
+                try
+                {
+                    parsedProfilesByPath[profilePath] = LauncherProfilesEditor.ParseAndValidateFile(profilePath);
+                }
+                catch (Exception)
+                {
+                    throw new LauncherProfileUnreadableException(Path.GetFileName(profilePath));
+                }
+            }
 
-            // Safe to remove our Fabric version directory only if NO other profile, in ANY
-            // existing profile file, still references it.
+            // Safe to remove our Fabric version directory only if:
+            //  - we know which version we own, AND
+            //  - at least one recognized profile file exists and was actually checked, AND
+            //  - no other profile in ANY of them still references it.
+            // Zero existing profile files is NOT proof of safety - it means we have no evidence
+            // either way, so the conservative default is to keep the directory (parsedProfilesByPath.Count == 0
+            // must never make Any() vacuously "prove" nothing references it).
             bool versionStillReferenced = ownedVersionId is not null
                 && parsedProfilesByPath.Values.Any(root => LauncherProfilesEditor.AnyOtherProfileUsesVersion(root, ownedVersionId, ProfileId));
-            bool versionSafeToRemove = ownedVersionId is not null && !versionStillReferenced;
+            bool versionSafeToRemove = ownedVersionId is not null && parsedProfilesByPath.Count > 0 && !versionStillReferenced;
 
             log?.Report("Tar bort Minecraft Launcher-profil...");
             foreach (var (profilePath, root) in parsedProfilesByPath)

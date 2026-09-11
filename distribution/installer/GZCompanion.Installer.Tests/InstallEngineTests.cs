@@ -363,6 +363,94 @@ public class InstallEngineTests : IDisposable
     }
 
     // ------------------------------------------------------------------
+    // ALL existing profile files must be pre-parsed and validated before any directory is
+    // created, anything is downloaded, or any file - including a perfectly valid OTHER profile
+    // file - is written. A corrupt/unsupported file must abort the whole install cleanly.
+    // ------------------------------------------------------------------
+
+    private const string MalformedProfilesJson = "{ this is not valid json";
+
+    [Fact]
+    public async Task Win32ValidStoreMalformed_AbortsBeforeAnyDownloadOrWrite()
+    {
+        var (paths, target, downloader, engine) = Build(LauncherSetup.Both);
+        File.WriteAllText(paths.MicrosoftStoreLauncherProfilesPath, MalformedProfilesJson);
+        string win32Before = File.ReadAllText(paths.Win32LauncherProfilesPath);
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.False(outcome.Success);
+        Assert.Contains("launcher_profiles_microsoft_store.json", outcome.ErrorMessage);
+        Assert.Contains("kunde inte läsas säkert", outcome.ErrorMessage);
+        Assert.Empty(downloader.RequestedUrls);
+        Assert.Equal(win32Before, File.ReadAllText(paths.Win32LauncherProfilesPath));
+        Assert.Equal(MalformedProfilesJson, File.ReadAllText(paths.MicrosoftStoreLauncherProfilesPath));
+        Assert.False(Directory.Exists(paths.GzCompanionGameDir), "No directory may be created once any existing profile file fails validation.");
+    }
+
+    [Fact]
+    public async Task StoreValidWin32Malformed_AbortsBeforeAnyDownloadOrWrite()
+    {
+        var (paths, target, downloader, engine) = Build(LauncherSetup.Both);
+        File.WriteAllText(paths.Win32LauncherProfilesPath, MalformedProfilesJson);
+        string storeBefore = File.ReadAllText(paths.MicrosoftStoreLauncherProfilesPath);
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.False(outcome.Success);
+        Assert.Contains("launcher_profiles.json", outcome.ErrorMessage);
+        Assert.Contains("kunde inte läsas säkert", outcome.ErrorMessage);
+        Assert.Empty(downloader.RequestedUrls);
+        Assert.Equal(storeBefore, File.ReadAllText(paths.MicrosoftStoreLauncherProfilesPath));
+        Assert.Equal(MalformedProfilesJson, File.ReadAllText(paths.Win32LauncherProfilesPath));
+        Assert.False(Directory.Exists(paths.GzCompanionGameDir));
+    }
+
+    [Fact]
+    public async Task SingleMalformedProfileFile_AbortsBeforeAnyDownloadOrWrite()
+    {
+        var (paths, target, downloader, engine) = Build(LauncherSetup.Win32Only);
+        File.WriteAllText(paths.Win32LauncherProfilesPath, MalformedProfilesJson);
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.False(outcome.Success);
+        Assert.Contains("launcher_profiles.json", outcome.ErrorMessage);
+        Assert.Contains("kunde inte läsas säkert", outcome.ErrorMessage);
+        Assert.Empty(downloader.RequestedUrls);
+        Assert.Equal(MalformedProfilesJson, File.ReadAllText(paths.Win32LauncherProfilesPath));
+        Assert.False(Directory.Exists(paths.GzCompanionGameDir));
+    }
+
+    [Fact]
+    public async Task BothValid_InstallationStillSucceeds()
+    {
+        // Sanity check that the new pre-validation gate doesn't false-positive on the normal case.
+        var (paths, target, _, engine) = Build(LauncherSetup.Both);
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        foreach (var path in paths.AllLauncherProfilePaths)
+        {
+            Assert.True(LauncherProfilesEditor.HasGzCompanionProfile(LauncherProfilesEditor.ParseAndValidate(File.ReadAllText(path)), "gzcompanion-gameZone"));
+        }
+    }
+
+    [Fact]
+    public async Task MalformedProfile_EvenDryRunReportsFailureWithoutDownloading()
+    {
+        var (paths, target, downloader, engine) = Build(LauncherSetup.Win32Only);
+        File.WriteAllText(paths.Win32LauncherProfilesPath, MalformedProfilesJson);
+
+        var outcome = await engine.RunAsync(target, dryRun: true, log: null, CancellationToken.None);
+
+        Assert.False(outcome.Success);
+        Assert.Contains("kunde inte läsas säkert", outcome.ErrorMessage);
+        Assert.Empty(downloader.RequestedUrls);
+    }
+
+    // ------------------------------------------------------------------
     // Uninstall: shared Fabric library/version ownership safety.
     // ------------------------------------------------------------------
 
@@ -457,6 +545,31 @@ public class InstallEngineTests : IDisposable
         Assert.True(outcome.Success, outcome.ErrorMessage);
         Assert.True(Directory.Exists(versionDir), "Without installed.json telling us which version we own, never guess and delete.");
         Assert.DoesNotContain(outcome.Steps, s => s.Step is "fabric-version-removed" or "fabric-version-kept");
+    }
+
+    [Fact]
+    public async Task Uninstall_KeepsFabricVersionDirectoryWhenZeroProfileFilesExistEvenIfOwned()
+    {
+        // The exact regression this locks in: zero existing profile files must NOT be treated as
+        // "proof nothing references it" (Enumerable.Any() on an empty collection is vacuously
+        // false, which used to make versionSafeToRemove incorrectly true). With no profile file
+        // to check at all, we have no evidence either way, so the conservative default is KEEP -
+        // even though installed.json positively identifies which version we own.
+        var (paths, target, _, engine) = Build(LauncherSetup.Neither);
+        Directory.CreateDirectory(paths.GzCompanionGameDir);
+        InstalledStateStore.Write(paths.InstalledManifestPath, new InstalledState("0.1.0-alpha.1", "26.1.2", "0.19.5", "0.155.3+26.1.2", DateTimeOffset.UtcNow.ToString("O")));
+        string versionDir = Path.Combine(paths.SharedVersionsDir, OwnedVersionId);
+        Directory.CreateDirectory(versionDir);
+        File.WriteAllText(Path.Combine(versionDir, OwnedVersionId + ".json"), "{}");
+        Directory.CreateDirectory(paths.SharedLibrariesDir);
+        File.WriteAllText(Path.Combine(paths.SharedLibrariesDir, "some-library.jar"), "fake");
+
+        var outcome = await engine.UninstallAsync(keepUserData: false, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.True(Directory.Exists(versionDir), "Zero existing profile files is not proof of safety - the shared Fabric version directory must be kept.");
+        Assert.Contains(outcome.Steps, s => s.Step == "fabric-version-kept");
+        Assert.True(File.Exists(Path.Combine(paths.SharedLibrariesDir, "some-library.jar")), "Shared libraries remain untouched as always.");
     }
 
     [Fact]

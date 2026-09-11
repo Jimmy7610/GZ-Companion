@@ -190,4 +190,37 @@ public class LauncherProfilesEditorTests : IDisposable
         Assert.True(File.Exists(first));
         Assert.True(File.Exists(second));
     }
+
+    [Fact]
+    public void FindFirstUnreadableProfile_ReturnsNullWhenAllFilesAreValid()
+    {
+        string a = Path.Combine(_tempRoot, "launcher_profiles.json");
+        string b = Path.Combine(_tempRoot, "launcher_profiles_microsoft_store.json");
+        File.WriteAllText(a, RealisticProfilesJson);
+        File.WriteAllText(b, RealisticProfilesJson);
+
+        Assert.Null(LauncherProfilesEditor.FindFirstUnreadableProfile(new[] { a, b }));
+    }
+
+    [Fact]
+    public void FindFirstUnreadableProfile_ReturnsTheFileNameOfTheFirstInvalidOne()
+    {
+        string a = Path.Combine(_tempRoot, "launcher_profiles.json");
+        string b = Path.Combine(_tempRoot, "launcher_profiles_microsoft_store.json");
+        File.WriteAllText(a, RealisticProfilesJson);
+        File.WriteAllText(b, "{ not json");
+
+        Assert.Equal("launcher_profiles_microsoft_store.json", LauncherProfilesEditor.FindFirstUnreadableProfile(new[] { a, b }));
+    }
+
+    [Fact]
+    public void ParseAndValidateFile_ReadsAndValidatesFromDisk()
+    {
+        string path = Path.Combine(_tempRoot, "launcher_profiles.json");
+        File.WriteAllText(path, RealisticProfilesJson);
+
+        var root = LauncherProfilesEditor.ParseAndValidateFile(path);
+
+        Assert.Equal(2, root["profiles"]!.AsObject().Count);
+    }
 }

@@ -54,6 +54,32 @@ public static class LauncherProfilesEditor
         return root;
     }
 
+    /// <summary>Reads and validates one profile file from disk. Thin wrapper over <see cref="ParseAndValidate(string)"/> so every caller that needs "is this file safe" (InstallEngine's pre-write gate, the GUI's own pre-flight check) shares the exact same logic rather than each re-implementing it.</summary>
+    public static JsonObject ParseAndValidateFile(string path) => ParseAndValidate(File.ReadAllText(path));
+
+    /// <summary>
+    /// Validates every given profile file, returning the filename of the first one that fails to
+    /// parse/validate, or null if all are readable. Used by the GUI to surface a malformed
+    /// profile file before the Installera button is even enabled, and shares the exact same
+    /// <see cref="ParseAndValidateFile"/> logic InstallEngine's own pre-write gate uses - there is
+    /// exactly one place that decides whether a profile file is safe to proceed with.
+    /// </summary>
+    public static string? FindFirstUnreadableProfile(IEnumerable<string> profilePaths)
+    {
+        foreach (var path in profilePaths)
+        {
+            try
+            {
+                ParseAndValidateFile(path);
+            }
+            catch (Exception)
+            {
+                return Path.GetFileName(path);
+            }
+        }
+        return null;
+    }
+
     /// <summary>An empty-but-valid launcher_profiles.json, used only when the file doesn't exist yet (a brand-new launcher install).</summary>
     public static JsonObject NewEmptyDocument() => new()
     {

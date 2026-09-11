@@ -26,7 +26,7 @@ GZCompanion.Installer.Core/    - all logic: manifest parsing, path/environment d
 GZCompanion.Installer.App/     - the WinForms UI (Program.cs, MainForm.cs, Theme.cs) plus the
                                   embedded resources (compatibility.json and, once copied in by
                                   build-installer.ps1, the GZ Companion mod jar itself).
-GZCompanion.Installer.Tests/   - xUnit tests against Core (101 tests as of this writing).
+GZCompanion.Installer.Tests/   - xUnit tests against Core (110 tests as of this writing).
 build-installer.ps1            - builds the mod jar, embeds it (HARD-FAILING if it doesn't match
                                   compatibility.json), runs the test suite, publishes the
                                   single-file exe, and copies the result to
@@ -205,8 +205,26 @@ The installer will **never** install a Minecraft version whose manifest entry is
     `versions\fabric-loader-0.19.5-26.1.2\`) if it can positively confirm - by reading **every**
     existing profile file (Win32 and/or Microsoft Store) - that no OTHER profile, in EITHER file,
     still has that exact `lastVersionId`. A reference from just one of the two files is enough to
-    keep it. If neither profile file exists, or our own `installed.json` can't say which version
-    we installed, the version directory is left alone rather than guessed at.
+    keep it. If our own `installed.json` can't say which version we installed, the version
+    directory is left alone rather than guessed at. **Zero existing profile files is NOT proof of
+    safety either** - `Enumerable.Any()` over an empty collection is vacuously `false`, which
+    briefly made `versionSafeToRemove` incorrectly `true` in that case; fixed by requiring at
+    least one profile file to have actually been checked before removal is ever considered safe
+    (`Uninstall_KeepsFabricVersionDirectoryWhenZeroProfileFilesExistEvenIfOwned` locks this in).
 - **Both official profile files are handled, independently.** See "Two official profile files"
   above - install/uninstall touch every existing one (never inventing a missing one), each backed
   up and merged/removed-from on its own.
+- **Every existing profile file is pre-validated before ANYTHING else happens.** With two
+  independent files, one could be perfectly valid while the other is corrupt/unsupported. If that
+  were only discovered while writing (after directories were created, Fabric/Fabric API/the mod
+  jar already downloaded, and possibly the FIRST, valid profile file already updated), the
+  install would be left half-done. `InstallEngine.RunAsync` now calls
+  `LauncherProfilesEditor.ParseAndValidateFile` on every existing profile file immediately after
+  confirming at least one exists - before creating a single directory or downloading a single
+  byte - and keeps the validated documents in memory for the later write step rather than
+  re-reading them. If any file fails, the whole install aborts with
+  `"<filename> kunde inte läsas säkert. Ingen installation har gjorts."` and touches nothing at
+  all. `UninstallAsync` does the same for its own removal step. The GUI's own pre-flight
+  (`MainForm.DetectAsync`) surfaces the same condition, via the same
+  `LauncherProfilesEditor.FindFirstUnreadableProfile` helper (not a separately re-implemented
+  parser), before the Installera/Avinstallera button is even enabled.
