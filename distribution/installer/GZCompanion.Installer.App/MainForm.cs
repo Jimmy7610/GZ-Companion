@@ -68,12 +68,13 @@ public sealed class MainForm : Form
     {
         _options = options;
         Text = _options.Uninstall ? "Avinstallera GZ Companion" : "GZ Companion Setup";
-        ClientSize = new Size(480, 540);
+        ClientSize = new Size(480, 556);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.PanelBg;
         Font = Theme.BodyFont;
+        TrySetWindowIcon();
 
         BuildLayout();
         Load += async (_, _) => await DetectAsync();
@@ -197,18 +198,47 @@ public sealed class MainForm : Form
         };
         Controls.Add(_completionPanel);
 
-        var disclaimer = new Label
+        const string disclaimerText = "GZ Companion är ett inofficiellt community-projekt för GameZoneMC.\nDet är inte anslutet till eller godkänt av GameZoneMC.\nProblem eller feedback? " + SupportContact.Email;
+        var disclaimer = new LinkLabel
         {
-            Text = "GZ Companion är ett inofficiellt community-projekt för GameZoneMC.\nDet är inte anslutet till eller godkänt av GameZoneMC.",
+            Text = disclaimerText,
             Font = Theme.SmallFont,
             ForeColor = Theme.TextMuted,
+            LinkColor = Theme.Mint,
+            ActiveLinkColor = Theme.Mint,
+            VisitedLinkColor = Theme.Mint,
+            LinkBehavior = LinkBehavior.HoverUnderline,
+            LinkArea = new LinkArea(disclaimerText.Length - SupportContact.Email.Length, SupportContact.Email.Length),
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleCenter,
-            Location = new Point(24, ClientSize.Height - 40),
-            Size = new Size(ClientSize.Width - 48, 34),
+            Location = new Point(24, ClientSize.Height - 56),
+            Size = new Size(ClientSize.Width - 48, 50),
             Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
         };
+        // The email text itself is always visible/readable right here regardless of whether this
+        // succeeds - a missing/misconfigured mail client must never crash the installer.
+        disclaimer.LinkClicked += (_, _) => new MailClientOpener(new WindowsShellProcessStarter()).TryOpen();
         Controls.Add(disclaimer);
+    }
+
+    private void TrySetWindowIcon()
+    {
+        try
+        {
+            // Deliberately not disposed - Form.Icon keeps this reference for the window's entire
+            // lifetime (taskbar/Alt+Tab can redraw it at any time), and it is a single small,
+            // process-lifetime object in a short-lived installer.
+            var icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            if (icon is not null)
+            {
+                Icon = icon;
+            }
+        }
+        catch
+        {
+            // A missing/unreadable icon resource must never prevent the installer from running -
+            // the window simply falls back to the default .NET application icon.
+        }
     }
 
     // ------------------------------------------------------------------

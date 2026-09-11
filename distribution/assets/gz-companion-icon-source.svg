@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  GZ Companion installer icon - original artwork, not affiliated with GameZoneMC or Mojang/Minecraft.
+  Concept: a mint/emerald shield (companion/protection) with a waypoint diamond cut out of its
+  center, on the same dark navy used throughout the installer UI (see Theme.cs). Deliberately flat,
+  high-contrast, and free of fine detail so the silhouette stays recognizable down to 16x16.
+
+  Colors match GZCompanion.Installer.App/Theme.cs exactly:
+    background = PanelBg (#0D141C), shield = Mint (#34D399), outline = Emerald (#10B981).
+
+  Regenerate distribution/assets/gz-companion.ico from this shape (or from an updated one) by
+  editing the polygon points here AND in distribution/assets/generate-icon.py, then running that
+  script (requires Python + Pillow).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect x="0" y="0" width="100" height="100" rx="18" ry="18" fill="#0D141C" />
+  <polygon points="22,20 78,20 78,52 50,88 22,52" fill="#34D399" stroke="#10B981" stroke-width="1.8" stroke-linejoin="round" />
+  <polygon points="50,34 63,50 50,66 37,50" fill="#0D141C" />
+</svg>

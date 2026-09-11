@@ -10,9 +10,17 @@
     <AssemblyName>GZ-Companion-Setup</AssemblyName>
     <Version>0.1.0.0</Version>
     <FileVersion>0.1.0.0</FileVersion>
+    <InformationalVersion>0.1.0-alpha.1</InformationalVersion>
+    <!-- .NET's native Win32 version resource takes its "File description" field from
+         AssemblyTitle, not from Description (Description only becomes the managed
+         AssemblyDescriptionAttribute, which Explorer's file properties dialog doesn't show). -->
+    <AssemblyTitle>Installer for GZ Companion</AssemblyTitle>
+    <Description>Installer for GZ Companion</Description>
     <Product>GZ Companion Setup</Product>
-    <AssemblyTitle>GZ Companion Setup</AssemblyTitle>
-    <Company>GZ Companion (community project)</Company>
+    <Company>Jimmy Eliasson</Company>
+    <!-- Keep ProductVersion exactly "0.1.0-alpha.1" rather than the SDK's default of appending
+         "+<git-commit-sha>". -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Copyright>Copyright (c) 2026 Jimmy Eliasson. Not affiliated with or endorsed by GameZoneMC or Mojang/Microsoft.</Copyright>
 
     <!-- Self-contained single-file publish so the friend never needs a .NET runtime installed. -->
@@ -22,7 +30,18 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Original GZ Companion branding - not GameZoneMC's logo, not Minecraft/Mojang artwork.
+         See distribution/assets/gz-companion-icon-source.svg for the design and how to regenerate. -->
+    <ApplicationIcon>..\..\assets\gz-companion.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <!-- Fails the build loudly rather than silently shipping a generic executable icon if the
+       branding asset is ever deleted or moved. -->
+  <Target Name="EnsureCompanionIconExists" BeforeTargets="CoreCompile">
+    <Error Condition="!Exists('$(ApplicationIcon)')"
+           Text="GZ Companion icon not found at '$(ApplicationIcon)'. Restore distribution/assets/gz-companion.ico (see generate-icon.py) before building." />
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\GZCompanion.Installer.Core\GZCompanion.Installer.Core.csproj" />
