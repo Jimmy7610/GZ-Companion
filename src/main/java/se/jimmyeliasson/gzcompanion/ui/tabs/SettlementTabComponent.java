@@ -22,6 +22,7 @@ import se.jimmyeliasson.gzcompanion.settlement.storage.MemberNote;
 import se.jimmyeliasson.gzcompanion.settlement.storage.SettlementPlannerProfile;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
+import se.jimmyeliasson.gzcompanion.ui.ItemHoverTooltips;
 import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
@@ -90,6 +91,11 @@ public class SettlementTabComponent implements TextInputHandler {
     private long pendingDeleteAtMs = 0L;
 
     private final List<ListRowHit> hitTargets = new ArrayList<>();
+    private final ItemHoverTooltips itemHoverTooltips = new ItemHoverTooltips();
+
+    public ItemHoverTooltips getItemHoverTooltips() {
+        return itemHoverTooltips;
+    }
 
     @Override
     public boolean isTextInputFocused() {
@@ -111,6 +117,7 @@ public class SettlementTabComponent implements TextInputHandler {
     private void renderContent(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         this.layout = SettlementLayout.calculate(bounds);
         hitTargets.clear();
+        itemHoverTooltips.clear();
 
         CompanionSession session = CompanionSession.getInstance();
         KnowledgeModuleStatus status = session.getSettlementCatalogStatus();
@@ -548,6 +555,7 @@ public class SettlementTabComponent implements TextInputHandler {
                     if (!stack.isEmpty()) {
                         try {
                             extractor.fakeItem(stack, x, currentY + 3);
+                            itemHoverTooltips.register(new UiRect(x, currentY + 3, 16, 16), stack, item.itemId(), item.count(), 1);
                         } catch (Exception ignored) {
                             // A single unbakeable item icon must never take down the whole tab.
                         }

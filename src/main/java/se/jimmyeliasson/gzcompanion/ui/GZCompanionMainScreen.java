@@ -163,6 +163,14 @@ public class GZCompanionMainScreen extends Screen {
         }
         extractor.disableScissor();
 
+        // Exactly one item-icon hover tooltip, rendered here - AFTER the active tab's own scissor
+        // region has closed, via Minecraft's own deferred tooltip mechanism (see ItemHoverTooltips'
+        // doc comment) - so it is never clipped by a scissored list/detail pane.
+        ItemHoverTooltips activeItemHoverTooltips = activeTabItemHoverTooltips();
+        if (activeItemHoverTooltips != null) {
+            activeItemHoverTooltips.renderHoveredTooltip(extractor, font, mouseX, mouseY);
+        }
+
         // 5. Global Modal Footer
         int footerY = modalRect.bottom() - 12;
         TextUtil.drawScaledEllipsizedText(extractor, font, "Fair play - Lokalt", modalRect.x() + 6, footerY, modalRect.width() / 2, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
@@ -277,6 +285,28 @@ public class GZCompanionMainScreen extends Screen {
             }
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    /**
+     * The active tab's item-hover-tooltip collector, if it has one - only the tabs that render
+     * real item icons via {@code fakeItem} own one. A per-call lookup, mirroring
+     * {@link #activeTextInputHandler()} immediately below, rather than a generic tab-component
+     * interface every tab (including the ones with no items at all) would have to implement.
+     */
+    private ItemHoverTooltips activeTabItemHoverTooltips() {
+        if (activeTab == TabType.CRAFTING) {
+            return craftingTab.getItemHoverTooltips();
+        }
+        if (activeTab == TabType.BYGGPLANER) {
+            return buildingsTab.getItemHoverTooltips();
+        }
+        if (activeTab == TabType.SETTLEMENT) {
+            return settlementTab.getItemHoverTooltips();
+        }
+        if (activeTab == TabType.MARKETWATCH) {
+            return marketWatchTab.getItemHoverTooltips();
+        }
+        return null;
     }
 
     /**

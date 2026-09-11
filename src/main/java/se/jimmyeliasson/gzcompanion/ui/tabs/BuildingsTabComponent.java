@@ -20,6 +20,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationStatus;
 import se.jimmyeliasson.gzcompanion.knowledge.crafting.bridge.MinecraftRecipeDisplayAdapter;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
+import se.jimmyeliasson.gzcompanion.ui.ItemHoverTooltips;
 import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
@@ -92,6 +93,11 @@ public class BuildingsTabComponent implements TextInputHandler {
 
     private BuildingLayout layout;
     private final List<ListRowHit> hitTargets = new ArrayList<>();
+    private final ItemHoverTooltips itemHoverTooltips = new ItemHoverTooltips();
+
+    public ItemHoverTooltips getItemHoverTooltips() {
+        return itemHoverTooltips;
+    }
 
     @Override
     public boolean isTextInputFocused() {
@@ -114,6 +120,7 @@ public class BuildingsTabComponent implements TextInputHandler {
     private void renderContent(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         this.layout = BuildingLayout.calculate(bounds);
         hitTargets.clear();
+        itemHoverTooltips.clear();
 
         CompanionSession session = CompanionSession.getInstance();
         KnowledgeModuleStatus status = session.getBuildingKnowledgeStatus();
@@ -368,6 +375,7 @@ public class BuildingsTabComponent implements TextInputHandler {
                 if (!stack.isEmpty()) {
                     try {
                         extractor.fakeItem(stack, x, y - 1);
+                        itemHoverTooltips.register(new UiRect(x, y - 1, 16, 16), stack, req.itemId(), req.count(), 1);
                     } catch (Exception ignored) {
                         // A single unbakeable item icon must never take down the whole tab.
                     }
@@ -403,6 +411,10 @@ public class BuildingsTabComponent implements TextInputHandler {
         // within the scrolled section (never the back button added above it).
         hitTargets.subList(scrolledSectionStart, hitTargets.size())
                 .removeIf(hit -> hit.rect().bottom() <= contentArea.y() || hit.rect().y() >= contentArea.bottom());
+
+        // The special-requirement item icon above is drawn the same unconditional way - filter its
+        // hover target out too if it scrolled outside contentArea, for the same reason.
+        itemHoverTooltips.removeOutside(contentArea);
     }
 
     /**

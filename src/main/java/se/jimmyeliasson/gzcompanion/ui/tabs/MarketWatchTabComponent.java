@@ -16,6 +16,7 @@ import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNotesManager;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNote;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
+import se.jimmyeliasson.gzcompanion.ui.ItemHoverTooltips;
 import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
@@ -64,6 +65,11 @@ public class MarketWatchTabComponent implements TextInputHandler {
 
     private MarketWatchLayout layout;
     private final List<ListRowHit> hitTargets = new ArrayList<>();
+    private final ItemHoverTooltips itemHoverTooltips = new ItemHoverTooltips();
+
+    public ItemHoverTooltips getItemHoverTooltips() {
+        return itemHoverTooltips;
+    }
 
     @Override
     public boolean isTextInputFocused() {
@@ -85,6 +91,7 @@ public class MarketWatchTabComponent implements TextInputHandler {
     private void renderContent(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         this.layout = MarketWatchLayout.calculate(bounds);
         hitTargets.clear();
+        itemHoverTooltips.clear();
 
         CompanionSession session = CompanionSession.getInstance();
         KnowledgeModuleStatus status = session.getMarketWatchInfoStatus();
@@ -372,6 +379,7 @@ public class MarketWatchTabComponent implements TextInputHandler {
                 try {
                     extractor.fakeItem(stack, x + 2, y + 2);
                     iconOffset = 16;
+                    itemHoverTooltips.register(new UiRect(x + 2, y + 2, 16, 16), stack, note.itemId());
                 } catch (Exception ignored) {
                     // A single unbakeable item icon must never take down the whole tab.
                 }

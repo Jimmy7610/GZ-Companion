@@ -23,6 +23,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.items.CustomItemKnowledge;
 import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeBase;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
+import se.jimmyeliasson.gzcompanion.ui.ItemHoverTooltips;
 import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
@@ -88,6 +89,11 @@ public class CraftingTabComponent implements TextInputHandler {
 
     private CraftingLayout layout;
     private final List<ListRowHit> listHitTargets = new ArrayList<>();
+    private final ItemHoverTooltips itemHoverTooltips = new ItemHoverTooltips();
+
+    public ItemHoverTooltips getItemHoverTooltips() {
+        return itemHoverTooltips;
+    }
 
     // --- Client recipe book cache (see ClientRecipeCachePolicy) ---
     private Supplier<List<ClientRecipeSnapshot>> clientRecipeSupplier = MinecraftRecipeDisplayAdapter::readClientRecipeBook;
@@ -213,6 +219,7 @@ public class CraftingTabComponent implements TextInputHandler {
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         this.layout = CraftingLayout.calculate(bounds);
         listHitTargets.clear();
+        itemHoverTooltips.clear();
 
         CompanionSession session = CompanionSession.getInstance();
         KnowledgeModuleStatus craftingStatus = session.getCraftingKnowledgeStatus();
@@ -516,6 +523,12 @@ public class CraftingTabComponent implements TextInputHandler {
         }
 
         extractor.disableScissor();
+
+        // Grid cells are drawn at a Y position offset by detailScrollOffset without any per-cell
+        // visibility check (unlike the list pane above) - a cell scrolled outside contentArea would
+        // otherwise stay hoverable even though scissoring makes it invisible. Mirrors the identical
+        // hitTargets filtering BuildingsTabComponent applies for exactly the same reason.
+        itemHoverTooltips.removeOutside(contentArea);
     }
 
     private UiRect computeDetailContentArea(UiRect detailRect, boolean isCompact) {
@@ -807,6 +820,8 @@ public class CraftingTabComponent implements TextInputHandler {
                             int iconY = cell.y() + ((cell.height() - GRID_ICON_SIZE) / 2);
                             extractor.fakeItem(stack, iconX, iconY);
                             iconDrawn = true;
+                            itemHoverTooltips.register(new UiRect(iconX, iconY, GRID_ICON_SIZE, GRID_ICON_SIZE),
+                                    stack, representative.itemId(), 0, alts.size());
                         } catch (Exception ignored) {
                             // A single malformed/unbakeable item render must never take down the
                             // whole Companion UI - fall through to the text label below.
