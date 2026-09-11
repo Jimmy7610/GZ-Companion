@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 using GZCompanion.Installer.Core;
 
@@ -439,13 +438,15 @@ public sealed class MainForm : Form
 
     private void OpenMinecraftLauncher()
     {
-        try
+        // A bare minecraft:// URI was confirmed on a real machine to open Mojang's newer
+        // "Minecraft for Windows" hub/Bedrock app instead of the actual Java Edition-capable
+        // Minecraft Launcher that shows our installed profile - see MinecraftLauncherOpener for
+        // why this is resolved by display name via real installed-app discovery instead.
+        var opener = new MinecraftLauncherOpener(new WindowsInstalledLauncherDiscovery(), new WindowsLauncherActivator());
+        var result = opener.TryOpen();
+        if (!result.Success)
         {
-            Process.Start(new ProcessStartInfo("minecraft://") { UseShellExecute = true });
-        }
-        catch
-        {
-            MessageBox.Show(this, "Kunde inte öppna Minecraft Launcher automatiskt. Öppna den manuellt från Start-menyn.",
+            MessageBox.Show(this, result.UserMessageIfFailed ?? MinecraftLauncherOpener.FallbackMessage,
                 "GZ Companion Setup", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
