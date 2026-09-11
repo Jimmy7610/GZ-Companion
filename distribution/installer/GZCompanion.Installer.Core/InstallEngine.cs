@@ -130,6 +130,20 @@ public sealed class InstallEngine
             }
             Record("directories", paths.GzCompanionGameDir);
 
+            // 1b. Fresh-install-only: seed the ISOLATED profile's own multiplayer server list with
+            //     GameZoneMC, so a friend's first Multiplayer screen isn't empty and they never have
+            //     to type play.gamezonemc.se by hand. Lives entirely under GzCompanionGameDir - the
+            //     player's real .minecraft/servers.dat (InstallPaths.DotMinecraftDir) is never read
+            //     or written. An existing isolated servers.dat (from a previous install) is left
+            //     byte-for-byte untouched - see ServersDatWriter.WriteIfAbsent.
+            Emit("Förbereder GameZoneMC-server...");
+            bool serversDatAlreadyExists = File.Exists(paths.GzCompanionServersDatPath);
+            if (!dryRun && !serversDatAlreadyExists)
+            {
+                ServersDatWriter.WriteIfAbsent(paths.GzCompanionServersDatPath, "GameZoneMC", "play.gamezonemc.se");
+            }
+            Record("servers-dat-seeded", serversDatAlreadyExists ? "preserved existing servers.dat" : "created with GameZoneMC");
+
             // 2. Fabric loader version profile - fetched live from the official Fabric Meta API,
             //    and written under the launcher's OWN versions directory (confirmed against the
             //    official Fabric Installer source: it always resolves versions/libraries from the

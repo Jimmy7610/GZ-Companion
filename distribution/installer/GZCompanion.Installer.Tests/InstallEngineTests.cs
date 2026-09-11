@@ -208,6 +208,98 @@ public class InstallEngineTests : IDisposable
     }
 
     // ------------------------------------------------------------------
+    // Final friend-test polish: a fresh isolated install seeds servers.dat with GameZoneMC, so
+    // Multiplayer isn't empty and nobody has to type play.gamezonemc.se by hand. Isolated-only,
+    // fresh-install-only, and never merged into an existing file - see ServersDatWriter.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task RealRun_FreshInstall_SeedsServersDatWithExactlyGameZoneMC()
+    {
+        var (paths, target, _, engine) = Build();
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.True(File.Exists(paths.GzCompanionServersDatPath));
+        var entries = ServersDatWriter.ReadServerEntries(File.ReadAllBytes(paths.GzCompanionServersDatPath));
+        Assert.Equal(new[] { ("GameZoneMC", "play.gamezonemc.se") }, entries);
+        Assert.Contains(outcome.Steps, s => s.Step == "servers-dat-seeded" && s.Detail.Contains("created"));
+    }
+
+    [Fact]
+    public async Task DryRun_NeverCreatesServersDat()
+    {
+        var (paths, target, _, engine) = Build();
+
+        var outcome = await engine.RunAsync(target, dryRun: true, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success);
+        Assert.False(File.Exists(paths.GzCompanionServersDatPath), "Dry-run must create no file at all, including servers.dat.");
+    }
+
+    [Fact]
+    public async Task Reinstall_NeverOverwritesAnExistingIsolatedServersDat()
+    {
+        var (paths, target, _, engine) = Build();
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        byte[] originalBytes = File.ReadAllBytes(paths.GzCompanionServersDatPath);
+
+        // Simulate the player having since added their own extra server to the isolated profile.
+        byte[] customBytes = ServersDatWriter.BuildSingleServerServersDat("A Custom Server The Player Added", "custom.example.com");
+        File.WriteAllBytes(paths.GzCompanionServersDatPath, customBytes);
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.Equal(customBytes, File.ReadAllBytes(paths.GzCompanionServersDatPath));
+        Assert.NotEqual(originalBytes, customBytes); // sanity: the test actually changed something first
+        Assert.Contains(outcome.Steps, s => s.Step == "servers-dat-seeded" && s.Detail.Contains("preserved"));
+    }
+
+    [Fact]
+    public async Task Install_NeverReadsOrWritesTheRealMinecraftServersDat()
+    {
+        var (paths, target, _, engine) = Build();
+        string realServersDatPath = Path.Combine(paths.DotMinecraftDir, "servers.dat");
+        byte[] realPlayerBytes = { 1, 2, 3, 4, 5 }; // deliberately not valid NBT - must never even be opened
+        File.WriteAllBytes(realServersDatPath, realPlayerBytes);
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.True(realPlayerBytes.SequenceEqual(File.ReadAllBytes(realServersDatPath)), "The player's real .minecraft/servers.dat must never be touched by this installer.");
+        Assert.NotEqual(Path.Combine(paths.DotMinecraftDir, "servers.dat"), paths.GzCompanionServersDatPath);
+    }
+
+    [Fact]
+    public async Task Uninstall_WithoutKeepUserData_RemovesTheIsolatedServersDatToo()
+    {
+        var (paths, target, _, engine) = Build();
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        Assert.True(File.Exists(paths.GzCompanionServersDatPath));
+
+        var outcome = await engine.UninstallAsync(keepUserData: false, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.False(File.Exists(paths.GzCompanionServersDatPath));
+    }
+
+    [Fact]
+    public async Task Uninstall_KeepUserData_PreservesTheIsolatedServersDat()
+    {
+        var (paths, target, _, engine) = Build();
+        await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+        byte[] before = File.ReadAllBytes(paths.GzCompanionServersDatPath);
+
+        var outcome = await engine.UninstallAsync(keepUserData: true, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.True(File.Exists(paths.GzCompanionServersDatPath), "keepUserData=true must preserve the isolated server list along with the rest of the player's local data.");
+        Assert.Equal(before, File.ReadAllBytes(paths.GzCompanionServersDatPath));
+    }
+
+    // ------------------------------------------------------------------
     // The launcher app itself must be closed before any profile mutation.
     // ------------------------------------------------------------------
 

@@ -77,6 +77,13 @@ public sealed class InstallPaths
     /// <summary>GZ Companion's own local user data (Guide/Settlement/chest/notes/settings) - never wiped on reinstall/update.</summary>
     public string GzCompanionConfigDir => Path.Combine(GzCompanionGameDir, "config", "gzcompanion");
 
+    /// <summary>
+    /// The isolated profile's OWN multiplayer server list - lives under <see cref="GzCompanionGameDir"/>,
+    /// never under <see cref="DotMinecraftDir"/>. Seeded with the GameZoneMC entry on a fresh
+    /// install only, and never overwritten if it already exists - see <see cref="InstallEngine"/>.
+    /// </summary>
+    public string GzCompanionServersDatPath => Path.Combine(GzCompanionGameDir, "servers.dat");
+
     /// <summary>Where the installer keeps its own bookkeeping (install manifest, logs, backups) - never mixed into the game directory itself.</summary>
     public string GzCompanionInstallerStateDir => Path.Combine(GzCompanionRootDir, "installer");
 

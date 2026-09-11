@@ -51,6 +51,25 @@ public class BuildingsTabComponent implements TextInputHandler {
     static final String NOT_VERIFIED_TEXT = "Den här informationen har ännu inte bekräftats.";
     static final String NO_PLANS_TEXT = "Inga sparade planer för denna byggnad ännu.";
 
+    // Plan row layout: a fixed right-side action column (sized to fit the widest of the four
+    // button labels below at META scale, so none of them ever ellipsize) is reserved across the
+    // FULL row height, and the checklist is confined to the width left of it, wrapping onto extra
+    // lines instead of overlapping the buttons. renderPlanRow() and estimatePlansSectionHeight()
+    // both go through computePlanRowLayout() for this, so render height and estimated height can
+    // never drift apart - a prior human QA blocker was exactly that kind of drift.
+    private static final String[] PLAN_ACTION_BUTTON_LABELS = {"Byt namn", "Ta bort", "Säker?", "Spara"};
+    private static final int ACTION_BUTTON_H = 11;
+    private static final int ACTION_BUTTON_GAP = 2;
+    private static final int ACTION_COLUMN_GAP = 4;
+    private static final int ACTION_COLUMN_PADDING = 6;
+    private static final int CHECKLIST_GAP_Y = 3;
+    private static final int CHECKLIST_ITEM_GAP = 4;
+    private static final int CHECKLIST_LINE_SPACING = 1;
+    private static final int ROW_TOP_PADDING = 3;
+    private static final int ROW_BOTTOM_PADDING = 3;
+    private static final int ROW_GAP = 4;
+    private static final int MIN_CONTENT_W = 20;
+
     private record ListRowHit(UiRect rect, Runnable action) {}
 
     private String searchText = "";
@@ -397,8 +416,96 @@ public class BuildingsTabComponent implements TextInputHandler {
         int measure(String text, int maxW, float scale, int maxLines, int lineSpacing);
     }
 
+    /**
+     * Abstracts scaled text-width measurement out of the plan-row layout so it too is
+     * unit-testable without a live {@link Font}. In production this is a thin adapter over
+     * {@link TextUtil#scaledWidth}; tests inject a synthetic measurer instead.
+     */
+    @FunctionalInterface
+    interface TextWidthMeasurer {
+        int measure(String text, float scale);
+    }
+
+    /**
+     * @param actionColW     width reserved for the rename/save and delete/confirm buttons.
+     * @param contentW       width left for the name field and checklist, left of the action column.
+     * @param checklistLines each entry is one wrapped checklist line, holding the
+     *                       {@link BuildingRequirementKey#values()} indices drawn on that line.
+     * @param cardHeight     the actual height of this row's card.
+     * @param rowPitch       cardHeight plus the gap before the next row - what callers advance y by.
+     */
+    record PlanRowLayout(int actionColW, int contentW, List<List<Integer>> checklistLines, int cardHeight, int rowPitch) {}
+
+    /** Shared by renderPlanRow() and computePlanRowLayout() so the column is always wide enough for every button label. */
+    static int computeActionColumnWidth(TextWidthMeasurer measurer) {
+        int maxLabelW = 0;
+        for (String label : PLAN_ACTION_BUTTON_LABELS) {
+            maxLabelW = Math.max(maxLabelW, measurer.measure(label, TypographyScale.META.getScale()));
+        }
+        return maxLabelW + ACTION_COLUMN_PADDING;
+    }
+
+    /**
+     * Greedily packs checklist labels onto as few lines as fit within maxWidth, in order, never
+     * splitting a label across lines. Always makes progress (an over-wide label still gets its own
+     * line) so it terminates even in a pathologically narrow layout.
+     */
+    static List<List<Integer>> packChecklistLines(List<String> labels, TextWidthMeasurer measurer, float scale, int maxWidth, int gap) {
+        List<List<Integer>> lines = new ArrayList<>();
+        List<Integer> current = new ArrayList<>();
+        int currentW = 0;
+        for (int i = 0; i < labels.size(); i++) {
+            int w = measurer.measure(labels.get(i), scale);
+            int neededW = current.isEmpty() ? w : currentW + gap + w;
+            if (!current.isEmpty() && neededW > maxWidth) {
+                lines.add(current);
+                current = new ArrayList<>();
+                currentW = w;
+            } else {
+                currentW = neededW;
+            }
+            current.add(i);
+        }
+        if (!current.isEmpty()) {
+            lines.add(current);
+        }
+        return lines.isEmpty() ? List.of(List.of()) : lines;
+    }
+
+    private static String checklistLabel(BuildingPlan plan, BuildingRequirementKey key) {
+        return (plan.isCompleted(key) ? "[x] " : "[ ] ") + key.getDisplayName();
+    }
+
+    /**
+     * The single source of truth for one plan row's geometry - used identically by renderPlanRow()
+     * (with a Font-backed measurer) and estimatePlansSectionHeight() (with an injected one), so
+     * render height and estimated height can never drift apart.
+     */
+    static PlanRowLayout computePlanRowLayout(BuildingPlan plan, int rowMaxW, TextWidthMeasurer measurer) {
+        int actionColW = computeActionColumnWidth(measurer);
+        int contentW = Math.max(MIN_CONTENT_W, rowMaxW - actionColW - ACTION_COLUMN_GAP);
+
+        BuildingRequirementKey[] keys = BuildingRequirementKey.values();
+        List<String> labels = new ArrayList<>(keys.length);
+        for (BuildingRequirementKey key : keys) {
+            labels.add(checklistLabel(plan, key));
+        }
+        List<List<Integer>> checklistLines = packChecklistLines(labels, measurer, TypographyScale.META.getScale(), contentW, CHECKLIST_ITEM_GAP);
+
+        int checklistLineH = (int) Math.ceil(9 * TypographyScale.META.getScale());
+        int checklistBlockH = checklistLines.size() * checklistLineH + (checklistLines.size() - 1) * CHECKLIST_LINE_SPACING;
+
+        int checklistStartYOffset = ROW_TOP_PADDING + ACTION_BUTTON_H + CHECKLIST_GAP_Y;
+        int deleteBtnYOffset = ROW_TOP_PADDING + ACTION_BUTTON_H + ACTION_BUTTON_GAP;
+        int contentBottom = Math.max(checklistStartYOffset + checklistBlockH, deleteBtnYOffset + ACTION_BUTTON_H);
+        int cardHeight = contentBottom + ROW_BOTTOM_PADDING;
+
+        return new PlanRowLayout(actionColW, contentW, checklistLines, cardHeight, cardHeight + ROW_GAP);
+    }
+
     private int estimateDetailHeight(Font font, int maxW, SettlementBuilding building, GlobalBuildingRules rules, List<BuildingPlan> buildingPlans) {
         return estimateDetailHeight((text, mw, scale, maxLines, spacing) -> TextUtil.measureWrappedHeightCapped(font, text, mw, scale, maxLines, spacing),
+                (text, scale) -> TextUtil.scaledWidth(font, text, scale),
                 maxW, building, rules, buildingPlans);
     }
 
@@ -409,7 +516,7 @@ public class BuildingsTabComponent implements TextInputHandler {
      * same helper and the same shared text constants the renderer itself uses, rather than
      * guessed flat numbers, so the two can never drift apart again.
      */
-    int estimateDetailHeight(WrappedTextHeightMeasurer measurer, int maxW, SettlementBuilding building, GlobalBuildingRules rules, List<BuildingPlan> buildingPlans) {
+    int estimateDetailHeight(WrappedTextHeightMeasurer measurer, TextWidthMeasurer widthMeasurer, int maxW, SettlementBuilding building, GlobalBuildingRules rules, List<BuildingPlan> buildingPlans) {
         int h = 11 + 10; // heading, license cost
         if (building.hasLevelRequirementConflict()) {
             h += measurer.measure(CONFLICT_WARNING_TEXT, maxW, TypographyScale.META.getScale(), 2, 1) + 2;
@@ -427,7 +534,7 @@ public class BuildingsTabComponent implements TextInputHandler {
         }
         h += 4 + estimateVerificationTrailHeight(measurer, maxW, building.verification());
         h += 6 + estimateStructureCalculatorHeight(measurer, maxW, building);
-        h += 6 + estimatePlansSectionHeight(buildingPlans.size());
+        h += 6 + estimatePlansSectionHeight(widthMeasurer, maxW, buildingPlans);
         return h;
     }
 
@@ -445,13 +552,21 @@ public class BuildingsTabComponent implements TextInputHandler {
     }
 
     /**
-     * Mirrors {@link #renderPlansSection}/{@link #renderPlanRow} exactly. Every plan row has a
-     * fixed 36px pitch regardless of its content (rename state, checklist labels are ellipsized/
-     * clipped horizontally rather than wrapped), so this stays exact with no Font needed.
+     * Mirrors {@link #renderPlansSection}/{@link #renderPlanRow} exactly, including per-row height
+     * that now varies with checklist wrapping - every row's height comes from the exact same
+     * {@link #computePlanRowLayout} call the renderer itself uses, so a synthetic
+     * {@link TextWidthMeasurer} keeps this unit-testable without a live Font.
      */
-    static int estimatePlansSectionHeight(int planCount) {
+    static int estimatePlansSectionHeight(TextWidthMeasurer widthMeasurer, int maxW, List<BuildingPlan> buildingPlans) {
         int h = 10 + 14; // "MINA LOKALA PLANER" label + "+ Ny plan" button
-        h += planCount == 0 ? 9 : planCount * 36;
+        if (buildingPlans.isEmpty()) {
+            h += 9; // empty-state message
+            return h;
+        }
+        int rowMaxW = maxW - 6;
+        for (BuildingPlan plan : buildingPlans) {
+            h += computePlanRowLayout(plan, rowMaxW, widthMeasurer).rowPitch();
+        }
         return h;
     }
 
@@ -560,20 +675,26 @@ public class BuildingsTabComponent implements TextInputHandler {
 
     private int renderPlanRow(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, BuildingPlan plan,
                                BuildingPlanManager plans, String contextKey, int mouseX, int mouseY, long now) {
-        GZTheme.drawCard(extractor, new UiRect(x, y, maxW, 32), GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
         int rowX = x + 3;
         int rowMaxW = maxW - 6;
+        TextWidthMeasurer widthMeasurer = (text, scale) -> TextUtil.scaledWidth(font, text, scale);
+        PlanRowLayout rowLayout = computePlanRowLayout(plan, rowMaxW, widthMeasurer);
+
+        GZTheme.drawCard(extractor, new UiRect(x, y, maxW, rowLayout.cardHeight()), GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
+
+        int nameRowY = y + ROW_TOP_PADDING;
+        int actionColX = rowX + rowLayout.contentW() + ACTION_COLUMN_GAP;
 
         boolean isRenaming = plan.id().equals(renamingPlanId);
         if (isRenaming) {
-            UiRect nameRect = new UiRect(rowX, y + 2, rowMaxW - 40, 11);
+            UiRect nameRect = new UiRect(rowX, nameRowY, rowLayout.contentW(), ACTION_BUTTON_H);
             GZTheme.drawCard(extractor, nameRect, GZTheme.COLOR_CARD_HOVER, GZTheme.COLOR_BORDER_EMERALD);
             String shown = renameText + (((System.currentTimeMillis() / 500) % 2 == 0) ? "_" : "");
             TextUtil.drawScaledEllipsizedText(extractor, font, shown, nameRect.x() + 2, nameRect.y() + 1, nameRect.width() - 4,
                     TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
             hitTargets.add(new ListRowHit(nameRect, () -> {}));
 
-            UiRect saveBtn = new UiRect(rowX + rowMaxW - 38, y + 2, 38, 11);
+            UiRect saveBtn = new UiRect(actionColX, nameRowY, rowLayout.actionColW(), ACTION_BUTTON_H);
             GZTheme.drawButton(extractor, font, saveBtn, "Spara", true, saveBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
             String planId = plan.id();
             hitTargets.add(new ListRowHit(saveBtn, () -> {
@@ -582,9 +703,9 @@ public class BuildingsTabComponent implements TextInputHandler {
             }));
         } else {
             TextUtil.drawScaledEllipsizedText(extractor, font, plan.planName() + " (" + plan.width() + "x" + plan.depth() + "x" + plan.height() + ")",
-                    rowX, y + 2, rowMaxW - 40, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
+                    rowX, nameRowY, rowLayout.contentW(), TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
 
-            UiRect renameBtn = new UiRect(rowX + rowMaxW - 38, y + 2, 38, 11);
+            UiRect renameBtn = new UiRect(actionColX, nameRowY, rowLayout.actionColW(), ACTION_BUTTON_H);
             GZTheme.drawButton(extractor, font, renameBtn, "Byt namn", false, renameBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
             String planId = plan.id();
             hitTargets.add(new ListRowHit(renameBtn, () -> {
@@ -594,7 +715,7 @@ public class BuildingsTabComponent implements TextInputHandler {
         }
 
         boolean pendingConfirm = plan.id().equals(pendingDeletePlanId) && (now - pendingDeleteAtMs) < 3000L;
-        UiRect deleteBtn = new UiRect(rowX + rowMaxW - 38, y + 15, 38, 11);
+        UiRect deleteBtn = new UiRect(actionColX, nameRowY + ACTION_BUTTON_H + ACTION_BUTTON_GAP, rowLayout.actionColW(), ACTION_BUTTON_H);
         GZTheme.drawButton(extractor, font, deleteBtn, pendingConfirm ? "Säker?" : "Ta bort", false, deleteBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
         String planIdForDelete = plan.id();
         hitTargets.add(new ListRowHit(deleteBtn, () -> {
@@ -607,20 +728,27 @@ public class BuildingsTabComponent implements TextInputHandler {
             }
         }));
 
-        int checkX = rowX;
-        for (BuildingRequirementKey key : BuildingRequirementKey.values()) {
-            boolean done = plan.isCompleted(key);
-            String label = (done ? "[x] " : "[ ] ") + key.getDisplayName();
-            int labelW = TextUtil.scaledWidth(font, label, TypographyScale.META.getScale()) + 4;
-            UiRect checkRect = new UiRect(checkX, y + 16, labelW, 9);
-            TextUtil.drawScaledText(extractor, font, label, checkX, y + 16, TypographyScale.META.getScale(),
-                    done ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_TEXT_SECONDARY, false);
-            String planIdForToggle = plan.id();
-            hitTargets.add(new ListRowHit(checkRect, () -> plans.toggleRequirement(contextKey, planIdForToggle, key)));
-            checkX += labelW + 4;
+        BuildingRequirementKey[] keys = BuildingRequirementKey.values();
+        int checklistLineH = (int) Math.ceil(9 * TypographyScale.META.getScale());
+        int checklistY = y + ROW_TOP_PADDING + ACTION_BUTTON_H + CHECKLIST_GAP_Y;
+        for (List<Integer> line : rowLayout.checklistLines()) {
+            int checkX = rowX;
+            for (int idx : line) {
+                BuildingRequirementKey key = keys[idx];
+                boolean done = plan.isCompleted(key);
+                String label = checklistLabel(plan, key);
+                int labelW = TextUtil.scaledWidth(font, label, TypographyScale.META.getScale());
+                UiRect checkRect = new UiRect(checkX, checklistY, labelW + CHECKLIST_ITEM_GAP, checklistLineH);
+                TextUtil.drawScaledText(extractor, font, label, checkX, checklistY, TypographyScale.META.getScale(),
+                        done ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_TEXT_SECONDARY, false);
+                String planIdForToggle = plan.id();
+                hitTargets.add(new ListRowHit(checkRect, () -> plans.toggleRequirement(contextKey, planIdForToggle, key)));
+                checkX += labelW + CHECKLIST_ITEM_GAP;
+            }
+            checklistY += checklistLineH + CHECKLIST_LINE_SPACING;
         }
 
-        return y + 36;
+        return y + rowLayout.rowPitch();
     }
 
     // ------------------------------------------------------------------

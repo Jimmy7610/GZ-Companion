@@ -10,6 +10,8 @@ import se.jimmyeliasson.gzcompanion.knowledge.building.SettlementBuilding;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationMetadata;
 import se.jimmyeliasson.gzcompanion.ui.layout.BuildingLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
+import se.jimmyeliasson.gzcompanion.ui.tabs.BuildingsTabComponent.PlanRowLayout;
+import se.jimmyeliasson.gzcompanion.ui.tabs.BuildingsTabComponent.TextWidthMeasurer;
 import se.jimmyeliasson.gzcompanion.ui.tabs.BuildingsTabComponent.WrappedTextHeightMeasurer;
 
 import java.util.EnumSet;
@@ -41,12 +43,21 @@ class BuildingsTabComponentTest {
         return new BuildingPlan(id, "test", "Plan " + id, 19, 19, 5, EnumSet.noneOf(BuildingRequirementKey.class), 0L);
     }
 
+    private BuildingPlan planWithCompleted(String id, BuildingRequirementKey... completed) {
+        EnumSet<BuildingRequirementKey> done = EnumSet.noneOf(BuildingRequirementKey.class);
+        done.addAll(java.util.Arrays.asList(completed));
+        return new BuildingPlan(id, "test", "Plan " + id, 19, 19, 5, done, 0L);
+    }
+
     private GlobalBuildingRules rules() {
         return new GlobalBuildingRules(50, 50, true, "process", "note", VerificationMetadata.UNVERIFIED_DEFAULT);
     }
 
     /** Returns the text's own length as its "height" - deterministic and exactly reproducible in assertions, unlike a live Font. */
     private static final WrappedTextHeightMeasurer IDENTITY_MEASURER = (text, maxW, scale, maxLines, spacing) -> text.length();
+
+    /** Returns the text's own length as its "width" - deterministic and exactly reproducible in assertions, unlike a live Font. */
+    private static final TextWidthMeasurer IDENTITY_WIDTH_MEASURER = (text, scale) -> text.length();
 
     @Test
     @DisplayName("A non-conflicting building's list row shows its settled level requirement")
@@ -131,21 +142,27 @@ class BuildingsTabComponentTest {
     @Test
     @DisplayName("Plans section height for zero plans covers the label, the + Ny plan button, and the empty-state message")
     void plansSectionHeightZeroPlans() {
-        assertEquals(10 + 14 + 9, BuildingsTabComponent.estimatePlansSectionHeight(0));
+        assertEquals(10 + 14 + 9, BuildingsTabComponent.estimatePlansSectionHeight(IDENTITY_WIDTH_MEASURER, 180, List.of()));
     }
 
     @Test
-    @DisplayName("Plans section height for one plan covers the label, the button, and the FULL fixed-height row (not the empty-state estimate)")
+    @DisplayName("Plans section height for one plan covers the label, the button, and the plan's own computed row pitch")
     void plansSectionHeightOnePlan() {
-        assertEquals(10 + 14 + 36, BuildingsTabComponent.estimatePlansSectionHeight(1));
+        int maxW = 180;
+        BuildingPlan p = plan("p1");
+        int expectedRowPitch = BuildingsTabComponent.computePlanRowLayout(p, maxW - 6, IDENTITY_WIDTH_MEASURER).rowPitch();
+        assertEquals(10 + 14 + expectedRowPitch, BuildingsTabComponent.estimatePlansSectionHeight(IDENTITY_WIDTH_MEASURER, maxW, List.of(p)));
     }
 
     @Test
-    @DisplayName("Plans section height for several plans adds exactly one fixed 36px row per plan")
+    @DisplayName("Plans section height for several plans adds exactly each plan's own row pitch, not a flat guess")
     void plansSectionHeightSeveralPlans() {
-        int one = BuildingsTabComponent.estimatePlansSectionHeight(1);
-        int three = BuildingsTabComponent.estimatePlansSectionHeight(3);
-        assertEquals(2 * 36, three - one, "Two additional plans must add exactly two full rows, not a flat guess.");
+        int maxW = 180;
+        int one = BuildingsTabComponent.estimatePlansSectionHeight(IDENTITY_WIDTH_MEASURER, maxW, List.of(plan("p1")));
+        int three = BuildingsTabComponent.estimatePlansSectionHeight(IDENTITY_WIDTH_MEASURER, maxW, List.of(plan("p1"), plan("p2"), plan("p3")));
+
+        int rowPitch = BuildingsTabComponent.computePlanRowLayout(plan("p2"), maxW - 6, IDENTITY_WIDTH_MEASURER).rowPitch();
+        assertEquals(2 * rowPitch, three - one, "Two additional identical-shaped plans must add exactly two full row pitches.");
     }
 
     @Test
@@ -155,11 +172,12 @@ class BuildingsTabComponentTest {
         SettlementBuilding testBuilding = buildingWith("En bonus", List.of(), VerificationMetadata.UNVERIFIED_DEFAULT);
         int maxW = 180;
 
-        int withZeroPlans = tab.estimateDetailHeight(IDENTITY_MEASURER, maxW, testBuilding, rules(), List.of());
-        int withThreePlans = tab.estimateDetailHeight(IDENTITY_MEASURER, maxW, testBuilding, rules(),
+        int withZeroPlans = tab.estimateDetailHeight(IDENTITY_MEASURER, IDENTITY_WIDTH_MEASURER, maxW, testBuilding, rules(), List.of());
+        int withThreePlans = tab.estimateDetailHeight(IDENTITY_MEASURER, IDENTITY_WIDTH_MEASURER, maxW, testBuilding, rules(),
                 List.of(plan("p1"), plan("p2"), plan("p3")));
 
-        int expectedDelta = BuildingsTabComponent.estimatePlansSectionHeight(3) - BuildingsTabComponent.estimatePlansSectionHeight(0);
+        int expectedDelta = BuildingsTabComponent.estimatePlansSectionHeight(IDENTITY_WIDTH_MEASURER, maxW, List.of(plan("p1"), plan("p2"), plan("p3")))
+                - BuildingsTabComponent.estimatePlansSectionHeight(IDENTITY_WIDTH_MEASURER, maxW, List.of());
         assertEquals(expectedDelta, withThreePlans - withZeroPlans,
                 "Adding plans must grow the total estimate by exactly the plans-section delta - the previous bug effectively dropped this contribution.");
     }
@@ -171,9 +189,9 @@ class BuildingsTabComponentTest {
         SettlementBuilding stall = buildingWith("Stall-bonus", List.of(), VerificationMetadata.UNVERIFIED_DEFAULT);
         int maxW = 180;
 
-        int total = tab.estimateDetailHeight(IDENTITY_MEASURER, maxW, stall, rules(), List.of());
+        int total = tab.estimateDetailHeight(IDENTITY_MEASURER, IDENTITY_WIDTH_MEASURER, maxW, stall, rules(), List.of());
         int calculatorHeight = tab.estimateStructureCalculatorHeight(IDENTITY_MEASURER, maxW, stall);
-        int plansHeight = BuildingsTabComponent.estimatePlansSectionHeight(0);
+        int plansHeight = BuildingsTabComponent.estimatePlansSectionHeight(IDENTITY_WIDTH_MEASURER, maxW, List.of());
 
         // The total must be at least everything-before-the-calculator, plus the calculator's own
         // gap+height, plus the plans section's own gap+height (which itself already includes the
@@ -181,6 +199,112 @@ class BuildingsTabComponentTest {
         // silently dropped the way the old flat "+90" estimate effectively did.
         assertTrue(total >= 6 + calculatorHeight + 6 + plansHeight,
                 "The total estimate must reach past the calculator through the full plans section (including + Ny plan).");
+    }
+
+    // ------------------------------------------------------------------
+    // Final friend-test polish: the plan row's checklist had no width constraint at all, so long
+    // checklists rendered straight underneath/into the fixed-position delete button, and the
+    // rename/delete buttons were a fixed 38px - too narrow for "Byt namn" at META scale. The fix
+    // reserves a right-side action column sized to fit every button label and confines the
+    // checklist to the width left of it, wrapping onto extra lines as needed. Both
+    // computePlanRowLayout() (the single source of truth) and estimatePlansSectionHeight() go
+    // through the exact same code the renderer uses, so render height and estimated height can
+    // never drift apart again.
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("The action column is always wide enough to fit every button label without truncation")
+    void actionColumnFitsEveryButtonLabel() {
+        int actionColW = BuildingsTabComponent.computeActionColumnWidth(IDENTITY_WIDTH_MEASURER);
+
+        for (String label : new String[]{"Byt namn", "Ta bort", "Säker?", "Spara"}) {
+            int labelW = IDENTITY_WIDTH_MEASURER.measure(label, 0.8f);
+            assertTrue(actionColW >= labelW, "Action column (" + actionColW + "px) must fit \"" + label + "\" (" + labelW + "px) without ellipsizing.");
+        }
+    }
+
+    @Test
+    @DisplayName("Checklist lines never exceed the available content width, so they can never overlap the reserved action column")
+    void checklistLinesNeverExceedContentWidth() {
+        BuildingPlan p = plan("p1");
+        int rowMaxW = 60; // narrow enough to force wrapping
+        PlanRowLayout layout = BuildingsTabComponent.computePlanRowLayout(p, rowMaxW, IDENTITY_WIDTH_MEASURER);
+        assertTrue(layout.checklistLines().size() > 1, "This width must force the checklist to wrap for the assertion below to be meaningful.");
+
+        List<String> labels = List.of("[ ] Licens", "[ ] Settlement-nivå", "[ ] Storlek", "[ ] Väggar", "[ ] Tak", "[ ] Specialkrav");
+        for (List<Integer> line : layout.checklistLines()) {
+            int lineW = 0;
+            for (int i = 0; i < line.size(); i++) {
+                lineW += IDENTITY_WIDTH_MEASURER.measure(labels.get(line.get(i)), 0.8f);
+                if (i > 0) lineW += 4; // CHECKLIST_ITEM_GAP
+            }
+            assertTrue(lineW <= layout.contentW(),
+                    "Line " + line + " (" + lineW + "px) must fit within contentW (" + layout.contentW() + "px) - never overlapping the action column.");
+        }
+    }
+
+    @Test
+    @DisplayName("A wide layout keeps the checklist on one line and stays compact - wide layouts must not become unnecessarily tall")
+    void wideLayoutStaysOneLineAndCompact() {
+        BuildingPlan p = plan("p1");
+        PlanRowLayout wide = BuildingsTabComponent.computePlanRowLayout(p, 300, IDENTITY_WIDTH_MEASURER);
+        assertEquals(1, wide.checklistLines().size(), "A wide row has ample room for every checklist item on one line.");
+    }
+
+    @Test
+    @DisplayName("Row height grows exactly when checklist wrapping needs more lines - a narrow layout is never shorter than a wide one")
+    void rowHeightGrowsWhenChecklistWraps() {
+        BuildingPlan p = plan("p1");
+        PlanRowLayout wide = BuildingsTabComponent.computePlanRowLayout(p, 300, IDENTITY_WIDTH_MEASURER);
+        PlanRowLayout narrow = BuildingsTabComponent.computePlanRowLayout(p, 60, IDENTITY_WIDTH_MEASURER);
+
+        assertTrue(narrow.checklistLines().size() > wide.checklistLines().size(), "The narrow layout must actually need more checklist lines.");
+        assertTrue(narrow.cardHeight() > wide.cardHeight(), "More checklist lines must grow the row's real height, not silently clip.");
+        assertTrue(narrow.rowPitch() > wide.rowPitch());
+    }
+
+    @Test
+    @DisplayName("A fully-completed plan's checklist wraps identically to an empty one - only the [x]/[ ] state differs, not the layout")
+    void checklistWrapUnaffectedByCompletionState() {
+        BuildingPlan empty = plan("p1");
+        BuildingPlan done = planWithCompleted("p1", BuildingRequirementKey.values());
+        int rowMaxW = 60;
+
+        PlanRowLayout emptyLayout = BuildingsTabComponent.computePlanRowLayout(empty, rowMaxW, IDENTITY_WIDTH_MEASURER);
+        PlanRowLayout doneLayout = BuildingsTabComponent.computePlanRowLayout(done, rowMaxW, IDENTITY_WIDTH_MEASURER);
+
+        assertEquals(emptyLayout.checklistLines().size(), doneLayout.checklistLines().size());
+        assertEquals(emptyLayout.rowPitch(), doneLayout.rowPitch());
+    }
+
+    @Test
+    @DisplayName("estimatePlansSectionHeight for a narrow layout with several plans stays exactly the sum of each plan's own real row pitch - never a flat over- or under-estimate")
+    void plansSectionHeightSumsRealPerPlanPitchesInNarrowLayout() {
+        int maxW = 66; // rowMaxW = 60, forces wrapping (see checklistLinesNeverExceedContentWidth)
+        List<BuildingPlan> threePlans = List.of(plan("p1"), plan("p2"), plan("p3"));
+
+        int total = BuildingsTabComponent.estimatePlansSectionHeight(IDENTITY_WIDTH_MEASURER, maxW, threePlans);
+        int expected = 10 + 14 + 3 * BuildingsTabComponent.computePlanRowLayout(plan("p1"), maxW - 6, IDENTITY_WIDTH_MEASURER).rowPitch();
+        assertEquals(expected, total);
+    }
+
+    @Test
+    @DisplayName("max-scroll for a building with several wrapping plan rows reaches exactly the final row - no more, no less")
+    void maxScrollReachesFinalWrappingPlanRowExactly() {
+        BuildingsTabComponent tab = new BuildingsTabComponent();
+        SettlementBuilding testBuilding = buildingWith("Bonus", List.of(), VerificationMetadata.UNVERIFIED_DEFAULT);
+        int maxW = 66; // narrow enough to force checklist wrapping in every plan row
+
+        int total = tab.estimateDetailHeight(IDENTITY_MEASURER, IDENTITY_WIDTH_MEASURER, maxW, testBuilding, rules(),
+                List.of(plan("p1"), plan("p2"), plan("p3")));
+
+        int shortVisibleHeight = total - 20;
+        assertEquals(20, BuildingsTabComponent.calculateMaxDetailScroll(total, shortVisibleHeight),
+                "Scrolling to max must reveal exactly the final wrapping row's remaining content - no more, no less.");
+
+        int tallVisibleHeight = total + 50;
+        assertEquals(0, BuildingsTabComponent.calculateMaxDetailScroll(total, tallVisibleHeight),
+                "Content that already fits (even with wrapped checklists) must never scroll into a huge blank area.");
     }
 
     @Test
@@ -228,8 +352,8 @@ class BuildingsTabComponentTest {
         SettlementBuilding conflicting = building(2, 2, 5000); // hasLevelRequirementConflict() == true
         SettlementBuilding normal = building(6, 7, 1000);
 
-        int conflictingHeight = tab.estimateDetailHeight(IDENTITY_MEASURER, maxW, conflicting, rules(), List.of());
-        int normalHeight = tab.estimateDetailHeight(IDENTITY_MEASURER, maxW, normal, rules(), List.of());
+        int conflictingHeight = tab.estimateDetailHeight(IDENTITY_MEASURER, IDENTITY_WIDTH_MEASURER, maxW, conflicting, rules(), List.of());
+        int normalHeight = tab.estimateDetailHeight(IDENTITY_MEASURER, IDENTITY_WIDTH_MEASURER, maxW, normal, rules(), List.of());
 
         int expectedExtra = (BuildingsTabComponent.CONFLICT_WARNING_TEXT.length() + 2 + 9 + 10) - 10;
         assertEquals(expectedExtra, conflictingHeight - normalHeight,
@@ -244,8 +368,8 @@ class BuildingsTabComponentTest {
         SettlementBuilding withBonus = buildingWith("En ganska lång bonusbeskrivning för detta test.", List.of(), VerificationMetadata.UNVERIFIED_DEFAULT);
         SettlementBuilding withoutBonus = buildingWith("", List.of(), VerificationMetadata.UNVERIFIED_DEFAULT);
 
-        int withBonusHeight = tab.estimateDetailHeight(IDENTITY_MEASURER, maxW, withBonus, rules(), List.of());
-        int withoutBonusHeight = tab.estimateDetailHeight(IDENTITY_MEASURER, maxW, withoutBonus, rules(), List.of());
+        int withBonusHeight = tab.estimateDetailHeight(IDENTITY_MEASURER, IDENTITY_WIDTH_MEASURER, maxW, withBonus, rules(), List.of());
+        int withoutBonusHeight = tab.estimateDetailHeight(IDENTITY_MEASURER, IDENTITY_WIDTH_MEASURER, maxW, withoutBonus, rules(), List.of());
 
         int expectedBonusContribution = 4 + 9 + withBonus.mainBonus().length() + 2;
         assertEquals(expectedBonusContribution, withBonusHeight - withoutBonusHeight);
@@ -257,7 +381,7 @@ class BuildingsTabComponentTest {
         BuildingsTabComponent tab = new BuildingsTabComponent();
         SettlementBuilding testBuilding = buildingWith("Bonus", List.of(), VerificationMetadata.UNVERIFIED_DEFAULT);
         int maxW = 180;
-        int total = tab.estimateDetailHeight(IDENTITY_MEASURER, maxW, testBuilding, rules(), List.of(plan("p1")));
+        int total = tab.estimateDetailHeight(IDENTITY_MEASURER, IDENTITY_WIDTH_MEASURER, maxW, testBuilding, rules(), List.of(plan("p1")));
 
         int shortVisibleHeight = total - 20; // content taller than the visible area
         assertEquals(20, BuildingsTabComponent.calculateMaxDetailScroll(total, shortVisibleHeight),
