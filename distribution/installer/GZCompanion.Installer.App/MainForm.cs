@@ -68,7 +68,7 @@ public sealed class MainForm : Form
     {
         _options = options;
         Text = _options.Uninstall ? "Avinstallera GZ Companion" : "GZ Companion Setup";
-        ClientSize = new Size(480, 556);
+        ClientSize = new Size(480, InstallerWindowLayout.ClientHeight);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -182,8 +182,8 @@ public sealed class MainForm : Form
             BackColor = Theme.CardInner,
             ForeColor = Theme.TextSecondary,
             BorderStyle = BorderStyle.FixedSingle,
-            Location = new Point(24, 432),
-            Size = new Size(ClientSize.Width - 48, 96),
+            Location = new Point(24, InstallerWindowLayout.LogBoxTop),
+            Size = new Size(ClientSize.Width - 48, InstallerWindowLayout.LogBoxHeight),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             Visible = false,
         };
@@ -191,8 +191,8 @@ public sealed class MainForm : Form
 
         _completionPanel = new Panel
         {
-            Location = new Point(24, 106),
-            Size = new Size(ClientSize.Width - 48, 300),
+            Location = new Point(24, InstallerWindowLayout.CompletionPanelTop),
+            Size = new Size(ClientSize.Width - 48, InstallerWindowLayout.CompletionPanelHeight),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             Visible = false,
         };
@@ -211,8 +211,8 @@ public sealed class MainForm : Form
             LinkArea = new LinkArea(disclaimerText.Length - SupportContact.Email.Length, SupportContact.Email.Length),
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleCenter,
-            Location = new Point(24, ClientSize.Height - 56),
-            Size = new Size(ClientSize.Width - 48, 50),
+            Location = new Point(24, InstallerWindowLayout.FooterTop),
+            Size = new Size(ClientSize.Width - 48, InstallerWindowLayout.FooterHeight),
             Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
         };
         // The email text itself is always visible/readable right here regardless of whether this
