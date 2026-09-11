@@ -42,6 +42,15 @@ public class BuildingsTabComponent implements TextInputHandler {
     private static final int MAX_SEARCH_LENGTH = 48;
     private static final int ROW_H = 20;
 
+    // Shared between rendering and estimateDetailHeight() so the two can never drift apart - a
+    // human QA blocker was exactly this: the max-scroll estimate used flat guessed numbers while
+    // the real renderer used measured wrapped-text heights, so the estimate came in short and the
+    // last plan controls were unreachable in compact mode.
+    static final String CONFLICT_WARNING_TEXT = "GameZones Wiki innehåller motstridiga nivåuppgifter för denna byggnad.";
+    static final String CALCULATOR_DISCLAIMER_TEXT = "Detta är en lokal planeringsberäkning, inte en garanti för att GameZone godkänner bygget.";
+    static final String NOT_VERIFIED_TEXT = "Den här informationen har ännu inte bekräftats.";
+    static final String NO_PLANS_TEXT = "Inga sparade planer för denna byggnad ännu.";
+
     private record ListRowHit(UiRect rect, Runnable action) {}
 
     private String searchText = "";
@@ -192,6 +201,15 @@ public class BuildingsTabComponent implements TextInputHandler {
         return Math.max(0, totalH - Math.max(1, visibleH));
     }
 
+    /**
+     * The detail pane's max-scroll is exactly total content height minus visible height, floored
+     * at zero - never more (which would leave the last control unreachable, the human QA bug)
+     * and never less (which would scroll past the end into blank space).
+     */
+    static int calculateMaxDetailScroll(int totalContentHeight, int visibleHeight) {
+        return Math.max(0, totalContentHeight - visibleHeight);
+    }
+
     static String listRowLevelAndCostText(SettlementBuilding building) {
         String levelPart = building.hasLevelRequirementConflict() ? "Nivåkonflikt" : "Nivå " + building.levelRequirement();
         return levelPart + " · " + building.licenseCost() + " Coins";
@@ -270,13 +288,15 @@ public class BuildingsTabComponent implements TextInputHandler {
         // button above (which is deliberately outside the scissored/scrolled area).
         int scrolledSectionStart = hitTargets.size();
 
-        int maxScroll = Math.max(0, estimateDetailHeight(building, base.globalRules(), plans.getPlansForBuilding(contextKey, building.id())) - contentArea.height());
-        detailScrollOffset = Math.max(0, Math.min(detailScrollOffset, maxScroll));
-
-        extractor.enableScissor(contentArea.x(), contentArea.y(), contentArea.right(), contentArea.bottom());
         int pad = 5;
         int maxW = contentArea.width() - (pad * 2);
         int x = contentArea.x() + pad;
+
+        int totalDetailHeight = estimateDetailHeight(font, maxW, building, base.globalRules(), plans.getPlansForBuilding(contextKey, building.id()));
+        int maxScroll = calculateMaxDetailScroll(totalDetailHeight, contentArea.height());
+        detailScrollOffset = Math.max(0, Math.min(detailScrollOffset, maxScroll));
+
+        extractor.enableScissor(contentArea.x(), contentArea.y(), contentArea.right(), contentArea.bottom());
         int y = contentArea.y() + 2 - detailScrollOffset;
 
         TextUtil.drawScaledEllipsizedText(extractor, font, building.name(), x, y, maxW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
@@ -287,7 +307,7 @@ public class BuildingsTabComponent implements TextInputHandler {
             // when this building is actually available - never silently pick one number and
             // present it as settled VERIFIED truth. Show both raw values and let the player see
             // the disagreement themselves.
-            y += TextUtil.drawScaledWrappedText(extractor, font, "GameZones Wiki innehåller motstridiga nivåuppgifter för denna byggnad.",
+            y += TextUtil.drawScaledWrappedText(extractor, font, CONFLICT_WARNING_TEXT,
                     x, y, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_RED, false) + 2;
             TextUtil.drawScaledEllipsizedText(extractor, font, "Byggnadssidan anger nivåkrav: Settlementnivå " + building.levelRequirement(),
                     x, y, maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
@@ -366,17 +386,72 @@ public class BuildingsTabComponent implements TextInputHandler {
                 .removeIf(hit -> hit.rect().bottom() <= contentArea.y() || hit.rect().y() >= contentArea.bottom());
     }
 
-    private int estimateDetailHeight(SettlementBuilding building, GlobalBuildingRules rules, List<BuildingPlan> buildingPlans) {
+    /**
+     * Abstracts wrapped-text height measurement out of the max-scroll estimate so its logic is
+     * unit-testable without a live Minecraft {@link Font} (not constructible headlessly). In
+     * production this is a thin adapter over {@link TextUtil#measureWrappedHeightCapped}; tests
+     * inject a synthetic measurer instead.
+     */
+    @FunctionalInterface
+    interface WrappedTextHeightMeasurer {
+        int measure(String text, int maxW, float scale, int maxLines, int lineSpacing);
+    }
+
+    private int estimateDetailHeight(Font font, int maxW, SettlementBuilding building, GlobalBuildingRules rules, List<BuildingPlan> buildingPlans) {
+        return estimateDetailHeight((text, mw, scale, maxLines, spacing) -> TextUtil.measureWrappedHeightCapped(font, text, mw, scale, maxLines, spacing),
+                maxW, building, rules, buildingPlans);
+    }
+
+    /**
+     * Must track {@link #renderDetail} exactly - human QA found the max-scroll estimate coming in
+     * shorter than the real rendered content, leaving "+ Ny plan" and the last saved plan's
+     * controls unreachable in compact mode. Every wrapped-text block below is measured with the
+     * same helper and the same shared text constants the renderer itself uses, rather than
+     * guessed flat numbers, so the two can never drift apart again.
+     */
+    int estimateDetailHeight(WrappedTextHeightMeasurer measurer, int maxW, SettlementBuilding building, GlobalBuildingRules rules, List<BuildingPlan> buildingPlans) {
         int h = 11 + 10; // heading, license cost
-        h += building.hasLevelRequirementConflict() ? (20 + 9 + 10) : 10; // conflict warning block, or the plain "Nivåkrav" line
+        if (building.hasLevelRequirementConflict()) {
+            h += measurer.measure(CONFLICT_WARNING_TEXT, maxW, TypographyScale.META.getScale(), 2, 1) + 2;
+            h += 9 + 10; // "Byggnadssidan anger..." + "Krävs före nivå..."
+        } else {
+            h += 10; // plain "Nivåkrav" line
+        }
         if (building.hasPublishedMinimumFootprint()) h += 10; // "Minsta storlek"
         h += 9 + 11; // Väggkrav, Takkrav
         h += 10; // "SPECIALKRAV"
         h += building.specialRequirements().size() * 12;
-        if (!building.mainBonus().isBlank()) h += 4 + 9 + 11; // "BONUS" label + wrapped text estimate
-        h += 4 + estimateVerificationTrailHeight(building.verification());
-        h += 6 + 90; // structure calculator block (fixed-height estimate)
-        h += 6 + 20 + (buildingPlans.size() * 34) + 16;
+        if (!building.mainBonus().isBlank()) {
+            h += 4 + 9; // gap + "BONUS" label
+            h += measurer.measure(building.mainBonus(), maxW, TypographyScale.SMALL.getScale(), 2, 1) + 2;
+        }
+        h += 4 + estimateVerificationTrailHeight(measurer, maxW, building.verification());
+        h += 6 + estimateStructureCalculatorHeight(measurer, maxW, building);
+        h += 6 + estimatePlansSectionHeight(buildingPlans.size());
+        return h;
+    }
+
+    /** Mirrors {@link #renderStructureCalculator} exactly, including its two conditional wrapped-text blocks. */
+    int estimateStructureCalculatorHeight(WrappedTextHeightMeasurer measurer, int maxW, SettlementBuilding building) {
+        int h = 10; // "PLANERINGSESTIMAT"
+        h += 14 * 3; // three dimension steppers (Bredd, Djup, Höjd)
+        h += 9 + 9 + 9 + 11; // golv/tak-yta, väggyta, tak-täckning, vägg-täckning
+        if (building.hasPublishedMinimumFootprint()) {
+            boolean tooSmall = !building.fitsFootprint(calcWidth, calcDepth, calcHeight);
+            h += measurer.measure(footprintStatusMessage(building, tooSmall), maxW, TypographyScale.META.getScale(), 2, 1) + 2;
+        }
+        h += measurer.measure(CALCULATOR_DISCLAIMER_TEXT, maxW, TypographyScale.META.getScale(), 2, 1) + 2;
+        return h;
+    }
+
+    /**
+     * Mirrors {@link #renderPlansSection}/{@link #renderPlanRow} exactly. Every plan row has a
+     * fixed 36px pitch regardless of its content (rename state, checklist labels are ellipsized/
+     * clipped horizontally rather than wrapped), so this stays exact with no Font needed.
+     */
+    static int estimatePlansSectionHeight(int planCount) {
+        int h = 10 + 14; // "MINA LOKALA PLANER" label + "+ Ny plan" button
+        h += planCount == 0 ? 9 : planCount * 36;
         return h;
     }
 
@@ -417,21 +492,27 @@ public class BuildingsTabComponent implements TextInputHandler {
 
         if (building.hasPublishedMinimumFootprint()) {
             boolean tooSmall = !building.fitsFootprint(calcWidth, calcDepth, calcHeight);
-            if (tooSmall) {
-                y += TextUtil.drawScaledWrappedText(extractor, font, "För litet för " + building.name() + " - minsta storlek är "
-                        + building.minWidth() + " × " + building.minDepth()
-                        + (building.minHeight() != null ? " (höjd " + building.minHeight() + ")" : "") + ".",
-                        x, y, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_RED, false) + 2;
-            } else {
-                y += TextUtil.drawScaledWrappedText(extractor, font, "Måtten uppfyller " + building.name() + "s publicerade minimikrav.",
-                        x, y, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_GREEN, false) + 2;
-            }
+            y += TextUtil.drawScaledWrappedText(extractor, font, footprintStatusMessage(building, tooSmall),
+                    x, y, maxW, TypographyScale.META.getScale(), 2, 1,
+                    tooSmall ? GZTheme.COLOR_STATUS_RED : GZTheme.COLOR_STATUS_GREEN, false) + 2;
         }
 
-        y += TextUtil.drawScaledWrappedText(extractor, font,
-                "Detta är en lokal planeringsberäkning, inte en garanti för att GameZone godkänner bygget.",
+        y += TextUtil.drawScaledWrappedText(extractor, font, CALCULATOR_DISCLAIMER_TEXT,
                 x, y, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false) + 2;
         return y;
+    }
+
+    /**
+     * Shared by rendering and height estimation, so the calculator's PASS/FAIL wording can never
+     * drift from what the estimate measures.
+     */
+    static String footprintStatusMessage(SettlementBuilding building, boolean tooSmall) {
+        if (tooSmall) {
+            return "För litet för " + building.name() + " - minsta storlek är "
+                    + building.minWidth() + " × " + building.minDepth()
+                    + (building.minHeight() != null ? " (höjd " + building.minHeight() + ")" : "") + ".";
+        }
+        return "Måtten uppfyller " + building.name() + "s publicerade minimikrav.";
     }
 
     private int renderDimensionStepper(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, String label, int value,
@@ -467,7 +548,7 @@ public class BuildingsTabComponent implements TextInputHandler {
 
         List<BuildingPlan> buildingPlans = plans.getPlansForBuilding(contextKey, buildingId);
         if (buildingPlans.isEmpty()) {
-            TextUtil.drawScaledText(extractor, font, "Inga sparade planer för denna byggnad ännu.", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+            TextUtil.drawScaledText(extractor, font, NO_PLANS_TEXT, x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
             return;
         }
 
@@ -562,19 +643,19 @@ public class BuildingsTabComponent implements TextInputHandler {
                 y += 9;
             }
         } else {
-            y += TextUtil.drawScaledWrappedText(extractor, font, "Den här informationen har ännu inte bekräftats.", x, y, maxW,
+            y += TextUtil.drawScaledWrappedText(extractor, font, NOT_VERIFIED_TEXT, x, y, maxW,
                     TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false) + 2;
         }
         return y - startY;
     }
 
-    private static int estimateVerificationTrailHeight(VerificationMetadata verification) {
+    static int estimateVerificationTrailHeight(WrappedTextHeightMeasurer measurer, int maxW, VerificationMetadata verification) {
         int h = 12;
         if (verification.hasSource()) {
             h += 9;
             if (verification.lastVerified() != null) h += 9;
         } else {
-            h += 20;
+            h += measurer.measure(NOT_VERIFIED_TEXT, maxW, TypographyScale.META.getScale(), 2, 1) + 2;
         }
         return h;
     }
