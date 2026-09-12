@@ -7,6 +7,7 @@ import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import org.lwjgl.glfw.GLFW;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
+import se.jimmyeliasson.gzcompanion.diagnostics.OnlineDiagnosticsSnapshot;
 import se.jimmyeliasson.gzcompanion.gamezone.settlement.GameZoneSettlementIdentity;
 import se.jimmyeliasson.gzcompanion.gamezone.settlement.GameZoneSettlementTracker;
 import se.jimmyeliasson.gzcompanion.minecraft.OnlinePlayerSnapshot;
@@ -44,6 +45,7 @@ public class OnlineTabComponent implements TextInputHandler {
     private static final int SECTION_GAP = 3;
     private static final String DISCONNECTED_MESSAGE = "Online-listan är tillgänglig när du är ansluten till GameZoneMC.";
     private static final String NO_PLAYERS_MESSAGE = "Inga spelare matchar sökningen.";
+    private static final int DIAG_BTN_W = 54;
 
     private String searchText = "";
     private boolean searchFocused = false;
@@ -51,6 +53,16 @@ public class OnlineTabComponent implements TextInputHandler {
     private int listScrollOffset = 0;
     private boolean compactShowingDetail = false;
     private long copyFeedbackExpiry = 0L;
+
+    /**
+     * TEMPORARY, LOCAL-ONLY diagnostic panel state for human QA of automatic settlement detection
+     * on the real GameZoneMC server - see docs/ONLINE-PLAYERS.md and
+     * {@link se.jimmyeliasson.gzcompanion.diagnostics.OnlineDiagnosticsSnapshot}. Never persisted,
+     * never sent anywhere.
+     */
+    private boolean showingDiagnostics = false;
+    private int diagnosticsScrollOffset = 0;
+    private long diagnosticsCopyFeedbackExpiry = 0L;
 
     private OnlineLayout layout;
     private final List<ListRowHit> hitTargets = new ArrayList<>();
@@ -84,7 +96,16 @@ public class OnlineTabComponent implements TextInputHandler {
         OnlinePlayersView view = OnlinePlayersGrouping.build(onlinePlayers, connected, favorites, settlementMembers, searchText);
 
         renderHeader(extractor, font, layout.headerRect(), view, connected);
-        renderStatus(extractor, font, layout.statusRect(), connected);
+        renderStatus(extractor, font, layout.statusRect(), connected, mouseX, mouseY);
+
+        if (showingDiagnostics) {
+            OnlineDiagnosticsSnapshot diagnostics = OnlineDiagnosticsSnapshot.capture(
+                    connected, tabHeaderText, onlinePlayers, settlementIdentity, settlementMembers.size());
+            UiRect diagArea = new UiRect(bounds.x(), layout.searchRect().y(), bounds.width(), bounds.bottom() - layout.searchRect().y());
+            renderDiagnostics(extractor, font, diagArea, mouseX, mouseY, diagnostics);
+            return;
+        }
+
         renderSearch(extractor, font, mouseX, mouseY);
 
         if (layout.isCompact()) {
@@ -108,11 +129,21 @@ public class OnlineTabComponent implements TextInputHandler {
         }
     }
 
-    private void renderStatus(GuiGraphicsExtractor extractor, Font font, UiRect statusRect, boolean connected) {
+    private void renderStatus(GuiGraphicsExtractor extractor, Font font, UiRect statusRect, boolean connected, int mouseX, int mouseY) {
         GZTheme.drawCard(extractor, statusRect, GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
         GZTheme.drawStatusDot(extractor, statusRect.x() + 4, statusRect.y() + 4, connected ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_STATUS_GREY);
+
+        UiRect diagBtn = new UiRect(statusRect.right() - DIAG_BTN_W, statusRect.y(), DIAG_BTN_W, statusRect.height());
+        GZTheme.drawButton(extractor, font, diagBtn, "Diagnostik", false, diagBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+        hitTargets.add(new ListRowHit(diagBtn, () -> {
+            showingDiagnostics = true;
+            searchFocused = false;
+            diagnosticsScrollOffset = 0;
+        }));
+
         String label = connected ? "GameZoneMC · Ansluten" : "Inte ansluten till GameZoneMC";
-        TextUtil.drawScaledEllipsizedText(extractor, font, label, statusRect.x() + 11, statusRect.y() + 2, statusRect.width() - 14,
+        int labelMaxW = Math.max(10, diagBtn.x() - (statusRect.x() + 11) - 4);
+        TextUtil.drawScaledEllipsizedText(extractor, font, label, statusRect.x() + 11, statusRect.y() + 2, labelMaxW,
                 TypographyScale.SMALL.getScale(), connected ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_TEXT_MUTED, false);
     }
 
@@ -405,12 +436,74 @@ public class OnlineTabComponent implements TextInputHandler {
     }
 
     // ------------------------------------------------------------------
+    // Diagnostics (TEMPORARY, LOCAL-ONLY - see OnlineDiagnosticsSnapshot)
+    // ------------------------------------------------------------------
+
+    private void renderDiagnostics(GuiGraphicsExtractor extractor, Font font, UiRect area, int mouseX, int mouseY,
+                                    OnlineDiagnosticsSnapshot diagnostics) {
+        GZTheme.drawCard(extractor, area, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
+
+        UiRect backBtn = new UiRect(area.x() + 3, area.y() + 3, 60, 11);
+        GZTheme.drawButton(extractor, font, backBtn, "< Tillbaka", false, backBtn.contains(mouseX, mouseY), TypographyScale.SMALL.getScale());
+        hitTargets.add(new ListRowHit(backBtn, () -> showingDiagnostics = false));
+
+        TextUtil.drawScaledText(extractor, font, "ONLINE-DIAGNOSTIK", backBtn.right() + 6, backBtn.y() + 2,
+                TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, true);
+
+        UiRect copyBtn = new UiRect(area.x() + 3, area.bottom() - 14, 120, 11);
+        GZTheme.drawButton(extractor, font, copyBtn, "Kopiera diagnostik", false, copyBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+        hitTargets.add(new ListRowHit(copyBtn, () -> copyDiagnosticsToClipboard(diagnostics.toCopyText())));
+
+        if (diagnosticsCopyFeedbackExpiry > System.currentTimeMillis()) {
+            TextUtil.drawScaledText(extractor, font, "Kopierat!", copyBtn.right() + 6, copyBtn.y() + 1,
+                    TypographyScale.META.getScale(), GZTheme.COLOR_STATUS_GREEN, false);
+        }
+
+        UiRect contentRect = new UiRect(area.x() + 2, backBtn.bottom() + 4, area.width() - 4,
+                Math.max(10, (copyBtn.y() - 4) - (backBtn.bottom() + 4)));
+        int innerW = Math.max(10, contentRect.width() - 4);
+        String text = diagnostics.toDisplayText();
+
+        int totalH = TextUtil.measureWrappedHeight(font, text, innerW, TypographyScale.SMALL.getScale(), 2);
+        int maxScroll = Math.max(0, totalH - Math.max(1, contentRect.height() - 4));
+        diagnosticsScrollOffset = Math.max(0, Math.min(diagnosticsScrollOffset, maxScroll));
+
+        extractor.enableScissor(contentRect.x(), contentRect.y(), contentRect.right(), contentRect.bottom());
+        TextUtil.drawScaledWrappedText(extractor, font, text, contentRect.x() + 2, contentRect.y() + 2 - diagnosticsScrollOffset,
+                innerW, TypographyScale.SMALL.getScale(), Integer.MAX_VALUE, 2, GZTheme.COLOR_TEXT_SECONDARY, false);
+        extractor.disableScissor();
+    }
+
+    /** Copies the diagnostic text block to the OS clipboard - local only, never sent anywhere. */
+    private void copyDiagnosticsToClipboard(String text) {
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client != null && client.keyboardHandler != null) {
+                client.keyboardHandler.setClipboard(text);
+                diagnosticsCopyFeedbackExpiry = System.currentTimeMillis() + 2000;
+            }
+        } catch (Exception ignored) {
+            // Clipboard access is a pure local OS convenience - never let a failure here affect anything else.
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Input handling
     // ------------------------------------------------------------------
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
         if (button != 0) return false;
         if (layout == null) layout = OnlineLayout.calculate(bounds);
+
+        if (showingDiagnostics) {
+            for (ListRowHit hit : hitTargets) {
+                if (hit.rect().contains(mouseX, mouseY)) {
+                    hit.action().run();
+                    return true;
+                }
+            }
+            return false;
+        }
 
         boolean insideSearch = layout.searchRect().contains(mouseX, mouseY);
         boolean insideClear = layout.clearBtnRect().contains(mouseX, mouseY);
@@ -442,6 +535,16 @@ public class OnlineTabComponent implements TextInputHandler {
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (layout == null) return false;
+
+        if (showingDiagnostics) {
+            UiRect diagArea = new UiRect(layout.bounds().x(), layout.searchRect().y(), layout.bounds().width(),
+                    layout.bounds().bottom() - layout.searchRect().y());
+            if (diagArea.contains(mouseX, mouseY)) {
+                diagnosticsScrollOffset = Math.max(0, diagnosticsScrollOffset - (int) (scrollY * 14));
+                return true;
+            }
+            return false;
+        }
 
         if (layout.isCompact() && compactShowingDetail) {
             return false;
