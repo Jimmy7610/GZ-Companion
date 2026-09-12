@@ -136,6 +136,78 @@ class GameZoneTabIdentityParserTest {
     }
 
     // ------------------------------------------------------------------
+    // Realistic real-server TAB row structure: [PREFIX] <glyph(s)> USERNAME [LEVEL]
+    // The prefix is not necessarily immediately adjacent to the username - one or more
+    // non-bracketed culture/role glyphs can sit between them, and a bracketed level always
+    // follows the username. See this class's own javadoc for the fair-play reasoning.
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Prefix is extracted even with intervening culture/role glyphs between it and the name")
+    void extractsPrefixWithInterveningGlyphs() {
+        assertEquals("BUS", GameZoneTabIdentityParser.extractPrefix("[BUS] ✦ ♚ Dollymorris07 [1]", "Dollymorris07"));
+    }
+
+    @Test
+    @DisplayName("Prefix is extracted with a single intervening glyph")
+    void extractsPrefixWithSingleGlyph() {
+        assertEquals("DDD", GameZoneTabIdentityParser.extractPrefix("[DDD] ✦ DoodleLukas [79]", "DoodleLukas"));
+    }
+
+    @Test
+    @DisplayName("Prefix is extracted with a different intervening glyph shape - glyphs are never hardcoded")
+    void extractsPrefixWithDifferentGlyph() {
+        assertEquals("GRH", GameZoneTabIdentityParser.extractPrefix("[GRH] ♚ JaikenSnake [43]", "JaikenSnake"));
+    }
+
+    @Test
+    @DisplayName("Arbitrary intervening Unicode text (not just single symbols) does not break parsing")
+    void arbitraryInterveningTextDoesNotBreakParsing() {
+        assertEquals("MJO", GameZoneTabIdentityParser.extractPrefix("[MJO] R ♚ LaudonIS [38]", "LaudonIS"));
+    }
+
+    @Test
+    @DisplayName("A bracketed level AFTER the username is never mistaken for the settlement prefix")
+    void trailingLevelAfterUsernameIsIgnored() {
+        assertEquals("BUS", GameZoneTabIdentityParser.extractPrefix("[BUS] Jimmy [38]", "Jimmy"));
+        assertNull(GameZoneTabIdentityParser.extractPrefix("Jimmy [38]", "Jimmy"), "With no bracket at all before the name, there is no prefix to find.");
+    }
+
+    @Test
+    @DisplayName("No bracketed candidate before the username yields UNKNOWN, even with glyphs and a trailing level present")
+    void noBracketedCandidateBeforeUsernameIsUnknown() {
+        assertNull(GameZoneTabIdentityParser.extractPrefix("✦ Jimmy [38]", "Jimmy"));
+        assertNull(GameZoneTabIdentityParser.extractPrefix("✦ ♚ Jimmy [38]", "Jimmy"));
+    }
+
+    @Test
+    @DisplayName("Two bracketed candidates before the username is ambiguous - never guess which one is the prefix")
+    void twoBracketedCandidatesBeforeUsernameIsAmbiguous() {
+        assertNull(GameZoneTabIdentityParser.extractPrefix("[BUS] [XYZ] Jimmy [38]", "Jimmy"));
+        assertNull(GameZoneTabIdentityParser.extractPrefix("[BUS] ♚ [XYZ] Jimmy", "Jimmy"));
+    }
+
+    @Test
+    @DisplayName("Bare culture/role glyphs alone (no brackets at all) never become a settlement prefix")
+    void bareGlyphsAloneNeverBecomePrefix() {
+        assertNull(GameZoneTabIdentityParser.extractPrefix("✦ ♚ Jimmy", "Jimmy"));
+        assertNull(GameZoneTabIdentityParser.extractPrefix("R ♚ Jimmy", "Jimmy"));
+    }
+
+    @Test
+    @DisplayName("Username matching stays case-insensitive even with the realistic glyph+level row shape")
+    void usernameMatchStaysCaseInsensitiveWithRealisticRow() {
+        assertEquals("BUS", GameZoneTabIdentityParser.extractPrefix("[BUS] ✦ JIMMY [38]", "Jimmy"));
+    }
+
+    @Test
+    @DisplayName("Same-settlement classification works end-to-end with the realistic row shape")
+    void sameSettlementClassificationWorksWithRealisticRows() {
+        assertTrue(GameZoneTabIdentityParser.isSameSettlement("[BUS] ✦ ♚ Dollymorris07 [1]", "Dollymorris07", "BUS"));
+        assertFalse(GameZoneTabIdentityParser.isSameSettlement("[DDD] ✦ DoodleLukas [79]", "DoodleLukas", "BUS"));
+    }
+
+    // ------------------------------------------------------------------
     // Combined identity
     // ------------------------------------------------------------------
 
