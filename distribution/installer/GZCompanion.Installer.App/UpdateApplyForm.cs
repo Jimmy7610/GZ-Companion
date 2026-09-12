@@ -1,0 +1,144 @@
+using GZCompanion.Installer.Core;
+
+namespace GZCompanion.Installer.App;
+
+/// <summary>
+/// The small, dedicated window shown for a REAL <c>--apply-update</c> run - the whole point of
+/// this feature is a one-click update for a non-technical player, and a console window that
+/// vanishes the instant Minecraft closes is not that. This form contains NO filesystem or process
+/// logic itself - it only ever renders whatever <see cref="UpdateApplyCoordinator"/> reports and
+/// invokes actions ("Försök igen") back into it, per the project's "keep orchestration testable"
+/// rule. See <see cref="Program"/> for the headless (<c>--test-root</c>) equivalent used in
+/// automated smoke tests.
+/// </summary>
+internal sealed class UpdateApplyForm : Form
+{
+    private readonly UpdateApplyRequest _request;
+    private readonly Label _titleLabel;
+    private readonly Label _statusLabel;
+    private readonly ProgressBar _progressBar;
+    private readonly Button _retryButton;
+    private readonly Button _closeButton;
+    private readonly Action? _onSuccess;
+
+    public UpdateApplyForm(UpdateApplyRequest request, Action? onSuccess = null)
+    {
+        _request = request;
+        _onSuccess = onSuccess;
+
+        Text = "GZ Companion Update";
+        ClientSize = new Size(420, 220);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        StartPosition = FormStartPosition.CenterScreen;
+        BackColor = Theme.PanelBg;
+
+        _titleLabel = new Label
+        {
+            Text = "GZ COMPANION UPPDATERING",
+            Font = new Font("Segoe UI", 13f, FontStyle.Bold),
+            ForeColor = Theme.Mint,
+            AutoSize = false,
+            Location = new Point(20, 16),
+            Size = new Size(380, 28),
+        };
+
+        _statusLabel = new Label
+        {
+            Text = "Förbereder...",
+            Font = Theme.BodyFont,
+            ForeColor = Theme.TextSecondary,
+            AutoSize = false,
+            Location = new Point(20, 56),
+            Size = new Size(380, 70),
+        };
+
+        _progressBar = new ProgressBar
+        {
+            Style = ProgressBarStyle.Marquee,
+            MarqueeAnimationSpeed = 30,
+            Location = new Point(20, 130),
+            Size = new Size(380, 8),
+        };
+
+        _retryButton = Theme.PrimaryButton("Försök igen");
+        _retryButton.Location = new Point(20, 156);
+        _retryButton.Size = new Size(180, 36);
+        _retryButton.Visible = false;
+        _retryButton.Click += (_, _) => _ = RunAsync();
+
+        _closeButton = Theme.SecondaryLinkButton("Stäng");
+        _closeButton.Location = new Point(210, 164);
+        _closeButton.Size = new Size(100, 24);
+        _closeButton.Click += (_, _) => Close();
+
+        Controls.Add(_titleLabel);
+        Controls.Add(_statusLabel);
+        Controls.Add(_progressBar);
+        Controls.Add(_retryButton);
+        Controls.Add(_closeButton);
+
+        Load += (_, _) => _ = RunAsync();
+    }
+
+    private async Task RunAsync()
+    {
+        _retryButton.Visible = false;
+        _progressBar.Visible = true;
+        _statusLabel.ForeColor = Theme.TextSecondary;
+
+        // Constructed on the UI thread, so Progress<T>'s callback is automatically marshaled back
+        // to it via the captured SynchronizationContext - safe to touch controls directly here.
+        var progress = new Progress<UpdateApplyProgress>(OnProgress);
+        var coordinator = new UpdateApplyCoordinator();
+        UpdateApplyOutcome outcome = await coordinator.RunAsync(_request, progress, CancellationToken.None);
+        OnFinished(outcome);
+    }
+
+    private void OnProgress(UpdateApplyProgress progress)
+    {
+        _statusLabel.Text = progress.Message;
+        _statusLabel.ForeColor = progress.Phase switch
+        {
+            UpdateApplyPhase.OtherMinecraftRunning or UpdateApplyPhase.LauncherMustClose or UpdateApplyPhase.Failed => Theme.StatusRed,
+            UpdateApplyPhase.Succeeded => Theme.StatusGreen,
+            _ => Theme.TextSecondary,
+        };
+    }
+
+    private void OnFinished(UpdateApplyOutcome outcome)
+    {
+        _progressBar.Visible = false;
+
+        switch (outcome.Phase)
+        {
+            case UpdateApplyPhase.Succeeded:
+                _titleLabel.Text = "✓ GZ COMPANION HAR UPPDATERATS";
+                _titleLabel.ForeColor = Theme.StatusGreen;
+                _statusLabel.Text = $"{outcome.Message}\n\nMinecraft Launcher är redo.";
+                _statusLabel.ForeColor = Theme.StatusGreen;
+                _onSuccess?.Invoke();
+                break;
+
+            case UpdateApplyPhase.OtherMinecraftRunning:
+                _statusLabel.Text = "Minecraft kör fortfarande.\nStäng Minecraft och försök igen.";
+                _statusLabel.ForeColor = Theme.StatusRed;
+                _retryButton.Visible = true;
+                break;
+
+            case UpdateApplyPhase.LauncherMustClose:
+                _statusLabel.Text = "Minecraft Launcher måste stängas\nför den här uppdateringen.\n\nStäng Launcher och klicka Försök igen.";
+                _statusLabel.ForeColor = Theme.StatusRed;
+                _retryButton.Visible = true;
+                break;
+
+            case UpdateApplyPhase.Failed:
+            default:
+                _statusLabel.Text = $"Uppdateringen kunde inte installeras.\nDin tidigare version är kvar.\n\n{outcome.Message}";
+                _statusLabel.ForeColor = Theme.StatusRed;
+                _retryButton.Visible = true;
+                break;
+        }
+    }
+}

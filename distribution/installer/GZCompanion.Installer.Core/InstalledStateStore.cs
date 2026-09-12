@@ -18,9 +18,11 @@ public static class InstalledStateStore
     public static void Write(string path, InstalledState state)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        string json = JsonSerializer.Serialize(state, WriteOptions);
-        AtomicFileWriter.WriteAllTextAtomically(path, json);
+        AtomicFileWriter.WriteAllTextAtomically(path, Serialize(state));
     }
+
+    /// <summary>Exposed separately so callers that need an injectable write seam (see <see cref="IFastUpdateFileOps"/>) can serialize here and write through their own seam.</summary>
+    public static string Serialize(InstalledState state) => JsonSerializer.Serialize(state, WriteOptions);
 
     public static InstalledState? TryRead(string path)
     {

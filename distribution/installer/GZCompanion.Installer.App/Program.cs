@@ -20,19 +20,31 @@ internal static class Program
 
         var options = new AppOptions(dryRun, verbose, uninstall, testRoot);
 
-        // --apply-update is always headless (it's a background update worker spawned by the mod
-        // itself, launched while Minecraft is still exiting - there is no install wizard to show).
+        // --apply-update: a REAL run (no --test-root) shows the dedicated update-status window -
+        // the whole point of this feature is a one-click update for a non-technical player, and a
+        // console window that vanishes the instant Minecraft closes is not that. --test-root stays
+        // headless so automated smoke tests can drive it without a real window.
         if (applyUpdate)
         {
-            try { Console.OutputEncoding = System.Text.Encoding.UTF8; } catch { /* redirected/non-console stdout - ignore */ }
             string? waitPidRaw = ReadOptionValue(args, "--wait-pid");
             string fromVersion = ReadOptionValue(args, "--from-version") ?? "okänd";
             if (waitPidRaw is null || !int.TryParse(waitPidRaw, out int waitPid))
             {
+                try { Console.OutputEncoding = System.Text.Encoding.UTF8; } catch { }
                 Console.WriteLine("FEL: --apply-update kräver ett giltigt --wait-pid <pid>.");
                 return 1;
             }
-            return RunApplyUpdate(options, waitPid, fromVersion).GetAwaiter().GetResult();
+
+            if (testRoot is not null)
+            {
+                try { Console.OutputEncoding = System.Text.Encoding.UTF8; } catch { }
+                return RunApplyUpdateHeadless(options, waitPid, fromVersion).GetAwaiter().GetResult();
+            }
+
+            ApplicationConfiguration.Initialize();
+            var request = BuildRealApplyUpdateRequest(waitPid, fromVersion);
+            Application.Run(new UpdateApplyForm(request, onSuccess: () => TryOpenLauncherIfNotOpen(new RealProcessLister())));
+            return 0;
         }
 
         // --dry-run (headless, no window - scriptable) and --test-root (headless, points every
@@ -147,128 +159,106 @@ internal static class Program
     }
 
     /// <summary>
-    /// The update worker entry point (see docs/UPDATES.md): waits for the supplied Minecraft PID to
-    /// exit, double-checks no OTHER Minecraft game process is still running, then applies the
-    /// update via either the SAFE FAST PATH (Minecraft/Fabric Loader version unchanged - the
-    /// Launcher app may stay open, launcher_profiles.json is never touched) or, if that isn't safe,
-    /// the existing FULL installer behavior (requires the Launcher app closed, exactly like a fresh
-    /// install/update always has).
+    /// The headless (<c>--test-root</c>) update worker entry point, for automated smoke testing -
+    /// drives the exact same <see cref="UpdateApplyCoordinator"/> the real WinForms window does,
+    /// just rendering its progress to the console instead. See <see cref="UpdateApplyForm"/> for
+    /// the real, user-visible equivalent.
     /// </summary>
-    private static async Task<int> RunApplyUpdate(AppOptions options, int waitPid, string fromVersion)
+    private static async Task<int> RunApplyUpdateHeadless(AppOptions options, int waitPid, string fromVersion)
     {
         void Log(string line) => Console.WriteLine(line);
-
-        Log("GZ COMPANION UPDATE");
+        Log("GZ COMPANION UPDATE (--test-root, headless)");
         Log($"Uppdaterar från {fromVersion}...");
         Log("");
 
-        var paths = options.TestRoot is not null
-            ? new InstallPaths(Path.Combine(options.TestRoot, "AppData", "Roaming"), Path.Combine(options.TestRoot, "AppData", "Local"))
-            : InstallPaths.FromEnvironment();
-        var realProcessLister = new RealProcessLister();
-        bool isRealRun = options.TestRoot is null;
+        var request = BuildTestRootApplyUpdateRequest(options.TestRoot!, waitPid, fromVersion);
+        var progress = new Progress<UpdateApplyProgress>(p => Log($"[{p.Phase}] {p.Message}"));
+        var outcome = await new UpdateApplyCoordinator().RunAsync(request, progress, CancellationToken.None);
 
-        Log("✓ Uppdateringen är verifierad");
-        Log("Väntar på att Minecraft ska stängas...");
-        bool exited = !isRealRun || PidWaiter.WaitForExit(waitPid, PidWaiter.IsProcessRunning, () => Thread.Sleep(1000), maxPolls: 300);
-        if (!exited)
+        Log("");
+        if (outcome.InstallResult is not null)
         {
-            Log("FEL: Kunde inte vänta ut att Minecraft stängs. Ingen uppdatering gjordes. Din nuvarande version har inte ändrats.");
-            return 1;
-        }
-
-        if (isRealRun)
-        {
-            // Extra safety net beyond the specific PID: make sure no OTHER Minecraft game process
-            // is still using this installation before any file is touched.
-            for (int i = 0; i < 60 && EnvironmentDetection.IsMinecraftLikelyRunning(realProcessLister); i++)
+            foreach (var step in outcome.InstallResult.Steps)
             {
-                Thread.Sleep(1000);
+                Log($"  [{(outcome.InstallResult.Success ? "OK" : "?")}] {step.Step}: {step.Detail}");
             }
         }
-        Log("Minecraft är stängt.");
+        Log(outcome.Phase == UpdateApplyPhase.Succeeded ? "KLAR." : $"MISSLYCKADES ({outcome.Phase}): {outcome.Message}");
 
+        return outcome.Phase switch
+        {
+            UpdateApplyPhase.Succeeded => 0,
+            UpdateApplyPhase.LauncherMustClose => 2, // distinct exit code: mod recognizes "full update blocked by open Launcher"
+            UpdateApplyPhase.OtherMinecraftRunning => 3, // distinct exit code: "Minecraft never actually closed"
+            _ => 1,
+        };
+    }
+
+    private static UpdateApplyRequest BuildTestRootApplyUpdateRequest(string testRoot, int waitPid, string fromVersion)
+    {
+        var paths = new InstallPaths(Path.Combine(testRoot, "AppData", "Roaming"), Path.Combine(testRoot, "AppData", "Local"));
+        return BuildApplyUpdateRequest(paths, waitPid, fromVersion,
+            isPidRunning: _ => false, // an isolated test-root run has no real PID to wait for
+            isAnyMinecraftGameRunning: () => false,
+            pidMaxPolls: 0, otherProcessMaxPolls: 0,
+            isLauncherRunning: () => false); // isolated sandbox - never touches a real launcher_profiles.json
+    }
+
+    private static UpdateApplyRequest BuildRealApplyUpdateRequest(int waitPid, string fromVersion)
+    {
+        var paths = InstallPaths.FromEnvironment();
+        var realProcessLister = new RealProcessLister();
+        return BuildApplyUpdateRequest(paths, waitPid, fromVersion,
+            isPidRunning: PidWaiter.IsProcessRunning,
+            isAnyMinecraftGameRunning: () => EnvironmentDetection.IsMinecraftLikelyRunning(realProcessLister),
+            pidMaxPolls: 300, otherProcessMaxPolls: 60, // ~5 minutes, then ~1 more minute grace for any other MC process
+            isLauncherRunning: () => EnvironmentDetection.IsMinecraftLauncherRunning(realProcessLister));
+    }
+
+    private static UpdateApplyRequest BuildApplyUpdateRequest(
+        InstallPaths paths, int waitPid, string fromVersion,
+        Func<int, bool> isPidRunning, Func<bool> isAnyMinecraftGameRunning,
+        int pidMaxPolls, int otherProcessMaxPolls, Func<bool> isLauncherRunning)
+    {
         CompatibilityManifest manifest;
         using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("compatibility.json")!)
         using (var reader = new StreamReader(stream))
         {
-            manifest = CompatibilityManifest.Parse(await reader.ReadToEndAsync());
-        }
-        var target = manifest.FindByMinecraftVersion("26.1.2");
-        if (target is null)
-        {
-            Log("FEL: Minecraft 26.1.2 finns inte i den här uppdateringens kompatibilitetsmanifest.");
-            return 1;
+            manifest = CompatibilityManifest.Parse(reader.ReadToEnd());
         }
 
-        var previouslyInstalled = InstalledStateStore.TryRead(paths.InstalledManifestPath);
-        bool fastPath = FastPathDecision.CanUseFastPath(previouslyInstalled, target);
-
-        using var downloader = new HttpsFileDownloader($"GZCompanionInstaller/{InstallerVersion}");
-        var deps = new InstallEngineDependencies
-        {
-            Paths = paths,
-            Downloader = downloader,
-            LoadEmbeddedCompanionJar = () =>
+        return new UpdateApplyRequest(
+            Paths: paths,
+            WaitPid: waitPid,
+            FromVersion: fromVersion,
+            IsPidRunning: isPidRunning,
+            IsAnyMinecraftGameRunning: isAnyMinecraftGameRunning,
+            Delay: () => Thread.Sleep(1000),
+            PidMaxPolls: pidMaxPolls,
+            OtherProcessMaxPolls: otherProcessMaxPolls,
+            Downloader: new HttpsFileDownloader($"GZCompanionInstaller/{InstallerVersion}"),
+            LoadEmbeddedCompanionJar: () =>
             {
                 using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("gzcompanion.jar")!;
                 using var mem = new MemoryStream();
                 s.CopyTo(mem);
                 return mem.ToArray();
             },
-            Clock = () => DateTimeOffset.Now,
-            IsLauncherRunning = () => isRealRun && EnvironmentDetection.IsMinecraftLauncherRunning(realProcessLister),
-        };
-        var engine = new InstallEngine(deps);
-        var progress = new Progress<string>(Log);
+            Clock: () => DateTimeOffset.Now,
+            IsLauncherRunning: isLauncherRunning,
+            Manifest: manifest);
+    }
 
-        InstallOutcome outcome;
-        if (fastPath)
+    /// <summary>Reuses the existing, proven MinecraftLauncherOpener - never force-closes anything, never called if the Launcher is already open.</summary>
+    private static void TryOpenLauncherIfNotOpen(RealProcessLister processLister)
+    {
+        try
         {
-            Log("Snabb uppdatering: Minecraft/Fabric Loader-versionen är oförändrad. Minecraft Launcher behöver inte stängas.");
-            outcome = await engine.RunFastUpdateAsync(target, dryRun: false, progress, CancellationToken.None);
-        }
-        else if (deps.IsLauncherRunning())
-        {
-            Log("");
-            Log("Stäng Minecraft Launcher för att fortsätta den här uppdateringen.");
-            Log("[ Försök igen ] - starta om uppdateringen när Launcher är stängd.");
-            return 2; // distinct exit code: the mod recognizes this as "full update blocked by open Launcher"
-        }
-        else
-        {
-            Log("Den här uppdateringen kräver den fullständiga installationsprocessen.");
-            outcome = await engine.RunAsync(target, dryRun: false, progress, CancellationToken.None);
-        }
-
-        Log("");
-        if (outcome.Success)
-        {
-            Log("✓ GZ Companion har uppdaterats");
-            Log($"v{fromVersion} → v{target.CompanionVersion}");
-        }
-        else
-        {
-            Log($"MISSLYCKADES: {outcome.ErrorMessage}");
-            Log("Din nuvarande version har inte ändrats.");
-        }
-        foreach (var step in outcome.Steps)
-        {
-            Log($"  [{(outcome.Success ? "OK" : "?")}] {step.Step}: {step.Detail}");
-        }
-
-        if (outcome.Success && isRealRun && !EnvironmentDetection.IsMinecraftLauncherRunning(realProcessLister))
-        {
-            Log("Öppnar Minecraft Launcher...");
+            if (EnvironmentDetection.IsMinecraftLauncherRunning(processLister)) return;
             var opener = new MinecraftLauncherOpener(new WindowsInstalledLauncherDiscovery(), new WindowsLauncherActivator());
-            var openResult = opener.TryOpen();
-            if (!openResult.Success)
-            {
-                Log(openResult.UserMessageIfFailed ?? MinecraftLauncherOpener.FallbackMessage);
-            }
+            opener.TryOpen();
         }
-
-        return outcome.Success ? 0 : 1;
+        catch { /* best-effort convenience only - never let this affect the already-reported successful update */ }
     }
 }
 

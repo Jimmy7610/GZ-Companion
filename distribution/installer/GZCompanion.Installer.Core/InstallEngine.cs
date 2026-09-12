@@ -22,6 +22,36 @@ public sealed class InstallEngineDependencies
     /// real for this safety check to protect there.
     /// </summary>
     public required Func<bool> IsLauncherRunning { get; init; }
+
+    /// <summary>
+    /// Optional seam for <see cref="InstallEngine.RunFastUpdateAsync"/>'s file swap/rollback steps
+    /// only - defaults to real file operations when omitted (every existing caller of
+    /// <see cref="InstallEngine.RunAsync"/>/<see cref="InstallEngine.UninstallAsync"/> is unaffected
+    /// and never needs to set this). Tests inject a fake that can be told to throw at a specific
+    /// call, to deterministically prove rollback behavior at each commit stage without relying on
+    /// real filesystem race conditions.
+    /// </summary>
+    public IFastUpdateFileOps? FastUpdateFileOps { get; init; }
+}
+
+/// <summary>See <see cref="InstallEngineDependencies.FastUpdateFileOps"/>.</summary>
+public interface IFastUpdateFileOps
+{
+    bool Exists(string path);
+    void Move(string from, string to);
+    void Delete(string path);
+
+    /// <summary>Used ONLY for the final installed.json write, via <see cref="AtomicFileWriter"/> in the real implementation - the one write test 6 (installed-state write failure) needs to be able to inject.</summary>
+    void WriteAllText(string path, string content);
+}
+
+/// <summary>The real, production <see cref="IFastUpdateFileOps"/> - plain <see cref="File"/> calls.</summary>
+public sealed class RealFastUpdateFileOps : IFastUpdateFileOps
+{
+    public void WriteAllText(string path, string content) => AtomicFileWriter.WriteAllTextAtomically(path, content);
+    public bool Exists(string path) => File.Exists(path);
+    public void Move(string from, string to) => File.Move(from, to, overwrite: true);
+    public void Delete(string path) => File.Delete(path);
 }
 
 /// <summary>
@@ -289,17 +319,54 @@ public sealed class InstallEngine
     /// API, seed servers.dat, or write to any launcher profile file. The caller is responsible for
     /// having already confirmed the Minecraft GAME process has exited before calling this.
     ///
-    /// <para>Ordering is deliberately more conservative than the full installer's own step 5: the
-    /// OLD companion jar(s) are only deleted AFTER the new one is staged, byte-written, and hash-
-    /// verified in place - so a verification failure here leaves the previous, working installation
-    /// completely untouched rather than mid-swap.</para>
+    /// <para><b>This is a genuine transaction, not merely staged-then-verified:</b></para>
+    /// <list type="number">
+    ///   <item>Ownership of the currently-active jar is derived from <paramref name="previouslyInstalled"/>
+    ///     (<c>gzcompanion-&lt;installed CompanionVersion&gt;.jar</c>) - never guessed from a directory scan.</item>
+    ///   <item>The new Fabric API (if needed) and the new Companion jar are BOTH staged and
+    ///     hash-verified in full BEFORE anything old is touched.</item>
+    ///   <item>Only then does the commit begin: the old owned jar (and old Fabric API, if it's
+    ///     being replaced) are renamed to a <c>.update-backup</c> file - never deleted outright -
+    ///     before the new, verified file is moved into the active place.</item>
+    ///   <item>Any other stale <c>gzcompanion-*.jar</c> is removed only after the new jar is
+    ///     confirmed active.</item>
+    ///   <item><c>installed.json</c> is written LAST, only once every file operation above
+    ///     succeeded.</item>
+    ///   <item>Only once installed-state is confirmed written are the <c>.update-backup</c> files
+    ///     deleted for good.</item>
+    ///   <item>If ANY step from the commit phase onward throws, EVERYTHING done since backups were
+    ///     created is undone: the new files are removed, the old jar/Fabric API are restored from
+    ///     their backups, and installed-state is restored to its previous content (or removed if it
+    ///     didn't exist before) - leaving exactly the previous working version active, never two
+    ///     Companion jars and never a false success.</item>
+    /// </list>
     /// </summary>
-    public async Task<InstallOutcome> RunFastUpdateAsync(SupportedEntry target, bool dryRun, IProgress<string>? log, CancellationToken ct)
+    public async Task<InstallOutcome> RunFastUpdateAsync(SupportedEntry target, InstalledState previouslyInstalled, bool dryRun, IProgress<string>? log, CancellationToken ct)
     {
         var steps = new List<InstallStepResult>();
         void Record(string step, string detail) => steps.Add(new InstallStepResult(step, true, detail));
         void Emit(string message) => log?.Report(message);
         var paths = _deps.Paths;
+        var fileOps = _deps.FastUpdateFileOps ?? new RealFastUpdateFileOps();
+
+        string ownedJarFileName = $"gzcompanion-{previouslyInstalled.CompanionVersion}.jar";
+        string oldJarPath = Path.Combine(paths.GzCompanionModsDir, ownedJarFileName);
+        string newJarPath = Path.Combine(paths.GzCompanionModsDir, target.CompanionJar.FileName);
+        string newJarStagingPath = newJarPath + ".staging";
+        string jarBackupPath = oldJarPath + ".update-backup";
+
+        string fabricApiPath = Path.Combine(paths.GzCompanionModsDir, target.FabricApi.FileName);
+        string fabricApiStagingPath = fabricApiPath + ".staging";
+        string fabricApiBackupPath = fabricApiPath + ".update-backup";
+
+        bool sameJarName = string.Equals(oldJarPath, newJarPath, StringComparison.OrdinalIgnoreCase);
+        bool jarBackedUp = false;
+        bool newJarPlaced = false;
+        bool fabricApiNeedsReplace = false;
+        bool fabricApiBackedUp = false;
+        bool fabricApiPlaced = false;
+        bool installedStateWritten = false;
+        string? previousInstalledStateJson = null;
 
         try
         {
@@ -309,75 +376,165 @@ public sealed class InstallEngine
                 Directory.CreateDirectory(paths.GzCompanionModsDir);
             }
 
-            // Fabric API - same ownership rule as the full installer: only re-download if the hash differs.
+            // --- STAGE everything new FIRST - nothing old is touched yet. ---
             Emit("Kontrollerar Fabric API...");
-            string fabricApiPath = Path.Combine(paths.GzCompanionModsDir, target.FabricApi.FileName);
-            if (!dryRun)
+            fabricApiNeedsReplace = !(fileOps.Exists(fabricApiPath) && HashMatches(fabricApiPath, target.FabricApi.Sha256));
+            if (!dryRun && fabricApiNeedsReplace)
             {
-                bool alreadyGood = File.Exists(fabricApiPath) && HashMatches(fabricApiPath, target.FabricApi.Sha256);
-                if (!alreadyGood)
-                {
-                    string stagingPath = fabricApiPath + ".staging";
-                    await _deps.Downloader.DownloadToFileAsync(new Uri(target.FabricApi.DownloadUrl), stagingPath, progress: null, ct).ConfigureAwait(false);
-                    Sha256.VerifyOrThrow(stagingPath, target.FabricApi.Sha256, "Fabric API");
-                    File.Move(stagingPath, fabricApiPath, overwrite: true);
-                }
+                await _deps.Downloader.DownloadToFileAsync(new Uri(target.FabricApi.DownloadUrl), fabricApiStagingPath, progress: null, ct).ConfigureAwait(false);
+                Sha256.VerifyOrThrow(fabricApiStagingPath, target.FabricApi.Sha256, "Fabric API");
             }
-            Record("fabric-api", target.FabricApi.FileName);
 
-            // GZ Companion's own jar - staged and hash-verified BEFORE any old jar is touched.
-            Emit("Installerar ny GZ Companion-version...");
-            string companionJarPath = Path.Combine(paths.GzCompanionModsDir, target.CompanionJar.FileName);
+            Emit("Hämtar ny GZ Companion-version...");
             if (!dryRun)
             {
                 byte[] jarBytes = _deps.LoadEmbeddedCompanionJar();
-                string tempJarPath = companionJarPath + ".staging";
-                await File.WriteAllBytesAsync(tempJarPath, jarBytes, ct).ConfigureAwait(false);
-                Sha256.VerifyOrThrow(tempJarPath, target.CompanionJar.Sha256, "GZ Companion.jar (embedded)");
-                File.Move(tempJarPath, companionJarPath, overwrite: true);
+                await File.WriteAllBytesAsync(newJarStagingPath, jarBytes, ct).ConfigureAwait(false);
+                Sha256.VerifyOrThrow(newJarStagingPath, target.CompanionJar.Sha256, "GZ Companion.jar (embedded)");
+            }
+            Record("staged", "new files downloaded and hash-verified");
 
-                // Only now that the NEW jar is confirmed in place do we remove any other stale
-                // gzcompanion-*.jar - never before, so a verification failure above never leaves
-                // zero working companion jars in mods.
-                if (Directory.Exists(paths.GzCompanionModsDir))
+            // --- COMMIT: back up the old owned files, then swap in the new, verified ones. ---
+            if (!dryRun)
+            {
+                Emit("Byter ut GZ Companion...");
+
+                if (!sameJarName && fileOps.Exists(oldJarPath))
                 {
-                    foreach (var stale in Directory.EnumerateFiles(paths.GzCompanionModsDir, "gzcompanion-*.jar"))
+                    fileOps.Move(oldJarPath, jarBackupPath);
+                    jarBackedUp = true;
+                }
+                fileOps.Move(newJarStagingPath, newJarPath);
+                newJarPlaced = true;
+
+                if (fabricApiNeedsReplace)
+                {
+                    if (fileOps.Exists(fabricApiPath))
                     {
-                        if (!string.Equals(Path.GetFileName(stale), target.CompanionJar.FileName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            File.Delete(stale);
-                        }
+                        fileOps.Move(fabricApiPath, fabricApiBackupPath);
+                        fabricApiBackedUp = true;
+                    }
+                    fileOps.Move(fabricApiStagingPath, fabricApiPath);
+                    fabricApiPlaced = true;
+                }
+            }
+            Record("fabric-api", target.FabricApi.FileName);
+            Record("companion-jar", target.CompanionJar.FileName);
+
+            // Remove any OTHER stale gzcompanion-*.jar - the just-backed-up old owned jar is
+            // already gone from this directory listing (it was moved to its backup name above), so
+            // this only ever catches a genuinely unrelated leftover. A failure here still rolls
+            // back the WHOLE transaction (see catch below) - a stray extra jar must never be
+            // reported as a successful, single-active-jar update.
+            if (!dryRun && Directory.Exists(paths.GzCompanionModsDir))
+            {
+                foreach (var stale in Directory.EnumerateFiles(paths.GzCompanionModsDir, "gzcompanion-*.jar"))
+                {
+                    string staleName = Path.GetFileName(stale);
+                    if (staleName.EndsWith(".update-backup", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(staleName, target.CompanionJar.FileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        fileOps.Delete(stale);
                     }
                 }
             }
-            Record("companion-jar", target.CompanionJar.FileName);
 
-            // Installed-state is written LAST, exactly like the full installer.
+            // --- installed.json is written LAST, only once every file operation above succeeded. ---
             if (!dryRun)
             {
-                InstalledStateStore.Write(paths.InstalledManifestPath, new InstalledState(
+                Directory.CreateDirectory(Path.GetDirectoryName(paths.InstalledManifestPath)!);
+                if (File.Exists(paths.InstalledManifestPath))
+                {
+                    previousInstalledStateJson = File.ReadAllText(paths.InstalledManifestPath);
+                }
+                string newStateJson = InstalledStateStore.Serialize(new InstalledState(
                     target.CompanionVersion, target.MinecraftVersion, target.FabricLoaderVersion, target.FabricApiVersion,
                     _deps.Clock().ToString("O")));
+                fileOps.WriteAllText(paths.InstalledManifestPath, newStateJson);
+                installedStateWritten = true;
             }
             Record("installed-state", target.CompanionVersion);
+
+            // --- Only now, after installed-state is confirmed written, discard the backups. ---
+            if (!dryRun)
+            {
+                TryDeleteQuietly(jarBackupPath);
+                TryDeleteQuietly(fabricApiBackupPath);
+            }
             Record("launcher-profile-skipped", "fast path - Minecraft/Fabric Loader version unchanged, launcher_profiles.json was never opened");
 
             return new InstallOutcome(Success: true, DryRun: dryRun, Steps: steps, ErrorMessage: null);
         }
         catch (Exception ex)
         {
-            // Both staging paths are deterministic from `target` alone, so cleanup here is safe
-            // and correct regardless of which step actually threw - a failure must never leave a
-            // half-written .staging file behind, only the untouched previous installation.
-            TryDeleteStagingFile(Path.Combine(paths.GzCompanionModsDir, target.FabricApi.FileName) + ".staging");
-            TryDeleteStagingFile(Path.Combine(paths.GzCompanionModsDir, target.CompanionJar.FileName) + ".staging");
+            if (!dryRun)
+            {
+                RollBackFastUpdate(paths, fileOps, newJarPath, newJarStagingPath, oldJarPath, jarBackupPath, jarBackedUp, newJarPlaced,
+                    fabricApiPath, fabricApiStagingPath, fabricApiBackupPath, fabricApiBackedUp, fabricApiPlaced,
+                    installedStateWritten, previousInstalledStateJson);
+            }
             return new InstallOutcome(Success: false, DryRun: dryRun, Steps: steps, ErrorMessage: ex.Message);
         }
     }
 
-    private static void TryDeleteStagingFile(string path)
+    /// <summary>
+    /// Undoes exactly what <see cref="RunFastUpdateAsync"/> had already done at the point of
+    /// failure, restoring the previous working installation. Every individual restore step is
+    /// best-effort (a rollback step itself must never throw and mask the real error), but each is
+    /// attempted regardless of whether an earlier one failed, to restore as much as possible.
+    /// </summary>
+    private static void RollBackFastUpdate(
+        InstallPaths paths, IFastUpdateFileOps fileOps,
+        string newJarPath, string newJarStagingPath, string oldJarPath, string jarBackupPath, bool jarBackedUp, bool newJarPlaced,
+        string fabricApiPath, string fabricApiStagingPath, string fabricApiBackupPath, bool fabricApiBackedUp, bool fabricApiPlaced,
+        bool installedStateWritten, string? previousInstalledStateJson)
     {
-        try { File.Delete(path); } catch { /* best-effort cleanup only */ }
+        if (newJarPlaced)
+        {
+            TryDeleteQuietly(newJarPath);
+        }
+        if (jarBackedUp)
+        {
+            TryMoveBackQuietly(fileOps, jarBackupPath, oldJarPath);
+        }
+        if (fabricApiPlaced)
+        {
+            TryDeleteQuietly(fabricApiPath);
+        }
+        if (fabricApiBackedUp)
+        {
+            TryMoveBackQuietly(fileOps, fabricApiBackupPath, fabricApiPath);
+        }
+        if (installedStateWritten)
+        {
+            if (previousInstalledStateJson is not null)
+            {
+                try { File.WriteAllText(paths.InstalledManifestPath, previousInstalledStateJson); } catch { /* best-effort */ }
+            }
+            else
+            {
+                TryDeleteQuietly(paths.InstalledManifestPath);
+            }
+        }
+        TryDeleteQuietly(newJarStagingPath);
+        TryDeleteQuietly(fabricApiStagingPath);
+    }
+
+    private static void TryMoveBackQuietly(IFastUpdateFileOps fileOps, string from, string to)
+    {
+        try
+        {
+            if (fileOps.Exists(from))
+            {
+                fileOps.Move(from, to);
+            }
+        }
+        catch { /* best-effort restore only - never let a failed rollback step mask the real error */ }
+    }
+
+    private static void TryDeleteQuietly(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); } catch { /* best-effort cleanup only */ }
     }
 
     /// <summary>

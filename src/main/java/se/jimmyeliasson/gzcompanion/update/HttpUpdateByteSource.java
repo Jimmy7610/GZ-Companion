@@ -25,8 +25,16 @@ public final class HttpUpdateByteSource implements UpdateByteSource {
     private final String userAgent;
 
     public HttpUpdateByteSource(String companionVersion) {
-        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
+        // NORMAL follows redirects but NEVER downgrades HTTPS to HTTP - required because GitHub
+        // release-asset browser_download_url values redirect to GitHub's CDN, and Java's
+        // HttpClient does not follow redirects by default.
+        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).followRedirects(HttpClient.Redirect.NORMAL).build();
         this.userAgent = "GZCompanion-Updater/" + companionVersion + " (+https://github.com/Jimmy7610/GZ-Companion)";
+    }
+
+    /** Test-only introspection so a future change can never silently remove the redirect policy. */
+    HttpClient.Redirect redirectPolicyForTesting() {
+        return httpClient.followRedirects();
     }
 
     @Override

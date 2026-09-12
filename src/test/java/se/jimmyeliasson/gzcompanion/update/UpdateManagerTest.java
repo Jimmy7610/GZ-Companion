@@ -48,8 +48,8 @@ class UpdateManagerTest {
 
     private static GitHubRelease releaseWithManifestAndInstaller(String tag) {
         return new GitHubRelease(tag, false, true, List.of(
-                new GitHubReleaseAsset(UpdateChecker.MANIFEST_ASSET_NAME, "https://example.invalid/manifest", null),
-                new GitHubReleaseAsset(UpdateChecker.INSTALLER_ASSET_NAME, "https://example.invalid/installer", null)
+                new GitHubReleaseAsset(UpdateChecker.MANIFEST_ASSET_NAME, "https://github.com/Jimmy7610/GZ-Companion/releases/download/manifest", null),
+                new GitHubReleaseAsset(UpdateChecker.INSTALLER_ASSET_NAME, "https://github.com/Jimmy7610/GZ-Companion/releases/download/installer", null)
         ));
     }
 

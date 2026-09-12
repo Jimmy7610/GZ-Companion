@@ -103,4 +103,12 @@ class UpdateManifestTest {
         String json = manifestJson("1", VALID_SHA).replace("\"minecraftVersion\": \"26.1.2\",", "");
         assertTrue(UpdateManifest.parse(json).isEmpty());
     }
+
+    @Test
+    @DisplayName("The installer file name must be EXACTLY the expected constant - not merely 'a safe name'")
+    void installerFileNameMustMatchExactly() {
+        assertTrue(UpdateManifest.parse(manifestJson("1", VALID_SHA).replace("GZ-Companion-Setup.exe", "GZCompanionSetup.exe")).isEmpty());
+        assertTrue(UpdateManifest.parse(manifestJson("1", VALID_SHA).replace("GZ-Companion-Setup.exe", "gz-companion-setup.exe")).isEmpty());
+        assertTrue(UpdateManifest.parse(manifestJson("1", VALID_SHA).replace("GZ-Companion-Setup.exe", "setup.exe")).isEmpty());
+    }
 }

@@ -34,6 +34,8 @@ public record UpdateManifest(
         List<String> notes
 ) {
     public static final int SUPPORTED_SCHEMA_VERSION = 1;
+    /** The ONLY installer file name this mod will ever accept - not merely "a safe name". */
+    public static final String EXPECTED_INSTALLER_FILE_NAME = "GZ-Companion-Setup.exe";
     private static final Pattern SHA256_HEX = Pattern.compile("^[0-9a-fA-F]{64}$");
 
     public UpdateManifest {
@@ -63,7 +65,9 @@ public record UpdateManifest(
             JsonObject installer = obj.getAsJsonObject("installer");
             String fileName = requiredString(installer, "fileName");
             String sha256 = requiredString(installer, "sha256");
-            if (fileName == null || !isSafeFileName(fileName) || sha256 == null || !SHA256_HEX.matcher(sha256).matches()) {
+            if (fileName == null || !isSafeFileName(fileName)
+                    || !fileName.equals(EXPECTED_INSTALLER_FILE_NAME)
+                    || sha256 == null || !SHA256_HEX.matcher(sha256).matches()) {
                 return Optional.empty();
             }
             if (!installer.has("sizeBytes") || !installer.get("sizeBytes").isJsonPrimitive()) return Optional.empty();

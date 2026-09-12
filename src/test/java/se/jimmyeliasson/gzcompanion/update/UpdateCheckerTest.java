@@ -60,8 +60,8 @@ class UpdateCheckerTest {
 
     private static GitHubRelease releaseWithAssets(String tag, boolean draft, boolean prerelease, boolean withManifest, boolean withInstaller) {
         List<GitHubReleaseAsset> assets = new java.util.ArrayList<>();
-        if (withManifest) assets.add(new GitHubReleaseAsset(MANIFEST_ASSET, "https://example.invalid/" + tag + "/manifest", null));
-        if (withInstaller) assets.add(new GitHubReleaseAsset(INSTALLER_ASSET, "https://example.invalid/" + tag + "/installer", null));
+        if (withManifest) assets.add(new GitHubReleaseAsset(MANIFEST_ASSET, "https://github.com/Jimmy7610/GZ-Companion/releases/download/" + tag + "/manifest", null));
+        if (withInstaller) assets.add(new GitHubReleaseAsset(INSTALLER_ASSET, "https://github.com/Jimmy7610/GZ-Companion/releases/download/" + tag + "/installer", null));
         return new GitHubRelease(tag, draft, prerelease, assets);
     }
 
@@ -72,7 +72,7 @@ class UpdateCheckerTest {
     void draftsIgnored() {
         GitHubRelease draft = releaseWithAssets("v0.1.0-alpha.3", true, true, true, true);
         FakeReleaseSource source = new FakeReleaseSource(List.of(draft));
-        source.putManifest("https://example.invalid/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.3"));
+        source.putManifest("https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.3"));
 
         assertTrue(UpdateChecker.findUpdate(List.of(draft), CURRENT, UpdateChannel.ALPHA, source).isEmpty());
     }
@@ -82,7 +82,7 @@ class UpdateCheckerTest {
     void prereleaseAlphaAcceptedOnAlphaChannel() {
         GitHubRelease release = releaseWithAssets("v0.1.0-alpha.3", false, true, true, true);
         FakeReleaseSource source = new FakeReleaseSource(List.of(release));
-        source.putManifest("https://example.invalid/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.3"));
+        source.putManifest("https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.3"));
 
         Optional<UpdateRelease> found = UpdateChecker.findUpdate(List.of(release), CURRENT, UpdateChannel.ALPHA, source);
         assertTrue(found.isPresent());
@@ -95,8 +95,8 @@ class UpdateCheckerTest {
         GitHubRelease r3 = releaseWithAssets("v0.1.0-alpha.3", false, true, true, true);
         GitHubRelease r4 = releaseWithAssets("v0.1.0-alpha.4", false, true, true, true);
         FakeReleaseSource source = new FakeReleaseSource(List.of(r3, r4));
-        source.putManifest("https://example.invalid/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.3"));
-        source.putManifest("https://example.invalid/v0.1.0-alpha.4/manifest", manifestFor("0.1.0-alpha.4"));
+        source.putManifest("https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.3"));
+        source.putManifest("https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.4/manifest", manifestFor("0.1.0-alpha.4"));
 
         Optional<UpdateRelease> found = UpdateChecker.findUpdate(List.of(r3, r4), CURRENT, UpdateChannel.ALPHA, source);
         assertTrue(found.isPresent());
@@ -132,7 +132,7 @@ class UpdateCheckerTest {
     void manifestVersionTagMismatchRejected() {
         GitHubRelease release = releaseWithAssets("v0.1.0-alpha.3", false, true, true, true);
         FakeReleaseSource source = new FakeReleaseSource(List.of(release));
-        source.putManifest("https://example.invalid/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.4")); // mismatch!
+        source.putManifest("https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.4")); // mismatch!
 
         assertTrue(UpdateChecker.findUpdate(List.of(release), CURRENT, UpdateChannel.ALPHA, source).isEmpty());
     }
@@ -151,7 +151,7 @@ class UpdateCheckerTest {
     void stableChannelNeverReceivesPrerelease() {
         GitHubRelease release = releaseWithAssets("v0.1.0-alpha.3", false, true, true, true);
         FakeReleaseSource source = new FakeReleaseSource(List.of(release));
-        source.putManifest("https://example.invalid/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.3"));
+        source.putManifest("https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.3"));
 
         assertTrue(UpdateChecker.findUpdate(List.of(release), CURRENT, UpdateChannel.STABLE, source).isEmpty());
     }
@@ -163,7 +163,7 @@ class UpdateCheckerTest {
         GitHubRelease good = releaseWithAssets("v0.1.0-alpha.4", false, true, true, true);
         FakeReleaseSource source = new FakeReleaseSource(List.of(broken, good));
         // Deliberately no fixture registered for broken's manifest URL - fetchText will throw.
-        source.putManifest("https://example.invalid/v0.1.0-alpha.4/manifest", manifestFor("0.1.0-alpha.4"));
+        source.putManifest("https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.4/manifest", manifestFor("0.1.0-alpha.4"));
 
         Optional<UpdateRelease> found = UpdateChecker.findUpdate(List.of(broken, good), CURRENT, UpdateChannel.ALPHA, source);
         assertTrue(found.isPresent());
@@ -175,5 +175,30 @@ class UpdateCheckerTest {
     void nullInputsFailSafe() {
         assertDoesNotThrow(() -> UpdateChecker.findUpdate(null, CURRENT, UpdateChannel.ALPHA, new FakeReleaseSource(List.of())));
         assertTrue(UpdateChecker.findUpdate(null, CURRENT, UpdateChannel.ALPHA, new FakeReleaseSource(List.of())).isEmpty());
+    }
+
+    @Test
+    @DisplayName("A manifest whose declared channel disagrees with what the tag itself implies is rejected")
+    void manifestChannelTagMismatchRejected() {
+        GitHubRelease release = releaseWithAssets("v0.1.0-alpha.3", false, true, true, true);
+        FakeReleaseSource source = new FakeReleaseSource(List.of(release));
+        // The tag is clearly alpha, but the manifest falsely claims "stable" - must be rejected.
+        String mismatchedManifest = manifestFor("0.1.0-alpha.3").replace("\"channel\":\"alpha\"", "\"channel\":\"stable\"");
+        source.putManifest("https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.3/manifest", mismatchedManifest);
+
+        assertTrue(UpdateChecker.findUpdate(List.of(release), CURRENT, UpdateChannel.ALPHA, source).isEmpty());
+    }
+
+    @Test
+    @DisplayName("An asset URL that does not genuinely belong to Jimmy7610/GZ-Companion is never fetched, release rejected")
+    void assetUrlNotBelongingToRepoRejected() {
+        GitHubReleaseAsset manifestAsset = new GitHubReleaseAsset(MANIFEST_ASSET, "https://evil.example/manifest.json", null);
+        GitHubReleaseAsset installerAsset = new GitHubReleaseAsset(INSTALLER_ASSET, "https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.3/installer", null);
+        GitHubRelease release = new GitHubRelease("v0.1.0-alpha.3", false, true, List.of(manifestAsset, installerAsset));
+        FakeReleaseSource source = new FakeReleaseSource(List.of(release));
+        source.putManifest("https://evil.example/manifest.json", manifestFor("0.1.0-alpha.3"));
+
+        assertTrue(UpdateChecker.findUpdate(List.of(release), CURRENT, UpdateChannel.ALPHA, source).isEmpty());
+        assertEquals(0, source.fetchTextCalls, "an unsafe asset URL must never even be fetched");
     }
 }

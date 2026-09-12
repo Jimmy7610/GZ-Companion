@@ -54,7 +54,7 @@ class UpdateDownloaderTest {
     private UpdateRelease releaseFor(long declaredSize, String declaredSha256, String githubDigest) {
         UpdateManifest manifest = new UpdateManifest(1, "0.1.0-alpha.3", "alpha", "26.1.2", "0.19.5",
                 "0.155.3+26.1.2", "GZ-Companion-Setup.exe", declaredSha256, declaredSize, List.of());
-        GitHubReleaseAsset installerAsset = new GitHubReleaseAsset("GZ-Companion-Setup.exe", "https://example.invalid/installer", githubDigest);
+        GitHubReleaseAsset installerAsset = new GitHubReleaseAsset("GZ-Companion-Setup.exe", "https://github.com/Jimmy7610/GZ-Companion/releases/download/installer", githubDigest);
         GitHubRelease release = new GitHubRelease("v0.1.0-alpha.3", false, true, List.of(installerAsset));
         return new UpdateRelease(release, manifest, installerAsset, SemanticVersion.parse("0.1.0-alpha.3").orElseThrow());
     }

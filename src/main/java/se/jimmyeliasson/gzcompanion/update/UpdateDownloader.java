@@ -41,6 +41,14 @@ public final class UpdateDownloader {
 
     public Result downloadAndVerify(UpdateRelease update, ProgressListener listener) {
         UpdateManifest manifest = update.manifest();
+
+        // Defense in depth: UpdateChecker already validates this before a release is ever offered
+        // as "available", but this is the actual point a real network fetch happens, so it is
+        // re-checked here too rather than trusting a caller to have validated it upstream.
+        if (!GitHubAssetUrlValidator.isSafeInitialAssetUrl(update.installerAsset().browserDownloadUrl())) {
+            return new Result.Failure("Uppdateringen kunde inte verifieras och installerades inte. Din nuvarande version har inte ändrats.");
+        }
+
         Path finalPath = UpdatePaths.installerPath(update.version().toDisplayString(), manifest.installerFileName());
         Path partPath = UpdatePaths.partPath(finalPath);
 

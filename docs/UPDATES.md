@@ -80,27 +80,44 @@ that release is simply skipped as if it didn't exist - never guessed at, never p
 GitHub repository - the same trust a player already places in the manual download today.
 **Integrity verification is real and independent of that trust**, not a rubber stamp:
 
-1. HTTPS only, everywhere.
+1. HTTPS only, everywhere - including across redirects (see below).
 2. Only the public `Jimmy7610/GZ-Companion` releases endpoint is ever queried - a fixed, hardcoded
    URL, never derived from anything a release or a player could influence.
-3. The manifest's declared installer file name must be a plain file name (no path separators, no
-   `..`) - anything else fails the whole manifest, never sanitized-and-proceeded-with.
-4. The download is written to a `.part` staging file first - it is never treated as the update
+3. Every asset URL a GitHub Releases API response provides (`browser_download_url`, for the
+   manifest AND the installer) is validated BEFORE it is ever requested: it must genuinely be
+   `https://github.com/Jimmy7610/GZ-Companion/releases/download/...` - an exact host match, never
+   `startsWith`/`endsWith`/`contains`, so a lookalike host (`github.com.evil.example`) or a
+   different repository entirely is rejected outright. See `GitHubAssetUrlValidator`.
+4. **GitHub release-asset browser URLs redirect** from that `github.com/.../releases/download/...`
+   URL to GitHub's own release-asset delivery infrastructure - a real HTTP 3xx hop, not a direct
+   download. Both HTTP clients this feature uses are deliberately configured with
+   `HttpClient.Redirect.NORMAL`, which follows that redirect while still refusing to ever redirect
+   from HTTPS to HTTP. The CDN hostname a redirect ultimately lands on is intentionally NOT
+   hardcoded anywhere - GitHub controls and can change it - only the INITIAL request (point 3
+   above) is validated.
+5. The manifest's declared installer file name must be EXACTLY `GZ-Companion-Setup.exe` - not
+   merely "a safe-looking name" - and must contain no path separators or `..`; anything else fails
+   the whole manifest, never sanitized-and-proceeded-with.
+6. The manifest's declared `channel` must agree with what the release TAG's own SemVer prerelease
+   tag implies (e.g. a `v0.1.0-alpha.3` tag claiming `"channel": "stable"` is rejected) - a
+   manifest can't unilaterally reclassify its own release onto a channel the tag doesn't support.
+7. The download is written to a `.part` staging file first - it is never treated as the update
    until every check below passes.
-5. The actual downloaded byte count is compared against the manifest's declared size.
-6. A SHA-256 is computed locally from the downloaded bytes and compared against the manifest's
+8. The actual downloaded byte count is compared against the manifest's declared size.
+9. A SHA-256 is computed locally from the downloaded bytes and compared against the manifest's
    declared hash.
-7. If GitHub's own release-asset API additionally provides a digest for that asset, it is checked
-   too - as defense in depth, never as a substitute for the check above.
-8. Only after ALL of the above pass is the `.part` file renamed into place as the real installer.
-9. A hash mismatch, a size mismatch, or an interrupted download all delete the `.part` file and
-   leave the current installation completely untouched - GZ Companion never executes a
-   partially-downloaded or hash-mismatched file, under any circumstance.
-10. Immediately before actually launching the downloaded installer (when the player presses "Stäng
+10. If GitHub's own release-asset API additionally provides a digest for that asset, it is checked
+    too - as defense in depth, never as a substitute for the check above.
+11. Only after ALL of the above pass is the `.part` file renamed into place as the real installer.
+12. A hash mismatch, a size mismatch, or an interrupted download all delete the `.part` file and
+    leave the current installation completely untouched - GZ Companion never executes a
+    partially-downloaded or hash-mismatched file, under any circumstance.
+13. Immediately before actually launching the downloaded installer (when the player presses "Stäng
     och uppdatera"), its hash is verified ONE MORE TIME from the file on disk - in case anything
     happened to it between download-time verification and this moment.
 
-See `se.jimmyeliasson.gzcompanion.update.UpdateDownloader` and `UpdateInstallerLauncher`.
+See `se.jimmyeliasson.gzcompanion.update.UpdateDownloader`, `GitHubAssetUrlValidator`, and
+`UpdateInstallerLauncher`.
 
 ## 6. What is checked, and what is never sent
 

@@ -13,11 +13,16 @@ import java.util.Optional;
  * fixtures, never a real HTTP call.
  *
  * <p>Rules, in order: drafts are ignored; the tag must parse as a valid SemVer version STRICTLY
- * newer than the current one; both the manifest asset and installer asset must be present; the
- * manifest itself must parse under the supported schema; the manifest's own declared version must
- * agree with the release tag (a mismatch is rejected, never silently trusted); the release's
- * channel must be one the current channel accepts (see {@link UpdateChannel#accepts}). Among every
- * release that survives all of that, the highest version wins.
+ * newer than the current one; both the manifest asset and installer asset must be present AND
+ * their {@code browser_download_url} must pass {@link GitHubAssetUrlValidator} (a URL that isn't
+ * genuinely {@code https://github.com/Jimmy7610/GZ-Companion/releases/download/...} is never
+ * fetched at all); the manifest itself must parse under the supported schema; the manifest's own
+ * declared version must agree with the release tag (a mismatch is rejected, never silently
+ * trusted); the manifest's declared channel must agree with what {@link UpdateChannel#classify}
+ * derives from that SAME tag (e.g. a {@code v0.1.0-alpha.3} tag claiming channel {@code "stable"}
+ * is rejected); the release's channel must be one the current channel accepts (see
+ * {@link UpdateChannel#accepts}). Among every release that survives all of that, the highest
+ * version wins.
  */
 public final class UpdateChecker {
     public static final String MANIFEST_ASSET_NAME = "update-manifest.json";
@@ -47,6 +52,13 @@ public final class UpdateChecker {
             Optional<GitHubReleaseAsset> installerAsset = release.findAsset(INSTALLER_ASSET_NAME);
             if (manifestAsset.isEmpty() || installerAsset.isEmpty()) continue;
 
+            // Never even request an asset URL that doesn't genuinely belong to this repository -
+            // a compromised/malformed API response must never be trusted just because it returned 2xx.
+            if (!GitHubAssetUrlValidator.isSafeInitialAssetUrl(manifestAsset.get().browserDownloadUrl())
+                    || !GitHubAssetUrlValidator.isSafeInitialAssetUrl(installerAsset.get().browserDownloadUrl())) {
+                continue;
+            }
+
             UpdateManifest manifest;
             try {
                 String manifestJson = source.fetchText(manifestAsset.get().browserDownloadUrl());
@@ -63,6 +75,9 @@ public final class UpdateChecker {
             }
 
             UpdateChannel releaseChannel = UpdateChannel.classify(tagVersion.get());
+            if (!manifest.channel().equalsIgnoreCase(releaseChannel.name())) {
+                continue; // the manifest's own declared channel must agree with what the tag itself implies
+            }
             if (!currentChannel.accepts(releaseChannel)) continue;
 
             UpdateRelease candidate = new UpdateRelease(release, manifest, installerAsset.get(), tagVersion.get());

@@ -31,7 +31,10 @@ public final class GitHubReleaseSource implements UpdateReleaseSource {
     private final String userAgent;
 
     public GitHubReleaseSource(String companionVersion) {
-        this.httpClient = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
+        // NORMAL follows redirects but NEVER downgrades HTTPS to HTTP (per the JDK's own Redirect
+        // policy semantics) - required because GitHub release-asset browser_download_url values
+        // redirect to GitHub's CDN, and Java's HttpClient does not follow redirects by default.
+        this.httpClient = HttpClient.newBuilder().connectTimeout(TIMEOUT).followRedirects(HttpClient.Redirect.NORMAL).build();
         this.userAgent = "GZCompanion-Updater/" + companionVersion + " (+https://github.com/Jimmy7610/GZ-Companion)";
     }
 
@@ -87,6 +90,11 @@ public final class GitHubReleaseSource implements UpdateReleaseSource {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while contacting GitHub", e);
         }
+    }
+
+    /** Test-only introspection so a future change can never silently remove the redirect policy. */
+    HttpClient.Redirect redirectPolicyForTesting() {
+        return httpClient.followRedirects();
     }
 
     private static String optString(JsonObject obj, String key) {
