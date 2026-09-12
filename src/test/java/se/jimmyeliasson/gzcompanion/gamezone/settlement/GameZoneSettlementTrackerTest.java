@@ -163,4 +163,40 @@ class GameZoneSettlementTrackerTest {
         assertEquals(60, view.settlementMembers().size());
         assertEquals(60, new java.util.HashSet<>(view.allRows().stream().map(OnlinePlayerRow::displayName).toList()).size());
     }
+
+    // ------------------------------------------------------------------
+    // REAL DATA end-to-end: the exact captured runtime header/prefix format from the real
+    // GameZoneMC server (bullet separator, Unicode [TRÄ] prefix), through the tracker AND
+    // OnlinePlayersGrouping, proving MIN SETTLEMENT · Trälskärsbukten would actually populate.
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("REAL DATA end-to-end: real header + real Unicode prefixes produce the correct identity and MIN SETTLEMENT grouping")
+    void realDataEndToEndProducesCorrectIdentityAndGrouping() {
+        GameZoneSettlementTracker tracker = new GameZoneSettlementTracker();
+
+        List<OnlinePlayerSnapshot> players = List.of(
+                local("jbl76", "[TRÄ] ⚜ jbl76 [2]"),
+                other("Olivre", "[TRÄ] ⚜ Olivre [62]"),
+                other("Jeizo", "[TRÄ] ⚜ Jeizo [22]"),
+                other("SomeoneElse", "[BUS] ⚜ SomeoneElse [11]")
+        );
+
+        GameZoneSettlementIdentity identity = tracker.update(true, "Trälskärsbukten • MEMBER • +44.3%", players);
+
+        assertEquals("Trälskärsbukten", identity.settlementName());
+        assertEquals("MEMBER", identity.role());
+        assertEquals("TRÄ", identity.settlementPrefix());
+
+        Set<String> sameSettlement = tracker.sameSettlementOnlineUsernames(players);
+        assertEquals(Set.of("jbl76", "Olivre", "Jeizo"), sameSettlement);
+        assertFalse(sameSettlement.contains("SomeoneElse"));
+
+        List<String> settlementMembers = List.copyOf(sameSettlement);
+        OnlinePlayersView view = OnlinePlayersGrouping.build(players, true, List.of(), settlementMembers, null);
+
+        List<String> minSettlementNames = view.settlementMembers().stream().map(OnlinePlayerRow::displayName).sorted().toList();
+        assertEquals(List.of("Jeizo", "Olivre", "jbl76"), minSettlementNames);
+        assertTrue(view.others().stream().anyMatch(r -> r.displayName().equals("SomeoneElse")));
+    }
 }

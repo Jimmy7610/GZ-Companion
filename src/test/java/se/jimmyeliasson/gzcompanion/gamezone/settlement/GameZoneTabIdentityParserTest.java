@@ -208,6 +208,104 @@ class GameZoneTabIdentityParserTest {
     }
 
     // ------------------------------------------------------------------
+    // REAL captured runtime data from the real GameZoneMC server (human QA diagnostics panel).
+    // These exact strings proved two bugs: the header separator is U+2022 BULLET, not only
+    // U+00B7 MIDDLE DOT, and settlement prefixes can contain non-ASCII letters (e.g. Swedish Ä).
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("REAL DATA: header with the real U+2022 BULLET separator parses correctly")
+    void realBulletSeparatorHeaderParses() {
+        GameZoneTabIdentityParser.ParsedHeader header = GameZoneTabIdentityParser.parseHeader("Trälskärsbukten • MEMBER • +44.3%");
+        assertNotNull(header);
+        assertEquals("Trälskärsbukten", header.name());
+        assertEquals("MEMBER", header.role());
+    }
+
+    @Test
+    @DisplayName("REAL DATA: the previously-assumed U+00B7 MIDDLE DOT separator still works (backward compatibility)")
+    void middleDotSeparatorHeaderStillWorks() {
+        GameZoneTabIdentityParser.ParsedHeader header = GameZoneTabIdentityParser.parseHeader("Trälskärsbukten · MEMBER · +44.3%");
+        assertNotNull(header);
+        assertEquals("Trälskärsbukten", header.name());
+        assertEquals("MEMBER", header.role());
+    }
+
+    @Test
+    @DisplayName("REAL DATA: KING role parses with the bullet separator")
+    void realBulletSeparatorKingRoleParses() {
+        GameZoneTabIdentityParser.ParsedHeader header = GameZoneTabIdentityParser.parseHeader("Uddevalla • KING • +8.0%");
+        assertNotNull(header);
+        assertEquals("Uddevalla", header.name());
+        assertEquals("KING", header.role());
+    }
+
+    @Test
+    @DisplayName("REAL DATA: LORD role parses with the bullet separator and no bonus segment")
+    void realBulletSeparatorLordRoleParses() {
+        GameZoneTabIdentityParser.ParsedHeader header = GameZoneTabIdentityParser.parseHeader("Fjordheim • LORD");
+        assertNotNull(header);
+        assertEquals("Fjordheim", header.name());
+        assertEquals("LORD", header.role());
+    }
+
+    @Test
+    @DisplayName("REAL DATA: the full captured multi-line TAB header finds the settlement line, ignoring NBSPs elsewhere")
+    void realFullCapturedHeaderFindsSettlementLine() {
+        String header = "\n          GAMEZONE MC\n"
+                + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                + "20/100 • TPS 20,0 • 10 - Småstad\n"
+                + "Coins 65 068 • Stadskassa 11 487 272\n"
+                + "Trälskärsbukten • MEMBER • +44.3%\n"
+                + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+
+        GameZoneTabIdentityParser.ParsedHeader parsed = GameZoneTabIdentityParser.parseHeader(header);
+        assertNotNull(parsed);
+        assertEquals("Trälskärsbukten", parsed.name());
+        assertEquals("MEMBER", parsed.role());
+    }
+
+    @Test
+    @DisplayName("REAL DATA: the real [TRÄ] Unicode prefix is extracted from the real local TAB row")
+    void realUnicodePrefixExtractedFromLocalRow() {
+        assertEquals("TRÄ", GameZoneTabIdentityParser.extractPrefix("[TRÄ] ⚜ jbl76 [2]", "jbl76"));
+    }
+
+    @Test
+    @DisplayName("REAL DATA: the real [TRÄ] Unicode prefix is extracted from another player's real TAB row")
+    void realUnicodePrefixExtractedFromOtherPlayerRow() {
+        assertEquals("TRÄ", GameZoneTabIdentityParser.extractPrefix("[TRÄ] ⚜ Olivre [62]", "Olivre"));
+    }
+
+    @Test
+    @DisplayName("Other Swedish-letter Unicode prefixes also parse - not just TRÄ")
+    void otherSwedishUnicodePrefixesParse() {
+        assertEquals("ÅBY", GameZoneTabIdentityParser.extractPrefix("[ÅBY] jbl76", "jbl76"));
+        assertEquals("ÖRN", GameZoneTabIdentityParser.extractPrefix("[ÖRN] jbl76", "jbl76"));
+        assertEquals("ÄLV", GameZoneTabIdentityParser.extractPrefix("[ÄLV] jbl76", "jbl76"));
+    }
+
+    @Test
+    @DisplayName("ASCII-only prefixes like [BUS] keep working alongside Unicode support")
+    void asciiPrefixesStillWorkAlongsideUnicodeSupport() {
+        assertEquals("BUS", GameZoneTabIdentityParser.extractPrefix("[BUS] jbl76", "jbl76"));
+    }
+
+    @Test
+    @DisplayName("REAL DATA: the trailing [2] level in a real row is never mistaken for the prefix")
+    void realTrailingLevelNeverBecomesPrefix() {
+        String prefix = GameZoneTabIdentityParser.extractPrefix("[TRÄ] ⚜ jbl76 [2]", "jbl76");
+        assertEquals("TRÄ", prefix);
+        assertNotEquals("2", prefix);
+    }
+
+    @Test
+    @DisplayName("REAL DATA shape: two bracketed candidates before the username (one Unicode) is still ambiguous -> UNKNOWN")
+    void realShapeTwoBracketedCandidatesIsAmbiguous() {
+        assertNull(GameZoneTabIdentityParser.extractPrefix("[TRÄ] [ABC] ⚜ jbl76 [2]", "jbl76"));
+    }
+
+    // ------------------------------------------------------------------
     // Combined identity
     // ------------------------------------------------------------------
 
