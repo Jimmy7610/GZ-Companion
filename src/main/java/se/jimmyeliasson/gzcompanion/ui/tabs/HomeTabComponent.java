@@ -42,6 +42,7 @@ public class HomeTabComponent {
     private record AdvisorHit(UiRect rect, Runnable action) {}
 
     private HomeTabLayout layout;
+    private UiRect onlinePlayerCountRect = null;
 
     public HomeTabLayout getLayout() {
         return layout;
@@ -108,7 +109,18 @@ public class HomeTabComponent {
 
         TextUtil.drawScaledText(extractor, font, HomeCopy.SERVER_LABEL_STATUS, serverRect.x() + sPad, row2Y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
         GZTheme.drawStatusDot(extractor, sValX, row2Y + 2, isGameZone ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_STATUS_GREY);
-        TextUtil.drawScaledEllipsizedText(extractor, font, isGameZone ? HomeCopy.SERVER_STATUS_CONNECTED : HomeCopy.SERVER_STATUS_DISCONNECTED, sValX + 6, row2Y, sValW - 6, TypographyScale.BODY.getScale(),
+        // When connected, the status line also shows the current online player count and becomes
+        // clickable, jumping straight to the Online tab - kept to this one existing row (no new
+        // row/card added) so the dashboard never gets more crowded.
+        String statusValue = HomeCopy.SERVER_STATUS_CONNECTED;
+        if (isGameZone) {
+            int onlineCount = session.getBridge().getOnlinePlayers().size();
+            statusValue = HomeCopy.SERVER_STATUS_CONNECTED + " · " + onlineCount + " spelare";
+            onlinePlayerCountRect = new UiRect(sValX + 6, row2Y, sValW - 6, 9);
+        } else {
+            onlinePlayerCountRect = null;
+        }
+        TextUtil.drawScaledEllipsizedText(extractor, font, isGameZone ? statusValue : HomeCopy.SERVER_STATUS_DISCONNECTED, sValX + 6, row2Y, sValW - 6, TypographyScale.BODY.getScale(),
                 isGameZone ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_TEXT_MUTED, false);
 
         TextUtil.drawScaledText(extractor, font, HomeCopy.SERVER_LABEL_SERVER, serverRect.x() + sPad, row3Y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
@@ -188,7 +200,7 @@ public class HomeTabComponent {
         TextUtil.drawScaledEllipsizedText(extractor, font, HomeCopy.MODULES_TITLE, moduleRect.x() + mPad, moduleRect.y() + 4, moduleRect.width() - 10, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
 
         TabType[] trackedTabs = {
-            TabType.HEM, TabType.GUIDE, TabType.CRAFTING, TabType.KISTOR,
+            TabType.HEM, TabType.ONLINE, TabType.GUIDE, TabType.CRAFTING, TabType.KISTOR,
             TabType.SETTLEMENT, TabType.BYGGPLANER, TabType.MARKETWATCH,
             TabType.KOMMANDON, TabType.INSTALLNINGAR
         };
@@ -343,6 +355,11 @@ public class HomeTabComponent {
         GuideEngine engine = session.getGuideEngine();
         GuideContext context = session.getCurrentGuideContext();
         GuideStep nextStep = engine != null ? engine.getActiveOrNextStep(context) : null;
+
+        if (onlinePlayerCountRect != null && onlinePlayerCountRect.contains(mouseX, mouseY)) {
+            mainScreen.setActiveTab(TabType.ONLINE);
+            return true;
+        }
 
         if (layout.primaryButtonRect().contains(mouseX, mouseY)) {
             mainScreen.openGuideStep(nextStep != null ? nextStep.id() : null);

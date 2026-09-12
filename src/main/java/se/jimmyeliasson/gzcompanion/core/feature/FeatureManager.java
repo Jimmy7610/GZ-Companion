@@ -163,6 +163,9 @@ public class FeatureManager {
         if (tab == null) return ModuleStatus.COMING_SOON;
         return switch (tab) {
             case HEM -> ModuleStatus.AVAILABLE;
+            // Always available - Online only ever depends on vanilla Minecraft's own player list
+            // and local settings, never on Rule Pack/knowledge-base data that could still be loading.
+            case ONLINE -> ModuleStatus.AVAILABLE;
             case GUIDE -> (getGuideLoadStatus() == GuideLoadStatus.LOADED) ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case CRAFTING -> (getCraftingKnowledgeStatus().isAvailable() || getItemKnowledgeStatus().isAvailable())
                     ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;

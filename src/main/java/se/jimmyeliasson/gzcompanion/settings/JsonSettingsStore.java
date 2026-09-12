@@ -2,6 +2,7 @@ package se.jimmyeliasson.gzcompanion.settings;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -14,6 +15,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Robust JSON-backed {@link SettingsStore} located at config/gzcompanion/settings.json. Mirrors
@@ -71,7 +74,8 @@ public class JsonSettingsStore implements SettingsStore {
                     getBool(root, "gameZoneToastsEnabled", defaults.gameZoneToastsEnabled()),
                     getBool(root, "showTechnicalIds", defaults.showTechnicalIds()),
                     getBool(root, "showUnverifiedKnowledge", defaults.showUnverifiedKnowledge()),
-                    getBool(root, "useLastKnownChestDataInPlanners", defaults.useLastKnownChestDataInPlanners())
+                    getBool(root, "useLastKnownChestDataInPlanners", defaults.useLastKnownChestDataInPlanners()),
+                    getStringList(root, "favoritePlayers")
             );
             return SettingsLoadResult.loaded(settings);
         } catch (Exception e) {
@@ -83,6 +87,25 @@ public class JsonSettingsStore implements SettingsStore {
 
     private static boolean getBool(JsonObject obj, String key, boolean fallback) {
         return (obj.has(key) && !obj.get(key).isJsonNull() && obj.get(key).isJsonPrimitive()) ? obj.get(key).getAsBoolean() : fallback;
+    }
+
+    /**
+     * Missing key, wrong type, or a malformed/non-string entry all degrade safely to "skip it"
+     * rather than throwing - a single corrupt favorite name must never take down the whole
+     * settings file (the rest of the array, and every other setting, still loads normally).
+     */
+    private static List<String> getStringList(JsonObject obj, String key) {
+        if (!obj.has(key) || !obj.get(key).isJsonArray()) return List.of();
+        List<String> result = new ArrayList<>();
+        for (JsonElement el : obj.get(key).getAsJsonArray()) {
+            if (el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()) {
+                String s = el.getAsString();
+                if (s != null && !s.isBlank()) {
+                    result.add(s);
+                }
+            }
+        }
+        return List.copyOf(result);
     }
 
     @Override
@@ -101,6 +124,12 @@ public class JsonSettingsStore implements SettingsStore {
             root.addProperty("showTechnicalIds", settings.showTechnicalIds());
             root.addProperty("showUnverifiedKnowledge", settings.showUnverifiedKnowledge());
             root.addProperty("useLastKnownChestDataInPlanners", settings.useLastKnownChestDataInPlanners());
+
+            JsonArray favoritesArray = new JsonArray();
+            for (String name : settings.favoritePlayers()) {
+                favoritesArray.add(name);
+            }
+            root.add("favoritePlayers", favoritesArray);
 
             Path tmpFile = filePath.resolveSibling(filePath.getFileName().toString() + ".tmp");
             try (FileWriter writer = new FileWriter(tmpFile.toFile())) {

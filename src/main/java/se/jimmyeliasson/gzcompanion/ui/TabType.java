@@ -1,11 +1,12 @@
 package se.jimmyeliasson.gzcompanion.ui;
 
 /**
- * The 9 navigation sections defined for GZ Companion.
+ * The 10 navigation sections defined for GZ Companion.
  * Uses bundled high-definition pixel icons and authentic Swedish localization.
  */
 public enum TabType {
     HEM("Hem", IconId.HOME, "Startskärm och översikt"),
+    ONLINE("Online", IconId.PLAYER, "Vilka spelare som är online just nu"),
     GUIDE("Guide", IconId.GUIDE, "Interaktiva guider och progression"),
     CRAFTING("Crafting", IconId.CRAFTING, "Recept och hantverkshjälp"),
     KISTOR("Kistor", IconId.CHEST, "Kist- och förvaringsöversikt"),

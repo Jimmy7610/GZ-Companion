@@ -1,11 +1,15 @@
 package se.jimmyeliasson.gzcompanion.minecraft;
 
+import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.multiplayer.ServerData;
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.profile.ServerDetection;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -101,5 +105,31 @@ public class VanillaMinecraftBridge implements MinecraftBridge {
                 client.setScreen(mcScreen);
             }
         }
+    }
+
+    /**
+     * Reads the exact same player list the vanilla in-game player list (tab list) shows -
+     * {@code ClientPacketListener.getListedOnlinePlayers()} only ever contains entries the server
+     * itself marked "listed", so this can never reveal a player the server/vanilla client hides
+     * from the ordinary player list. Never queries anything beyond that: no coordinates, no
+     * inventory, no entity scanning.
+     */
+    @Override
+    public List<OnlinePlayerSnapshot> getOnlinePlayers() {
+        List<OnlinePlayerSnapshot> result = new ArrayList<>();
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client != null && client.getConnection() != null) {
+                for (PlayerInfo info : client.getConnection().getListedOnlinePlayers()) {
+                    GameProfile profile = info.getProfile();
+                    if (profile == null || profile.name() == null || profile.name().isBlank()) continue;
+                    boolean isLocal = client.isLocalPlayer(profile.id());
+                    result.add(new OnlinePlayerSnapshot(profile.name(), isLocal, info.getLatency()));
+                }
+            }
+        } catch (Exception ignored) {
+            // Best-effort - an empty list is always a safe fallback, never a crash.
+        }
+        return result;
     }
 }

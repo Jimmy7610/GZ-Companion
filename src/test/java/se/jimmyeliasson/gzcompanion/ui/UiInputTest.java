@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class UiInputTest {
 
     @Test
-    @DisplayName("UiInput: Hit testing resolves correct TabType for all 9 tabs")
+    @DisplayName("UiInput: Hit testing resolves correct TabType for every tab")
     void testSidebarTabHitTesting() {
         int[][] testViewports = {
             {320, 200},
@@ -23,14 +23,13 @@ class UiInputTest {
         };
 
         TabType[] allTabs = TabType.values();
-        assertEquals(9, allTabs.length);
 
         for (int[] vp : testViewports) {
             MainScreenLayout layout = MainScreenLayout.calculate(vp[0], vp[1]);
             UiRect[] tabRects = layout.tabRects();
-            assertEquals(9, tabRects.length);
+            assertEquals(allTabs.length, tabRects.length);
 
-            for (int i = 0; i < 9; i++) {
+            for (int i = 0; i < allTabs.length; i++) {
                 UiRect tr = tabRects[i];
                 TabType expectedTab = allTabs[i];
 
@@ -71,7 +70,7 @@ class UiInputTest {
     }
 
     @Test
-    @DisplayName("UiInput: All 9 tab rectangles have disjoint, distinct clickable areas")
+    @DisplayName("UiInput: All tab rectangles have disjoint, distinct clickable areas")
     void testTabsDisjointHitAreas() {
         MainScreenLayout layout = MainScreenLayout.calculate(640, 384);
         UiRect[] tabRects = layout.tabRects();

@@ -19,6 +19,7 @@ import se.jimmyeliasson.gzcompanion.ui.tabs.HomeTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.BuildingsTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.KistorTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.MarketWatchTabComponent;
+import se.jimmyeliasson.gzcompanion.ui.tabs.OnlineTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.PlaceholderTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.SettingsTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.SettlementTabComponent;
@@ -30,6 +31,7 @@ import se.jimmyeliasson.gzcompanion.ui.tabs.SettlementTabComponent;
 public class GZCompanionMainScreen extends Screen {
     private TabType activeTab = TabType.HEM;
     private final HomeTabComponent homeTab = new HomeTabComponent();
+    private final OnlineTabComponent onlineTab = new OnlineTabComponent();
     private final se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent guideTab = new se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent();
     private final KistorTabComponent kistorTab = new KistorTabComponent();
     private final CommandsTabComponent commandsTab = new CommandsTabComponent();
@@ -142,6 +144,8 @@ public class GZCompanionMainScreen extends Screen {
         extractor.enableScissor(contentRect.x(), contentRect.y(), contentRect.right(), contentRect.bottom());
         if (activeTab == TabType.HEM) {
             homeTab.render(extractor, font, contentRect, mouseX, mouseY, this);
+        } else if (activeTab == TabType.ONLINE) {
+            onlineTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else if (activeTab == TabType.GUIDE) {
             guideTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else if (activeTab == TabType.KISTOR) {
@@ -207,6 +211,10 @@ public class GZCompanionMainScreen extends Screen {
                 if (homeTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
                 }
+            } else if (activeTab == TabType.ONLINE) {
+                if (onlineTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
+                    return true;
+                }
             } else if (activeTab == TabType.GUIDE) {
                 if (guideTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
@@ -251,7 +259,11 @@ public class GZCompanionMainScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (activeTab == TabType.GUIDE) {
+        if (activeTab == TabType.ONLINE) {
+            if (onlineTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+                return true;
+            }
+        } else if (activeTab == TabType.GUIDE) {
             if (guideTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
@@ -315,6 +327,9 @@ public class GZCompanionMainScreen extends Screen {
      * char routing that used to hardcode {@code TabType.KISTOR} - not a wider tab refactor.
      */
     private TextInputHandler activeTextInputHandler() {
+        if (activeTab == TabType.ONLINE) {
+            return onlineTab;
+        }
         if (activeTab == TabType.KISTOR) {
             return kistorTab;
         }

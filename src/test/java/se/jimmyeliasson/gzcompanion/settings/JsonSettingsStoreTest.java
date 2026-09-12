@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -31,12 +32,53 @@ class JsonSettingsStoreTest {
     @DisplayName("save() then load() round-trips every field exactly")
     void saveThenLoadRoundTrips() {
         JsonSettingsStore store = new JsonSettingsStore(storeFile());
-        CompanionSettings settings = new CompanionSettings(false, true, false, true, false);
+        CompanionSettings settings = new CompanionSettings(false, true, false, true, false, List.of("Kalle92", "AnnaCraft"));
         store.save(settings);
 
         SettingsLoadResult result = store.load();
         assertEquals(SettingsLoadResult.Outcome.LOADED, result.outcome());
         assertEquals(settings, result.settings());
+    }
+
+    @Test
+    @DisplayName("A settings file saved before favoritePlayers existed (migration) still loads, defaulting to an empty favorites list")
+    void migrationFromPreviousSaveWithoutFavoritePlayers() throws Exception {
+        Path file = storeFile();
+        Files.writeString(file, "{\"schemaVersion\": 1, \"showTechnicalIds\": false}");
+
+        JsonSettingsStore store = new JsonSettingsStore(file);
+        SettingsLoadResult result = store.load();
+
+        assertEquals(SettingsLoadResult.Outcome.LOADED, result.outcome());
+        assertEquals(List.of(), result.settings().favoritePlayers());
+        assertFalse(result.settings().showTechnicalIds(), "Pre-existing fields must still load correctly alongside the new one.");
+    }
+
+    @Test
+    @DisplayName("Corrupted favoritePlayers data (wrong type, non-string entries) degrades safely rather than crashing")
+    void corruptedFavoritesDataDegradesSafely() throws Exception {
+        Path file = storeFile();
+        Files.writeString(file, "{\"schemaVersion\": 1, \"favoritePlayers\": [\"Kalle92\", 42, null, \"\", \"   \", {\"nested\":true}, \"AnnaCraft\"]}");
+
+        JsonSettingsStore store = new JsonSettingsStore(file);
+        SettingsLoadResult result = store.load();
+
+        assertEquals(SettingsLoadResult.Outcome.LOADED, result.outcome());
+        assertEquals(List.of("Kalle92", "AnnaCraft"), result.settings().favoritePlayers(),
+                "Malformed entries must be skipped individually - never crash the whole settings load.");
+    }
+
+    @Test
+    @DisplayName("A favoritePlayers value that isn't a JSON array at all degrades to an empty list rather than crashing")
+    void favoritePlayersWrongTopLevelTypeDegradesSafely() throws Exception {
+        Path file = storeFile();
+        Files.writeString(file, "{\"schemaVersion\": 1, \"favoritePlayers\": \"not-an-array\"}");
+
+        JsonSettingsStore store = new JsonSettingsStore(file);
+        SettingsLoadResult result = store.load();
+
+        assertEquals(SettingsLoadResult.Outcome.LOADED, result.outcome());
+        assertEquals(List.of(), result.settings().favoritePlayers());
     }
 
     @Test
