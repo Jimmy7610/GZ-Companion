@@ -4,14 +4,14 @@
   "supported": [
     {
       "status": "VERIFIED",
-      "companionVersion": "0.1.0-alpha.1",
+      "companionVersion": "0.1.0-alpha.2",
       "minecraftVersion": "26.1.2",
       "fabricLoaderVersion": "0.19.5",
       "fabricApiVersion": "0.155.3+26.1.2",
       "companionJar": {
-        "fileName": "gzcompanion-0.1.0-alpha.1.jar",
-        "sha256": "3b2079439cd62ac6b0ccb84a447376d4f8f35e78b8964592870458ac20dbc197",
-        "sizeBytes": 632676,
+        "fileName": "gzcompanion-0.1.0-alpha.2.jar",
+        "sha256": "ce128f2de06de7e5f05f3522bd28b20609285eb66df5c2ce23e22d5248a2891d",
+        "sizeBytes": 681542,
         "source": "embedded",
         "note": "Bundled inside the installer as an embedded resource - built from this repository via .\\gradlew.bat build. Never downloaded."
       },

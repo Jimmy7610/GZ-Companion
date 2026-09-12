@@ -45,6 +45,13 @@ import se.jimmyeliasson.gzcompanion.settings.SettingsManager;
 import se.jimmyeliasson.gzcompanion.settlement.SettlementPlannerManager;
 import se.jimmyeliasson.gzcompanion.settlement.storage.JsonSettlementPlannerStore;
 import se.jimmyeliasson.gzcompanion.storage.StorageManager;
+import se.jimmyeliasson.gzcompanion.update.GitHubReleaseSource;
+import se.jimmyeliasson.gzcompanion.update.HttpUpdateByteSource;
+import se.jimmyeliasson.gzcompanion.update.SemanticVersion;
+import se.jimmyeliasson.gzcompanion.update.UpdateChannel;
+import se.jimmyeliasson.gzcompanion.update.UpdateDownloader;
+import se.jimmyeliasson.gzcompanion.update.UpdateManager;
+import se.jimmyeliasson.gzcompanion.update.UpdateReleaseSource;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -87,6 +94,7 @@ public class CompanionSession {
     private final GameZoneChatObserver chatObserver = new GameZoneChatObserver(() -> parserCatalog, toastManager, this::isConnectedToGameZone);
     private final GameZoneSettlementTracker settlementTracker = new GameZoneSettlementTracker();
     private final GameZoneLiveStatusTracker liveStatusTracker = new GameZoneLiveStatusTracker();
+    private final UpdateManager updateManager = createUpdateManager();
 
     private CompanionSession() {
         this.bridge = new VanillaMinecraftBridge();
@@ -147,6 +155,18 @@ public class CompanionSession {
         loadParserCatalog();
 
         refreshCompatibility();
+
+        updateManager.startBackgroundChecks();
+    }
+
+    private static UpdateManager createUpdateManager() {
+        String versionString = CompanionConstants.getModVersion();
+        SemanticVersion currentVersion = SemanticVersion.parse(versionString)
+                .orElseGet(() -> SemanticVersion.parse("0.0.0").orElseThrow());
+        UpdateChannel currentChannel = UpdateChannel.classify(currentVersion);
+        UpdateReleaseSource releaseSource = new GitHubReleaseSource(versionString);
+        UpdateDownloader downloader = new UpdateDownloader(new HttpUpdateByteSource(versionString));
+        return new UpdateManager(currentVersion, currentChannel, releaseSource, downloader);
     }
 
     private void loadParserCatalog() {
@@ -340,6 +360,11 @@ public class CompanionSession {
 
     public GameZoneLiveStatusTracker getLiveStatusTracker() {
         return liveStatusTracker;
+    }
+
+    /** THE single authoritative updater instance - Home and Inställningar both read this same manager. */
+    public UpdateManager getUpdateManager() {
+        return updateManager;
     }
 
     public GameZoneParserCatalog getParserCatalog() {

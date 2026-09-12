@@ -3,6 +3,7 @@ package se.jimmyeliasson.gzcompanion.ui.tabs;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.keybind.KeybindHandler;
 import se.jimmyeliasson.gzcompanion.settings.CompanionSettings;
@@ -15,6 +16,8 @@ import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
 import se.jimmyeliasson.gzcompanion.ui.layout.SettingsLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
+import se.jimmyeliasson.gzcompanion.update.UpdateManager;
+import se.jimmyeliasson.gzcompanion.update.UpdateState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,6 +74,8 @@ public class SettingsTabComponent {
         y = renderDiagnosticsSection(extractor, font, session, x, y, maxW, mouseX, mouseY);
         y += 4;
         y = renderKeybindSection(extractor, font, x, y, maxW);
+        y += 4;
+        y = renderUpdatesSection(extractor, font, session, x, y, maxW, mouseX, mouseY);
 
         this.contentHeight = (y + scroll) - (content.y() + 3) + 6;
         extractor.disableScissor();
@@ -290,6 +295,60 @@ public class SettingsTabComponent {
         TextUtil.drawScaledEllipsizedText(extractor, font, "Öppna GZ Companion: " + keyLabel + " (ändra i Minecrafts kontrollinställningar)",
                 x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
         return y + ROW_H;
+    }
+
+    // ------------------------------------------------------------------
+    // Updates - reads the SAME UpdateManager instance the Home tab's banner does (see
+    // CompanionSession#getUpdateManager()); never a second, independent updater state.
+    // ------------------------------------------------------------------
+
+    private int renderUpdatesSection(GuiGraphicsExtractor extractor, Font font, CompanionSession session, int x, int y, int maxW, int mouseX, int mouseY) {
+        TextUtil.drawScaledText(extractor, font, "UPPDATERINGAR", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        y += 11;
+
+        TextUtil.drawScaledText(extractor, font, "Installerad version:", x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += 9;
+        TextUtil.drawScaledText(extractor, font, CompanionConstants.getModVersion(), x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
+        y += 11;
+
+        UpdateManager.Snapshot snapshot = session.getUpdateManager().getSnapshot();
+        TextUtil.drawScaledText(extractor, font, "Status:", x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += 9;
+        TextUtil.drawScaledEllipsizedText(extractor, font, updateStatusLabel(snapshot), x, y, maxW, TypographyScale.SMALL.getScale(),
+                updateStatusColor(snapshot), false);
+        y += 11;
+
+        boolean checking = snapshot.state() == UpdateState.CHECKING;
+        UiRect checkBtn = new UiRect(x, y, Math.min(160, maxW), 11);
+        GZTheme.drawButton(extractor, font, checkBtn, checking ? "Söker..." : "Sök efter uppdateringar", false,
+                checkBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+        if (!checking) {
+            hitTargets.add(new RowHit(checkBtn, () -> session.getUpdateManager().checkNow(true)));
+        }
+        return y + 14;
+    }
+
+    private static String updateStatusLabel(UpdateManager.Snapshot snapshot) {
+        return switch (snapshot.state()) {
+            case IDLE -> "Ingen kontroll ännu";
+            case CHECKING -> "Söker efter uppdateringar...";
+            case UP_TO_DATE -> "Senaste versionen";
+            case UPDATE_AVAILABLE -> "Ny version tillgänglig: v" + snapshot.availableUpdate().version().toDisplayString();
+            case DOWNLOADING -> "Hämtar uppdatering...";
+            case VERIFYING -> "Verifierar...";
+            case READY_TO_INSTALL -> "Uppdateringen är redo (se Hem)";
+            case STARTING_INSTALLER -> "Startar uppdatering...";
+            case ERROR -> snapshot.errorMessage() != null ? snapshot.errorMessage() : "Ett fel uppstod.";
+        };
+    }
+
+    private static int updateStatusColor(UpdateManager.Snapshot snapshot) {
+        return switch (snapshot.state()) {
+            case UP_TO_DATE -> GZTheme.COLOR_STATUS_GREEN;
+            case UPDATE_AVAILABLE, READY_TO_INSTALL -> GZTheme.COLOR_STATUS_YELLOW;
+            case ERROR -> GZTheme.COLOR_STATUS_RED;
+            default -> GZTheme.COLOR_TEXT_MUTED;
+        };
     }
 
     private void copyToClipboard(String text) {

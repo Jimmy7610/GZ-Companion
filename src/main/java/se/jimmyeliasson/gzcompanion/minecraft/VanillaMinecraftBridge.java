@@ -172,4 +172,16 @@ public class VanillaMinecraftBridge implements MinecraftBridge {
         }
         return Optional.empty();
     }
+
+    @Override
+    public void requestGracefulShutdown() {
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client != null) {
+                client.stop();
+            }
+        } catch (Exception ignored) {
+            // Best-effort - if this somehow fails, the player still has a normal, unmodified client.
+        }
+    }
 }

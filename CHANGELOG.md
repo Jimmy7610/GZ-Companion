@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.0-alpha.2] - 2026-09-12
+
+The final bootstrap release testers must install manually - every release after this one is
+deliverable through the new in-app updater (see `docs/UPDATES.md`).
+
+### Added
+- **Online tab**: live player list, Favoriter, and automatic GameZone settlement detection
+  (MIN SETTLEMENT), parsed entirely from the vanilla TAB header/player-list data GameZone already
+  sends the client - no commands, no menu automation, no external APIs. Human-QA-verified against
+  the real GameZoneMC server, including real header separators (`•`/`·`) and Unicode settlement
+  prefixes (e.g. `[TRÄ]`). See `docs/ONLINE-PLAYERS.md`.
+- **Home tab**: a LIVE GAMEZONE dashboard card showing server population, TPS, city, and economy,
+  reusing the same TAB header data source. See `docs/LIVE-GAMEZONE-STATUS.md`.
+- **Secure in-app updater**: GZ Companion now checks GitHub Releases in the background and can
+  download, verify, and apply future updates with one click - no manual download, no visiting
+  GitHub, no replacing jars by hand. See `docs/UPDATES.md`.
+- `se.jimmyeliasson.gzcompanion.gamezone.settlement` / `gamezone.status` / `update` packages;
+  `mixin.PlayerTabOverlayAccessor` (the project's first Mixin, exposing vanilla's private TAB
+  header field via a minimal `@Accessor`, no reflection).
+
+### Changed
+- Canonical product version is now `0.1.0-alpha.2`, sourced from `gradle.properties`' `mod_version`
+  everywhere (mod, Fabric metadata, UI, installer, `compatibility.json`) - see `distribution/RELEASING.md`.
+  The installer no longer carries its own independently-editable version literal.
+
 ## [Unreleased] - Settings (Inställningar) - 2026-09-10
 
 ### Added

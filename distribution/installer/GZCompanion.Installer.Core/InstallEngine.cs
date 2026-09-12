@@ -33,7 +33,6 @@ public sealed class InstallEngine
 {
     private const string ProfileId = "gzcompanion-gameZone";
     private const string ProfileName = "GZ Companion - GameZone";
-    private const string UserAgent = "GZCompanionInstaller/0.1.0-alpha.1 (+https://github.com/Jimmy7610/GZ-Companion)";
 
     /// <summary>Thrown (and turned into a clean, non-stack-trace InstallOutcome) when the launcher app itself is open.</summary>
     public sealed class LauncherRunningException : Exception
@@ -279,6 +278,106 @@ public sealed class InstallEngine
         {
             return new InstallOutcome(Success: false, DryRun: dryRun, Steps: steps, ErrorMessage: ex.Message);
         }
+    }
+
+    /// <summary>
+    /// The SAFE UPDATE FAST PATH for <c>--apply-update</c> (see <see cref="FastPathDecision.CanUseFastPath"/>):
+    /// updates ONLY the files GZ Companion exclusively owns (its own mod jar, and Fabric API if its
+    /// hash changed) and rewrites <c>installed.json</c> - and NOTHING else. Deliberately does NOT:
+    /// check whether the Minecraft Launcher app is open (safe, since launcher_profiles.json is never
+    /// touched), create the shared Fabric versions/libraries directories, contact the Fabric Meta
+    /// API, seed servers.dat, or write to any launcher profile file. The caller is responsible for
+    /// having already confirmed the Minecraft GAME process has exited before calling this.
+    ///
+    /// <para>Ordering is deliberately more conservative than the full installer's own step 5: the
+    /// OLD companion jar(s) are only deleted AFTER the new one is staged, byte-written, and hash-
+    /// verified in place - so a verification failure here leaves the previous, working installation
+    /// completely untouched rather than mid-swap.</para>
+    /// </summary>
+    public async Task<InstallOutcome> RunFastUpdateAsync(SupportedEntry target, bool dryRun, IProgress<string>? log, CancellationToken ct)
+    {
+        var steps = new List<InstallStepResult>();
+        void Record(string step, string detail) => steps.Add(new InstallStepResult(step, true, detail));
+        void Emit(string message) => log?.Report(message);
+        var paths = _deps.Paths;
+
+        try
+        {
+            Emit("Uppdaterar GZ Companion (snabb uppdatering - Minecraft Launcher påverkas inte)...");
+            if (!dryRun)
+            {
+                Directory.CreateDirectory(paths.GzCompanionModsDir);
+            }
+
+            // Fabric API - same ownership rule as the full installer: only re-download if the hash differs.
+            Emit("Kontrollerar Fabric API...");
+            string fabricApiPath = Path.Combine(paths.GzCompanionModsDir, target.FabricApi.FileName);
+            if (!dryRun)
+            {
+                bool alreadyGood = File.Exists(fabricApiPath) && HashMatches(fabricApiPath, target.FabricApi.Sha256);
+                if (!alreadyGood)
+                {
+                    string stagingPath = fabricApiPath + ".staging";
+                    await _deps.Downloader.DownloadToFileAsync(new Uri(target.FabricApi.DownloadUrl), stagingPath, progress: null, ct).ConfigureAwait(false);
+                    Sha256.VerifyOrThrow(stagingPath, target.FabricApi.Sha256, "Fabric API");
+                    File.Move(stagingPath, fabricApiPath, overwrite: true);
+                }
+            }
+            Record("fabric-api", target.FabricApi.FileName);
+
+            // GZ Companion's own jar - staged and hash-verified BEFORE any old jar is touched.
+            Emit("Installerar ny GZ Companion-version...");
+            string companionJarPath = Path.Combine(paths.GzCompanionModsDir, target.CompanionJar.FileName);
+            if (!dryRun)
+            {
+                byte[] jarBytes = _deps.LoadEmbeddedCompanionJar();
+                string tempJarPath = companionJarPath + ".staging";
+                await File.WriteAllBytesAsync(tempJarPath, jarBytes, ct).ConfigureAwait(false);
+                Sha256.VerifyOrThrow(tempJarPath, target.CompanionJar.Sha256, "GZ Companion.jar (embedded)");
+                File.Move(tempJarPath, companionJarPath, overwrite: true);
+
+                // Only now that the NEW jar is confirmed in place do we remove any other stale
+                // gzcompanion-*.jar - never before, so a verification failure above never leaves
+                // zero working companion jars in mods.
+                if (Directory.Exists(paths.GzCompanionModsDir))
+                {
+                    foreach (var stale in Directory.EnumerateFiles(paths.GzCompanionModsDir, "gzcompanion-*.jar"))
+                    {
+                        if (!string.Equals(Path.GetFileName(stale), target.CompanionJar.FileName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            File.Delete(stale);
+                        }
+                    }
+                }
+            }
+            Record("companion-jar", target.CompanionJar.FileName);
+
+            // Installed-state is written LAST, exactly like the full installer.
+            if (!dryRun)
+            {
+                InstalledStateStore.Write(paths.InstalledManifestPath, new InstalledState(
+                    target.CompanionVersion, target.MinecraftVersion, target.FabricLoaderVersion, target.FabricApiVersion,
+                    _deps.Clock().ToString("O")));
+            }
+            Record("installed-state", target.CompanionVersion);
+            Record("launcher-profile-skipped", "fast path - Minecraft/Fabric Loader version unchanged, launcher_profiles.json was never opened");
+
+            return new InstallOutcome(Success: true, DryRun: dryRun, Steps: steps, ErrorMessage: null);
+        }
+        catch (Exception ex)
+        {
+            // Both staging paths are deterministic from `target` alone, so cleanup here is safe
+            // and correct regardless of which step actually threw - a failure must never leave a
+            // half-written .staging file behind, only the untouched previous installation.
+            TryDeleteStagingFile(Path.Combine(paths.GzCompanionModsDir, target.FabricApi.FileName) + ".staging");
+            TryDeleteStagingFile(Path.Combine(paths.GzCompanionModsDir, target.CompanionJar.FileName) + ".staging");
+            return new InstallOutcome(Success: false, DryRun: dryRun, Steps: steps, ErrorMessage: ex.Message);
+        }
+    }
+
+    private static void TryDeleteStagingFile(string path)
+    {
+        try { File.Delete(path); } catch { /* best-effort cleanup only */ }
     }
 
     /// <summary>

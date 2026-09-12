@@ -119,7 +119,8 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 ```
 
 The compiled mod JAR will be located at:
-`build/libs/gzcompanion-0.1.0-alpha.1.jar`
+`build/libs/gzcompanion-0.1.0-alpha.2.jar` (the exact file name always matches `gradle.properties`'
+`mod_version` - the single canonical product version, see `distribution/RELEASING.md`)
 
 ---
 

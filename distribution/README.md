@@ -31,8 +31,10 @@ installing it.
 
 The installer refuses to install anything not listed here with `"status": "VERIFIED"`. For this
 release that's exactly one entry: Minecraft 26.1.2 / Fabric Loader 0.19.5 / Fabric API
-0.155.3+26.1.2 / GZ Companion 0.1.0-alpha.1. Future releases add new entries here rather than the
-installer guessing at compatibility.
+0.155.3+26.1.2 / GZ Companion 0.1.0-alpha.2. Future releases add new entries here rather than the
+installer guessing at compatibility - see `RELEASING.md` for the exact version-bump workflow, and
+`docs/UPDATES.md` for how `0.1.0-alpha.3` and later are delivered through the in-app updater
+instead of a manual reinstall.
 
 ## Building the installer
 

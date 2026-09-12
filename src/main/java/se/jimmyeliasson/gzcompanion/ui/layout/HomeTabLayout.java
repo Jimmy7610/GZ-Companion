@@ -41,7 +41,7 @@ public record HomeTabLayout(
         int vCardH = Math.max(8, midH - (vPad * 2));
         int availVW = Math.max(20, width - (vPad * 5));
         int w1 = (int) (availVW * 0.20f); // Minecraft (26.1.2)
-        int w2 = (int) (availVW * 0.29f); // Companion (0.1.0-alpha.1)
+        int w2 = (int) (availVW * 0.29f); // Companion (version string width - see CompanionConstants.getModVersion())
         int w3 = (int) (availVW * 0.28f); // Rule Pack (Ej laddad / version)
         int w4 = Math.max(5, availVW - w1 - w2 - w3); // Status (Overifierad / OK)
 

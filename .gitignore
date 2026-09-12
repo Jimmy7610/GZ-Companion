@@ -36,3 +36,4 @@ logs/
 obj/
 distribution/installer/GZCompanion.Installer.App/Assets/gzcompanion.jar
 distribution/dist/
+distribution/release/
