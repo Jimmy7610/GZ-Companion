@@ -35,6 +35,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeBase;
 import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeLoader;
 import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementCatalog;
 import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementKnowledgeLoader;
+import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardManager;
 import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNotesManager;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.JsonMarketWatchNotesStore;
 import se.jimmyeliasson.gzcompanion.minecraft.MinecraftBridge;
@@ -95,6 +96,8 @@ public class CompanionSession {
     private final GameZoneSettlementTracker settlementTracker = new GameZoneSettlementTracker();
     private final GameZoneLiveStatusTracker liveStatusTracker = new GameZoneLiveStatusTracker();
     private final UpdateManager updateManager = createUpdateManager();
+    private final LeaderboardManager leaderboardManager =
+            new LeaderboardManager(new se.jimmyeliasson.gzcompanion.leaderboard.GameZoneLeaderboardSource(CompanionConstants.getModVersion()));
 
     private CompanionSession() {
         this.bridge = new VanillaMinecraftBridge();
@@ -365,6 +368,11 @@ public class CompanionSession {
     /** THE single authoritative updater instance - Home and Inställningar both read this same manager. */
     public UpdateManager getUpdateManager() {
         return updateManager;
+    }
+
+    /** THE single authoritative Leaderboards cache/fetch manager - see {@link LeaderboardManager}. */
+    public LeaderboardManager getLeaderboardManager() {
+        return leaderboardManager;
     }
 
     public GameZoneParserCatalog getParserCatalog() {

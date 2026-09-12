@@ -8,5 +8,5 @@
 /// </summary>
 public static class GeneratedProductVersion
 {
-    public const string Value = "0.1.0-alpha.3";
+    public const string Value = "0.1.0-alpha.4";
 }

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.0-alpha.4] - 2026-09-13
+
+The first real feature release distributed through GZ Companion's own in-app updater, now that the
+alpha.2 → alpha.3 self-update path has been proven end to end on a real machine.
+
+### Added
+- **Leaderboards tab**: read-only view of GameZone's own public leaderboards (Spelare, Settlements,
+  Företag, Servern - 27 boards total), shown as a Companion-native TOP 10 with a podium-style
+  ranking, group/board selectors, and local-only "DU" highlighting on player boards. Fetches only
+  while open, caches per board, and degrades gracefully (stale-but-usable data, never mislabeled
+  LIVE) if GameZone's site is unreachable or changes shape. See `docs/LEADERBOARDS.md`.
+- `leaderboard` package: `GameZoneLeaderboardRegistry` (the one place all 27 board definitions live),
+  `LeaderboardHtmlParser` (a narrow, hash-resilient HTML adapter - no new external parsing
+  dependency), `GameZoneLeaderboardSource`, `LeaderboardManager` (per-board cache/fetch state
+  machine), `LeaderboardFormatter`.
+
+### Changed
+- Canonical product version is now `0.1.0-alpha.4`. Minecraft (26.1.2), Fabric Loader (0.19.5), and
+  Fabric API (0.155.3+26.1.2) are unchanged, so the in-app updater takes the safe fast path from
+  alpha.3.
+
 ## [0.1.0-alpha.3] - 2026-09-13
 
 A minimal validation release with no gameplay changes - its sole purpose is proving the complete

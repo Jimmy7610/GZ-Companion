@@ -173,6 +173,12 @@ public class FeatureManager {
             case SETTLEMENT -> getSettlementKnowledgeStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case BYGGPLANER -> getBuildingKnowledgeStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case MARKETWATCH -> getMarketWatchKnowledgeStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
+            // Always available - like ONLINE, Leaderboards is self-contained client code (its own
+            // registry + UI) that works regardless of whether GameZone's public website happens to
+            // be reachable right now. Live network/data health is a SEPARATE, per-board concept
+            // (see LeaderboardStatus) - GameZone being temporarily unreachable must never mark the
+            // whole module "Kommer snart".
+            case LEADERBOARDS -> ModuleStatus.AVAILABLE;
             case KOMMANDON -> getCommandCatalogStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case INSTALLNINGAR -> getSettingsStatus() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
         };

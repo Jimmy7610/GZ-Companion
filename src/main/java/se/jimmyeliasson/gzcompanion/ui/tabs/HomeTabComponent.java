@@ -249,7 +249,7 @@ public class HomeTabComponent {
 
         TabType[] trackedTabs = {
             TabType.HEM, TabType.ONLINE, TabType.GUIDE, TabType.CRAFTING, TabType.KISTOR,
-            TabType.SETTLEMENT, TabType.BYGGPLANER, TabType.MARKETWATCH,
+            TabType.SETTLEMENT, TabType.BYGGPLANER, TabType.MARKETWATCH, TabType.LEADERBOARDS,
             TabType.KOMMANDON, TabType.INSTALLNINGAR
         };
 

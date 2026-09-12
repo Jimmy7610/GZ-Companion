@@ -2,6 +2,7 @@ package se.jimmyeliasson.gzcompanion.settings;
 
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
+import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardManager;
 
 /**
  * Builds the exact safe, redacted diagnostics text shown by the Settings tab and copied via
@@ -29,6 +30,17 @@ public final class DiagnosticsTextBuilder {
         sb.append("MarketWatch-status: ").append(session.getMarketWatchInfoStatus()).append('\n');
         sb.append("Händelsemotor-status: ").append(session.getParserCatalogStatus())
                 .append(" (").append(session.getParserCatalog().activeCount()).append(" verifierade parsrar)\n");
+
+        // Leaderboards - status/count/adapter-version only, never full fetched player/settlement/
+        // company data (see docs/LEADERBOARDS.md's privacy section).
+        LeaderboardManager.DiagnosticsSummary lb = session.getLeaderboardManager().getDiagnosticsSummary();
+        sb.append("Leaderboards-status: Aktiv (adapter ").append(lb.adapterVersion())
+                .append(", ").append(lb.cachedBoardCount()).append(" cachade topplistor)\n");
+        sb.append("Leaderboards senaste lyckade uppdatering: ")
+                .append(lb.lastSuccessfulRefreshAt() != null ? lb.lastSuccessfulRefreshAt() : "ingen ännu").append('\n');
+        if (lb.lastErrorCategory() != null) {
+            sb.append("Leaderboards senaste felkategori: ").append(lb.lastErrorCategory()).append('\n');
+        }
         return sb.toString();
     }
 }
