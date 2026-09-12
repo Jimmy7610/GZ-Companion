@@ -60,6 +60,18 @@ public sealed record UpdateApplyRequest(
 ///   <item>Full path additionally requires the Launcher app closed - if it's open, this returns
 ///     <see cref="UpdateApplyPhase.LauncherMustClose"/> without ever force-closing it.</item>
 /// </list>
+///
+/// <para><b>Cancellation boundary:</b> the caller's <c>ct</c> (the "Avbryt" button) can only ever
+/// abort the wait above - the moment <see cref="MinecraftExitGuard"/> positively reports safe, this
+/// stops passing <c>ct</c> to anything further and uses <see cref="CancellationToken.None"/> for the
+/// actual <see cref="InstallEngine"/> call instead. This is deliberate, not an oversight: a
+/// <see cref="Progress{T}"/> phase notification can be delayed arbitrarily behind this method's own
+/// execution (it posts to a UI <see cref="SynchronizationContext"/> asynchronously), so a caller's
+/// UI could still believe it's in <see cref="UpdateApplyPhase.WaitingForMinecraft"/> - and let the
+/// user click "Avbryt" - for a brief window after the guard has already succeeded. If that late
+/// cancellation reached <see cref="InstallEngine"/>, it could interrupt a transaction mid-mutation
+/// with no phase information to have prevented it. Making the transaction itself non-cancellable
+/// closes that race entirely, independent of anything the UI does or doesn't observe in time.</para>
 /// </summary>
 public sealed class UpdateApplyCoordinator
 {
@@ -117,11 +129,13 @@ public sealed class UpdateApplyCoordinator
         var engine = new InstallEngine(deps);
         var textProgress = new Progress<string>(line => progress?.Report(new UpdateApplyProgress(UpdateApplyPhase.Installing, line)));
 
+        // From here on, the transaction is non-user-cancellable - see the cancellation-boundary
+        // note on this class's own doc comment. CancellationToken.None, not ct.
         InstallOutcome outcome;
         if (fastPath)
         {
             progress?.Report(new UpdateApplyProgress(UpdateApplyPhase.Installing, "Snabb uppdatering: Minecraft Launcher behöver inte stängas."));
-            outcome = await engine.RunFastUpdateAsync(target, previouslyInstalled!, dryRun: false, textProgress, ct).ConfigureAwait(false);
+            outcome = await engine.RunFastUpdateAsync(target, previouslyInstalled!, dryRun: false, textProgress, CancellationToken.None).ConfigureAwait(false);
         }
         else if (req.IsLauncherRunning())
         {
@@ -132,7 +146,7 @@ public sealed class UpdateApplyCoordinator
         else
         {
             progress?.Report(new UpdateApplyProgress(UpdateApplyPhase.Installing, "Den här uppdateringen kräver den fullständiga installationsprocessen."));
-            outcome = await engine.RunAsync(target, dryRun: false, textProgress, ct).ConfigureAwait(false);
+            outcome = await engine.RunAsync(target, dryRun: false, textProgress, CancellationToken.None).ConfigureAwait(false);
         }
 
         if (outcome.Success)

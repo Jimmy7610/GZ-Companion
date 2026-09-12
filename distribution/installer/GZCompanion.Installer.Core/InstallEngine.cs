@@ -470,24 +470,29 @@ public sealed class InstallEngine
                 }
             }
 
-            // The ONE old Fabric API file (if any) that needs backing up before the new one is
-            // placed - either the explicitly-owned old-named file (a genuine filename change), or
-            // whatever already occupies the NEW target path when ownership is unknown or the
-            // filename is unchanged (a same-path overwrite, exactly like before this change).
-            if (fabricApiNeedsDownload)
+            // The old Fabric API file (if any) that must be retired before/alongside placing the
+            // new one. Two INDEPENDENT cases, deliberately not both gated on fabricApiNeedsDownload:
+            //   - Explicit ownership of a DIFFERENTLY-named old file: retire it whenever it exists,
+            //     regardless of whether the new target file needs downloading at all. The new
+            //     target file can already exist with the correct hash (e.g. left over from a
+            //     previous partial run, or incidentally shared with another mod) while the
+            //     differently-named OLD file is still sitting there too - gating retirement on
+            //     "needs download" used to silently leave BOTH files active whenever the target
+            //     file happened to already be correct. This is exactly that bug, fixed.
+            //   - Same filename (or ownership unknown): only back up whatever already occupies the
+            //     NEW target path when actually about to overwrite it - if it already has the
+            //     correct hash, fabricApiNeedsDownload is false and there is nothing to retire.
+            if (fabricApiOwnershipKnownAndDifferentName && fileOps.Exists(oldFabricApiPathIfKnown!))
             {
-                if (fabricApiOwnershipKnownAndDifferentName && fileOps.Exists(oldFabricApiPathIfKnown!))
-                {
-                    fabricApiRetireePath = oldFabricApiPathIfKnown;
-                }
-                else if (!fabricApiOwnershipKnownAndDifferentName && fileOps.Exists(newFabricApiPath))
-                {
-                    fabricApiRetireePath = newFabricApiPath;
-                }
-                if (fabricApiRetireePath is not null)
-                {
-                    fabricApiRetireeBackupPath = fabricApiRetireePath + ".update-backup";
-                }
+                fabricApiRetireePath = oldFabricApiPathIfKnown;
+            }
+            else if (!fabricApiOwnershipKnownAndDifferentName && fabricApiNeedsDownload && fileOps.Exists(newFabricApiPath))
+            {
+                fabricApiRetireePath = newFabricApiPath;
+            }
+            if (fabricApiRetireePath is not null)
+            {
+                fabricApiRetireeBackupPath = fabricApiRetireePath + ".update-backup";
             }
 
             // --- COMMIT: back up every old owned file, then swap in the new, verified ones. ---

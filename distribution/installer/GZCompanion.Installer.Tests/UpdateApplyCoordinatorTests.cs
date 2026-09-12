@@ -148,4 +148,38 @@ public class UpdateApplyCoordinatorTests : IDisposable
             new[] { UpdateApplyPhase.WaitingForMinecraft, UpdateApplyPhase.Cancelled },
             progress.Reported.Select(p => p.Phase));
     }
+
+    // --- Cancellation boundary (2026-09-12 follow-up): once the guard has positively reported safe,
+    // the user's token must have NO effect on InstallEngine - a late "Avbryt" click (racing against a
+    // delayed Progress<T> notification) cannot interrupt staging/mutation. ---
+
+    [Fact]
+    public async Task CancelledImmediatelyAfterGuardSucceeds_DoesNotCancelInstallEngine()
+    {
+        var downloader = new FakeDownloader();
+        using var cts = new CancellationTokenSource();
+        // isAnyMinecraftGameRunning is called twice by the guard when the target has already
+        // exited: once for the grace-period loop CONDITION, once for the final positive re-check.
+        // Cancelling on the second call simulates the worst-case timing - the token is cancelled
+        // in the exact instant the guard is about to report "safe" - without the guard itself
+        // observing the cancellation (there is no ThrowIfCancellationRequested after that call).
+        int otherMcCalls = 0;
+        var request = BuildRequest(
+            isPidRunning: _ => false,
+            isAnyMinecraftGameRunning: () =>
+            {
+                otherMcCalls++;
+                if (otherMcCalls == 2) cts.Cancel();
+                return false;
+            },
+            downloader: downloader);
+        Directory.CreateDirectory(request.Paths.DotMinecraftDir);
+        File.WriteAllText(request.Paths.Win32LauncherProfilesPath, """{"profiles":{}}""");
+
+        var outcome = await new UpdateApplyCoordinator().RunAsync(request, progress: null, cts.Token);
+
+        Assert.NotEqual(UpdateApplyPhase.Cancelled, outcome.Phase);
+        Assert.NotNull(outcome.InstallResult); // InstallEngine ran to completion, unaffected by the "late" cancel
+        Assert.True(cts.IsCancellationRequested); // sanity: the cancel really was requested
+    }
 }

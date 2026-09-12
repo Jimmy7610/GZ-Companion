@@ -208,4 +208,92 @@ public class FabricApiOwnershipTests : IDisposable
         AssertExactlyOneFabricApiJar(paths, OldApiPath(paths));
         Assert.False(File.Exists(OldApiPath(paths) + ".update-backup"));
     }
+
+    // ------------------------------------------------------------------------------------------
+    // Second follow-up pass (2026-09-12): "changed filename + target B already exists with the
+    // correct hash" - retirement of the old, explicitly-owned A.jar must be independent of whether
+    // B needed downloading at all. The original fix gated retirement on fabricApiNeedsDownload,
+    // which stayed false whenever B already had the correct hash - silently leaving BOTH A and B
+    // active. These tests cover the corrected, independent condition.
+    // ------------------------------------------------------------------------------------------
+
+    // 1. Different filename + target B absent (the original scenario) must still work exactly as
+    //    before - see DifferentFilename_KnownOwnership_OldRetiredNewPlaced_ExactlyOneApiJar above
+    //    for the full assertion; this just re-confirms no download was skipped incorrectly.
+    [Fact]
+    public async Task DifferentFilename_TargetAbsent_StillDownloadsAndRetiresOld()
+    {
+        var (paths, target, previouslyInstalled, downloader, _, engine) = Build(fabricApiOwnershipKnown: true);
+
+        var outcome = await engine.RunFastUpdateAsync(target, previouslyInstalled, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.Contains(NewFabricApiUrl, downloader.RequestedUrls);
+        Assert.False(File.Exists(OldApiPath(paths)));
+    }
+
+    // 2. Different filename + target B ALREADY EXISTS with the correct hash -> no download, old A
+    //    retired anyway, exactly one active owned API jar (B), state points to B.
+    [Fact]
+    public async Task DifferentFilename_TargetAlreadyGood_NoDownload_OldRetiredAnyway()
+    {
+        var (paths, target, previouslyInstalled, downloader, _, engine) = Build(fabricApiOwnershipKnown: true);
+        // B already present with the exact bytes the target expects - simulates a leftover from a
+        // previous partial run, or a file incidentally shared with another mod.
+        File.WriteAllBytes(NewApiPath(paths, NewFabricApiFileName), NewFabricApiBytes);
+
+        var outcome = await engine.RunFastUpdateAsync(target, previouslyInstalled, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.DoesNotContain(NewFabricApiUrl, downloader.RequestedUrls); // B was already correct - never re-downloaded
+        Assert.False(File.Exists(OldApiPath(paths)), "the old-named A.jar must be retired even though B needed no download");
+        Assert.True(File.Exists(NewApiPath(paths, NewFabricApiFileName)));
+        Assert.Equal(NewFabricApiBytes, File.ReadAllBytes(NewApiPath(paths, NewFabricApiFileName)));
+        AssertExactlyOneFabricApiJar(paths, NewApiPath(paths, NewFabricApiFileName));
+        Assert.False(File.Exists(OldApiPath(paths) + ".update-backup"), "the backup must be discarded after a confirmed success");
+        var state = InstalledStateStore.TryRead(paths.InstalledManifestPath);
+        Assert.Equal(NewFabricApiFileName, state!.FabricApiFileName);
+    }
+
+    // 3. Same scenario + installed-state write failure -> old A restored, the PRE-EXISTING B is
+    //    left exactly as it was (this transaction never touched it, since it needed no download or
+    //    move at all), previous state restored.
+    [Fact]
+    public async Task DifferentFilename_TargetAlreadyGood_InstalledStateWriteFailure_OldRestored_PreexistingBUntouched()
+    {
+        var (paths, target, previouslyInstalled, _, fileOps, engine) = Build(fabricApiOwnershipKnown: true);
+        string newApiPath = NewApiPath(paths, NewFabricApiFileName);
+        File.WriteAllBytes(newApiPath, NewFabricApiBytes);
+        InstalledStateStore.Write(paths.InstalledManifestPath, previouslyInstalled);
+        string originalJson = File.ReadAllText(paths.InstalledManifestPath);
+        fileOps.ThrowOnWriteAllText = path => path == paths.InstalledManifestPath;
+        DateTime bBefore = File.GetLastWriteTimeUtc(newApiPath);
+
+        var outcome = await engine.RunFastUpdateAsync(target, previouslyInstalled, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.False(outcome.Success);
+        Assert.Equal(originalJson, File.ReadAllText(paths.InstalledManifestPath));
+        Assert.True(File.Exists(OldApiPath(paths)), "the old-named A.jar must be restored");
+        Assert.Equal(OldFabricApiBytes, File.ReadAllBytes(OldApiPath(paths)));
+        Assert.True(File.Exists(newApiPath), "the pre-existing B.jar must not be deleted by a rollback this transaction didn't create it in");
+        Assert.Equal(NewFabricApiBytes, File.ReadAllBytes(newApiPath));
+        Assert.Equal(bBefore, File.GetLastWriteTimeUtc(newApiPath));
+    }
+
+    // 4. Unknown old ownership + B already good -> do not guess/delete unknown A, exactly like the
+    //    "needs download" case, now also proven for the "already good" case.
+    [Fact]
+    public async Task DifferentFilename_UnknownOwnership_TargetAlreadyGood_OldFileLeftAlone()
+    {
+        var (paths, target, previouslyInstalled, downloader, _, engine) = Build(fabricApiOwnershipKnown: false);
+        File.WriteAllBytes(NewApiPath(paths, NewFabricApiFileName), NewFabricApiBytes);
+
+        var outcome = await engine.RunFastUpdateAsync(target, previouslyInstalled, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.DoesNotContain(NewFabricApiUrl, downloader.RequestedUrls);
+        Assert.True(File.Exists(OldApiPath(paths)), "an old Fabric API jar with unknown ownership must never be guessed at or deleted");
+        Assert.Equal(OldFabricApiBytes, File.ReadAllBytes(OldApiPath(paths)));
+        Assert.True(File.Exists(NewApiPath(paths, NewFabricApiFileName)));
+    }
 }

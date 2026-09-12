@@ -106,13 +106,30 @@ internal sealed class UpdateApplyForm : Form
 
     private void OnFormClosing(object? sender, FormClosingEventArgs e)
     {
-        if (UpdateApplyClosePolicy.CanClose(_currentPhase))
+        // Gated on _running, NOT _currentPhase - see UpdateApplyClosePolicy's doc comment for why a
+        // phase-based check would reopen the exact race this method exists to close (a delayed
+        // Progress<T> notification could leave _currentPhase stale at WaitingForMinecraft while the
+        // coordinator has already moved on to actually mutating files on its background thread).
+        switch (UpdateApplyClosePolicy.DecideOnCloseRequest(_running, _currentPhase))
         {
-            return;
+            case UpdateApplyClosePolicy.CloseAction.AllowClose:
+                return;
+
+            case UpdateApplyClosePolicy.CloseAction.RequestCancelAndBlock:
+                // Best-effort only: if the guard has already succeeded, this cancellation request
+                // has no effect on InstallEngine (see UpdateApplyCoordinator's cancellation-boundary
+                // doc comment) - it is never relied upon for safety, only offered when it's likely
+                // to still be useful.
+                _cts?.Cancel();
+                e.Cancel = true;
+                break;
+
+            case UpdateApplyClosePolicy.CloseAction.BlockOnly:
+                e.Cancel = true;
+                _statusLabel.Text = UpdateApplyClosePolicy.BlockedCloseMessage;
+                _statusLabel.ForeColor = Theme.StatusRed;
+                break;
         }
-        e.Cancel = true;
-        _statusLabel.Text = UpdateApplyClosePolicy.BlockedCloseMessage;
-        _statusLabel.ForeColor = Theme.StatusRed;
     }
 
     private async Task RunAsync()
@@ -152,8 +169,12 @@ internal sealed class UpdateApplyForm : Form
     private void SetPhase(UpdateApplyPhase phase)
     {
         _currentPhase = phase;
-        _cancelButton.Visible = UpdateApplyClosePolicy.CanCancel(phase);
-        _closeButton.Enabled = UpdateApplyClosePolicy.CanClose(phase);
+        // Purely cosmetic (shows/hides the Avbryt button) - actual close safety is enforced by
+        // OnFormClosing based on _running alone, so a stale _currentPhase here can never allow an
+        // unsafe close; at worst a Cancel() request lands too late and is harmlessly ignored (see
+        // UpdateApplyCoordinator's cancellation-boundary doc comment). The Stäng button itself is
+        // always left enabled - it also routes through OnFormClosing, which is the sole authority.
+        _cancelButton.Visible = _running && UpdateApplyClosePolicy.CanCancel(phase);
     }
 
     private void OnProgress(UpdateApplyProgress progress)
