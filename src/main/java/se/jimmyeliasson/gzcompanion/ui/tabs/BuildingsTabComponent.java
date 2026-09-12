@@ -375,7 +375,11 @@ public class BuildingsTabComponent implements TextInputHandler {
                 if (!stack.isEmpty()) {
                     try {
                         extractor.fakeItem(stack, x, y - 1);
-                        itemHoverTooltips.register(new UiRect(x, y - 1, 16, 16), stack, req.itemId(), req.count(), 1);
+                        // No preferred name: a special requirement only ever carries a plain
+                        // Minecraft item id, never a specific known GameZone custom item's
+                        // identity - see ItemHoverTooltips' class doc for why that must never be
+                        // inferred from the id alone.
+                        itemHoverTooltips.register(new UiRect(x, y - 1, 16, 16), stack, req.itemId(), null, req.count(), 1);
                     } catch (Exception ignored) {
                         // A single unbakeable item icon must never take down the whole tab.
                     }

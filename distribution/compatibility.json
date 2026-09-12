@@ -10,8 +10,8 @@
       "fabricApiVersion": "0.155.3+26.1.2",
       "companionJar": {
         "fileName": "gzcompanion-0.1.0-alpha.1.jar",
-        "sha256": "80f3aa809ad4bce2d42d3aaa5ef2f475dd54c8b91b6753c6cc31d96866aff4ac",
-        "sizeBytes": 585997,
+        "sha256": "5ddfef4e5968069bb81f381ae6792bab8f29f4dbf9067b0422f45213fce92292",
+        "sizeBytes": 585624,
         "source": "embedded",
         "note": "Bundled inside the installer as an embedded resource - built from this repository via .\\gradlew.bat build. Never downloaded."
       },

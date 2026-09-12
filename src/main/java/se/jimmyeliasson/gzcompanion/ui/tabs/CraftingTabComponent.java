@@ -820,8 +820,11 @@ public class CraftingTabComponent implements TextInputHandler {
                             int iconY = cell.y() + ((cell.height() - GRID_ICON_SIZE) / 2);
                             extractor.fakeItem(stack, iconX, iconY);
                             iconDrawn = true;
+                            // No preferred name: a grid cell only ever carries a plain ingredient
+                            // id, never a specific known GameZone custom item's identity - see
+                            // ItemHoverTooltips' class doc for why that must never be inferred.
                             itemHoverTooltips.register(new UiRect(iconX, iconY, GRID_ICON_SIZE, GRID_ICON_SIZE),
-                                    stack, representative.itemId(), 0, alts.size());
+                                    stack, representative.itemId(), null, 0, alts.size());
                         } catch (Exception ignored) {
                             // A single malformed/unbakeable item render must never take down the
                             // whole Companion UI - fall through to the text label below.

@@ -82,4 +82,51 @@ class ItemTooltipContentTest {
         List<String> lines = ItemTooltipContent.buildLines("Oak Planks", "Ancient Plank", 4, "minecraft:oak_planks", true, 6);
         assertEquals(List.of("Ancient Plank ×4", "minecraft:oak_planks", "1 av 6 giltiga alternativ"), lines);
     }
+
+    // ------------------------------------------------------------------
+    // Regression: independent code review found ItemHoverTooltips.resolvePreferredGameZoneName
+    // inferring a GameZone custom item's identity from baseMinecraftItemId alone - unsafe, since
+    // ItemKnowledgeBase.byBaseItemId() is intentionally shallow (several relics may legitimately
+    // share one base item; matching the base id never proves a given ItemStack IS that relic).
+    // That inference has been removed entirely - ItemTooltipContent never looks anything up itself,
+    // it only ever uses whatever preferredName its caller explicitly supplies. These tests pin that
+    // contract down using the exact minecraft:iron_pickaxe / "Miner's Companion" example from the
+    // report, at the one layer that's actually unit-testable without a live Minecraft/knowledge-base
+    // environment (ItemHoverTooltips itself needs a real ItemStack and CompanionSession, so the
+    // "no implicit lookup" guarantee is structural there - it no longer has a knowledge-base
+    // dependency at all - and is exercised concretely here for the name-assembly logic it delegates to).
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("A generic item sharing its base id with SEVERAL verified relics still shows the plain vanilla name when no identity is supplied")
+    void genericItemWithMultipleVerifiedRelicsSharingBaseId_staysVanilla() {
+        // Simulates minecraft:iron_pickaxe, which several different VERIFIED relics might use as
+        // their carrier item elsewhere in the knowledge base - irrelevant here, since this call
+        // site never looked any of them up and passes no preferred name.
+        List<String> lines = ItemTooltipContent.buildLines("Iron Pickaxe", null, 0, "minecraft:iron_pickaxe", false, 1);
+        assertEquals(List.of("Iron Pickaxe"), lines);
+        assertNotEquals("Miner's Companion", lines.get(0));
+    }
+
+    @Test
+    @DisplayName("A generic item sharing its base id with EXACTLY ONE verified relic still shows the plain vanilla name when no identity is supplied")
+    void genericItemWithExactlyOneVerifiedRelicSharingBaseId_staysVanilla() {
+        // Even a single VERIFIED relic sharing this base item does not prove THIS particular
+        // ItemStack is that relic - cardinality of matches must never substitute for real identity.
+        List<String> lines = ItemTooltipContent.buildLines("Iron Pickaxe", null, 0, "minecraft:iron_pickaxe", false, 1);
+        assertEquals("Iron Pickaxe", lines.get(0));
+    }
+
+    @Test
+    @DisplayName("Real Swedish example: a plain iron pickaxe reads 'Järnhacka', never 'Miner's Companion', unless identity is explicitly supplied")
+    void plainIronPickaxe_neverBecomesMinersCompanionWithoutExplicitIdentity() {
+        assertEquals(List.of("Järnhacka"),
+                ItemTooltipContent.buildLines("Järnhacka", null, 0, "minecraft:iron_pickaxe", false, 1));
+
+        // The exact same base item, but THIS call site genuinely knows (from trusted context, e.g.
+        // rendering one specific CustomItemKnowledge entry it already holds) that this icon really
+        // is that relic - only then may the preferred name be supplied.
+        assertEquals(List.of("Miner's Companion"),
+                ItemTooltipContent.buildLines("Järnhacka", "Miner's Companion", 0, "minecraft:iron_pickaxe", false, 1));
+    }
 }

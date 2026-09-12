@@ -555,7 +555,11 @@ public class SettlementTabComponent implements TextInputHandler {
                     if (!stack.isEmpty()) {
                         try {
                             extractor.fakeItem(stack, x, currentY + 3);
-                            itemHoverTooltips.register(new UiRect(x, currentY + 3, 16, 16), stack, item.itemId(), item.count(), 1);
+                            // No preferred name: a material requirement only ever carries a plain
+                            // Minecraft item id, never a specific known GameZone custom item's
+                            // identity - see ItemHoverTooltips' class doc for why that must never
+                            // be inferred from the id alone.
+                            itemHoverTooltips.register(new UiRect(x, currentY + 3, 16, 16), stack, item.itemId(), null, item.count(), 1);
                         } catch (Exception ignored) {
                             // A single unbakeable item icon must never take down the whole tab.
                         }
