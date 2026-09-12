@@ -259,7 +259,11 @@ public class GZCompanionMainScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (activeTab == TabType.ONLINE) {
+        if (activeTab == TabType.HEM) {
+            if (homeTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+                return true;
+            }
+        } else if (activeTab == TabType.ONLINE) {
             if (onlineTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }

@@ -49,4 +49,20 @@ public final class HomeCopy {
     public static final String MODULES_TITLE = "Modulstatus";
     public static final String MODULE_STATUS_ACTIVE = "Aktiv";
     public static final String MODULE_STATUS_SOON = "Snart";
+
+    // Live GameZone Card - see docs/LIVE-GAMEZONE-STATUS.md
+    public static final String LIVE_TITLE = "LIVE GAMEZONE";
+    public static final String LIVE_BADGE_CONNECTED = "ANSLUTEN";
+    public static final String LIVE_DISCONNECTED = "GameZoneMC · Inte ansluten";
+    public static final String LIVE_CONNECTED_NO_DATA = "GameZoneMC · Ansluten";
+    public static final String LIVE_NO_DATA_DETAIL = "Live-status kunde inte läsas just nu.";
+    public static final String LIVE_NO_SETTLEMENT = "Inget settlement upptäckt just nu.";
+    public static final String LIVE_SECTION_STAD = "STAD";
+    public static final String LIVE_SECTION_EKONOMI = "EKONOMI";
+    public static final String LIVE_SECTION_SERVER = "SERVER";
+    public static final String LIVE_LABEL_LEVEL = "Nivå";
+    public static final String LIVE_LABEL_COINS = "Coins";
+    public static final String LIVE_LABEL_TREASURY = "Stadskassa";
+    public static final String LIVE_LABEL_TPS = "TPS";
+    public static final String LIVE_UNKNOWN = "—";
 }

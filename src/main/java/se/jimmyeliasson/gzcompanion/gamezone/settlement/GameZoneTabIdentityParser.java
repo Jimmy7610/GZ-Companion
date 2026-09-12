@@ -47,7 +47,7 @@ public final class GameZoneTabIdentityParser {
     /** Accepts both observed header separators - U+00B7 MIDDLE DOT and U+2022 BULLET - never arbitrary punctuation. */
     private static final String SEPARATOR = "[\\u00B7\\u2022]";
     private static final Pattern HEADER_LINE_PATTERN =
-            Pattern.compile("^(.+?)\\s*" + SEPARATOR + "\\s*(KING|LORD|MEMBER)\\s*(?:" + SEPARATOR + "\\s*[+-]?\\d+(?:[.,]\\d+)?%)?$");
+            Pattern.compile("^(.+?)\\s*" + SEPARATOR + "\\s*(KING|LORD|MEMBER)\\s*(?:" + SEPARATOR + "\\s*([+-]?\\d+(?:[.,]\\d+)?)%)?$");
     /** Unicode-aware so non-ASCII prefixes like [TRÄ] match - never ASCII-only. */
     private static final Pattern PREFIX_PATTERN = Pattern.compile("\\[([\\p{L}\\p{N}]{2,6})\\]");
 
@@ -83,8 +83,12 @@ public final class GameZoneTabIdentityParser {
         return candidatePrefix != null && candidatePrefix.equalsIgnoreCase(localPrefix);
     }
 
-    /** Package-visible for direct unit testing of the header-only parse behavior. */
-    static ParsedHeader parseHeader(String headerText) {
+    /**
+     * Public so other GameZone-aware code (e.g. the Home tab's live status parser) can reuse this
+     * single, human-QA-verified definition of "where is the settlement name/role in the TAB
+     * header" instead of maintaining a second, potentially-diverging definition.
+     */
+    public static ParsedHeader parseHeader(String headerText) {
         if (headerText == null || headerText.isBlank()) return null;
         for (String rawLine : headerText.split("\\n", -1)) {
             String line = rawLine.trim();
@@ -93,8 +97,9 @@ public final class GameZoneTabIdentityParser {
             if (!m.matches()) continue;
             String name = m.group(1).trim();
             String role = m.group(2);
+            String bonusText = m.group(3);
             if (name.isEmpty()) continue;
-            return new ParsedHeader(name, role);
+            return new ParsedHeader(name, role, bonusText);
         }
         return null;
     }
@@ -126,5 +131,6 @@ public final class GameZoneTabIdentityParser {
         return candidate != null ? candidate.toUpperCase(Locale.ROOT) : null;
     }
 
-    record ParsedHeader(String name, String role) {}
+    /** @param bonusText the raw numeric bonus text without the trailing {@code %} (e.g. {@code "+44.3"}), or {@code null} if the header line had no bonus segment. */
+    public record ParsedHeader(String name, String role, String bonusText) {}
 }

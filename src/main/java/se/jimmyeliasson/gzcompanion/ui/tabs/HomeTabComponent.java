@@ -11,6 +11,8 @@ import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.core.feature.FeatureManager;
 import se.jimmyeliasson.gzcompanion.core.feature.ModuleStatus;
 import se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityResult;
+import se.jimmyeliasson.gzcompanion.gamezone.status.GameZoneLiveStatus;
+import se.jimmyeliasson.gzcompanion.gamezone.status.GameZoneStatusFormatter;
 import se.jimmyeliasson.gzcompanion.guide.GuideEngine;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideStep;
 import se.jimmyeliasson.gzcompanion.guide.progress.GuideContext;
@@ -21,6 +23,7 @@ import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TabType;
 import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
 import se.jimmyeliasson.gzcompanion.ui.layout.HomeTabLayout;
+import se.jimmyeliasson.gzcompanion.ui.layout.LiveGameZoneCardLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 
@@ -31,6 +34,8 @@ import java.util.List;
  * Renders the compact, polished Home ("Hem") tab following docs/design/GZ-COMPANION-UI-REFERENCE.png.
  */
 public class HomeTabComponent {
+    private static final int ROW_GAP = 4;
+
     private String feedbackMessage = null;
     private long feedbackExpiry = 0;
 
@@ -44,6 +49,15 @@ public class HomeTabComponent {
     private HomeTabLayout layout;
     private UiRect onlinePlayerCountRect = null;
 
+    /**
+     * Whole-page scroll for the Home tab - the existing dense 5-card grid always renders at its
+     * exact, unchanged pixel layout (see {@link HomeTabLayout}); this offset only ever reveals the
+     * LIVE GAMEZONE card appended below it (see docs/LIVE-GAMEZONE-STATUS.md), never rescales or
+     * repositions the existing cards themselves.
+     */
+    private int homeScrollOffset = 0;
+    private int homeMaxScroll = 0;
+
     public HomeTabLayout getLayout() {
         return layout;
     }
@@ -53,8 +67,6 @@ public class HomeTabComponent {
     }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
-        calculateLayout(bounds);
-
         CompanionSession session = CompanionSession.getInstance();
         String playerName = session.getBridge().getPlayerName();
         boolean isGameZone = session.getBridge().isConnectedToGameZone();
@@ -62,6 +74,23 @@ public class HomeTabComponent {
         CompatibilityResult compat = session.getCompatibilityResult();
         String packVersion = session.getActiveRulePack() != null ? session.getActiveRulePack().manifest().packVersion() : HomeCopy.RULE_PACK_FALLBACK;
         FeatureManager featureManager = session.getFeatureManager();
+
+        String tabHeaderText = isGameZone ? session.getBridge().getTabHeaderText().orElse(null) : null;
+        GameZoneLiveStatus liveStatus = session.getLiveStatusTracker().update(isGameZone, tabHeaderText);
+
+        // Measure the existing grid's UNSCROLLED bottom edge and the live card's own natural
+        // height up front - the single source of truth both for how far scrolling is allowed to go
+        // and for where the live card actually gets drawn, so the two can never drift apart.
+        HomeTabLayout naturalLayout = HomeTabLayout.calculate(new UiRect(bounds.x(), bounds.y(), bounds.width(), bounds.height()));
+        int liveCardH = computeLiveCardHeight(font, bounds.width(), isGameZone, liveStatus);
+        int naturalContentH = (naturalLayout.moduleRect().bottom() + ROW_GAP + liveCardH) - bounds.y();
+        homeMaxScroll = Math.max(0, naturalContentH - bounds.height());
+        homeScrollOffset = Math.max(0, Math.min(homeScrollOffset, homeMaxScroll));
+
+        UiRect scrolledBounds = new UiRect(bounds.x(), bounds.y() - homeScrollOffset, bounds.width(), bounds.height());
+        calculateLayout(scrolledBounds);
+
+        extractor.enableScissor(bounds.x(), bounds.y(), bounds.right(), bounds.bottom());
 
         UiRect welcomeRect = layout.welcomeRect();
         UiRect serverRect = layout.serverRect();
@@ -216,6 +245,12 @@ public class HomeTabComponent {
             drawModuleRow(extractor, font, moduleRect.x() + mPad, modStartY + (i * rowH), moduleRect.width() - (mPad * 2), tab.getDisplayName(), compactStatus, status.getRgbColor());
         }
 
+        // 6. LIVE GAMEZONE CARD - see docs/LIVE-GAMEZONE-STATUS.md
+        UiRect liveCardRect = new UiRect(bounds.x(), moduleRect.bottom() + ROW_GAP, bounds.width(), liveCardH);
+        renderLiveGameZoneCard(extractor, font, liveCardRect, isGameZone, liveStatus);
+
+        extractor.disableScissor();
+
         // Toast Notification
         if (feedbackMessage != null && System.currentTimeMillis() < feedbackExpiry) {
             int msgW = font.width(feedbackMessage) + 14;
@@ -230,6 +265,112 @@ public class HomeTabComponent {
         if (showAdvisor) {
             renderAdvisorOverlay(extractor, font, bounds, mouseX, mouseY);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Live GameZone card - see docs/LIVE-GAMEZONE-STATUS.md
+    //
+    // Fair play: every value shown here comes ONLY from the vanilla TAB header Component GameZone
+    // already sends this client and Minecraft already renders on screen - the exact same seam
+    // (MinecraftBridge.getTabHeaderText()) already used and human-QA-verified for automatic
+    // settlement detection on the Online tab. No commands, no menus, no external APIs.
+    // ------------------------------------------------------------------
+
+    private static final int LIVE_HEADER_H = 10;
+    private static final int LIVE_LINE_H = 9;
+    private static final int LIVE_CARD_PAD = 4;
+
+    /**
+     * The single source of truth for the live card's total height - called identically here (for
+     * scroll-range measurement) and from {@link #renderLiveGameZoneCard} (for actual drawing), so
+     * the two can never drift apart, mirroring the Online tab's own established
+     * "measure-before-render" anti-drift convention.
+     */
+    private int computeLiveCardHeight(Font font, int width, boolean connected, GameZoneLiveStatus status) {
+        int innerW = Math.max(10, width - (LIVE_CARD_PAD * 2));
+        if (!connected) {
+            return LIVE_HEADER_H + 2 + LIVE_LINE_H + 6;
+        }
+        if (!status.hasAnyData()) {
+            int msgH = TextUtil.measureWrappedHeightCapped(font, HomeCopy.LIVE_NO_DATA_DETAIL, innerW, TypographyScale.SMALL.getScale(), 2, 1);
+            return LIVE_HEADER_H + 2 + LIVE_LINE_H + 2 + msgH + 6;
+        }
+        boolean showSubCards = status.hasCity() || status.hasEconomy() || status.hasServerInfo();
+        return LiveGameZoneCardLayout.calculate(new UiRect(0, 0, width, 0), status.hasSettlement(), showSubCards).contentHeight();
+    }
+
+    private void renderLiveGameZoneCard(GuiGraphicsExtractor extractor, Font font, UiRect cardRect, boolean connected, GameZoneLiveStatus status) {
+        GZTheme.drawCard(extractor, cardRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
+
+        int innerX = cardRect.x() + LIVE_CARD_PAD;
+        int innerW = Math.max(10, cardRect.width() - (LIVE_CARD_PAD * 2));
+        int headerY = cardRect.y() + LIVE_CARD_PAD;
+
+        TextUtil.drawScaledText(extractor, font, HomeCopy.LIVE_TITLE, innerX, headerY, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
+
+        if (connected) {
+            String badge = HomeCopy.LIVE_BADGE_CONNECTED;
+            int badgeTextW = TextUtil.scaledWidth(font, badge, TypographyScale.META.getScale());
+            int badgeX = cardRect.right() - LIVE_CARD_PAD - badgeTextW - 6;
+            GZTheme.drawStatusDot(extractor, badgeX, headerY + 2, GZTheme.COLOR_STATUS_GREEN);
+            TextUtil.drawScaledText(extractor, font, badge, badgeX + 6, headerY, TypographyScale.META.getScale(), GZTheme.COLOR_STATUS_GREEN, false);
+        }
+
+        int contentY = headerY + LIVE_HEADER_H;
+
+        if (!connected) {
+            TextUtil.drawScaledText(extractor, font, HomeCopy.LIVE_DISCONNECTED, innerX, contentY, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+            return;
+        }
+
+        if (!status.hasAnyData()) {
+            TextUtil.drawScaledText(extractor, font, HomeCopy.LIVE_CONNECTED_NO_DATA, innerX, contentY, TypographyScale.SMALL.getScale(), GZTheme.COLOR_STATUS_GREEN, false);
+            contentY += LIVE_LINE_H + 2;
+            TextUtil.drawScaledWrappedText(extractor, font, HomeCopy.LIVE_NO_DATA_DETAIL, innerX, contentY, innerW,
+                    TypographyScale.SMALL.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false);
+            return;
+        }
+
+        boolean showSubCards = status.hasCity() || status.hasEconomy() || status.hasServerInfo();
+        LiveGameZoneCardLayout cardLayout = LiveGameZoneCardLayout.calculate(cardRect, status.hasSettlement(), showSubCards);
+
+        UiRect settlementRect = cardLayout.settlementRect();
+        if (status.hasSettlement()) {
+            TextUtil.drawScaledEllipsizedText(extractor, font, status.settlementName(), settlementRect.x(), settlementRect.y(),
+                    settlementRect.width(), TypographyScale.BODY.getScale(), GZTheme.COLOR_MINT, true);
+            String roleLine = (status.settlementRole() != null ? status.settlementRole() : HomeCopy.LIVE_UNKNOWN)
+                    + " · " + GameZoneStatusFormatter.formatBonusPercent(status.settlementBonusPercent());
+            TextUtil.drawScaledEllipsizedText(extractor, font, roleLine, settlementRect.x(), settlementRect.y() + 10,
+                    settlementRect.width(), TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        } else {
+            TextUtil.drawScaledEllipsizedText(extractor, font, HomeCopy.LIVE_NO_SETTLEMENT, settlementRect.x(), settlementRect.y(),
+                    settlementRect.width(), TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        }
+
+        if (!showSubCards) return;
+
+        String cityLine1 = status.cityName() != null ? status.cityName() : HomeCopy.LIVE_UNKNOWN;
+        String cityLine2 = HomeCopy.LIVE_LABEL_LEVEL + " " + (status.cityLevel() != null ? status.cityLevel() : HomeCopy.LIVE_UNKNOWN);
+        renderLiveSubCard(extractor, font, cardLayout.stadRect(), HomeCopy.LIVE_SECTION_STAD, cityLine1, cityLine2);
+
+        String coinsLine = GameZoneStatusFormatter.formatMoney(status.coins()) + " " + HomeCopy.LIVE_LABEL_COINS;
+        String treasuryLine = GameZoneStatusFormatter.formatMoney(status.treasury()) + " " + HomeCopy.LIVE_LABEL_TREASURY;
+        renderLiveSubCard(extractor, font, cardLayout.ekonomiRect(), HomeCopy.LIVE_SECTION_EKONOMI, coinsLine, treasuryLine);
+
+        String playersLine = (status.onlinePlayers() != null && status.maxPlayers() != null)
+                ? status.onlinePlayers() + " / " + status.maxPlayers()
+                : HomeCopy.LIVE_UNKNOWN;
+        String tpsLine = HomeCopy.LIVE_LABEL_TPS + " " + GameZoneStatusFormatter.formatTps(status.tps());
+        renderLiveSubCard(extractor, font, cardLayout.serverRect(), HomeCopy.LIVE_SECTION_SERVER, playersLine, tpsLine);
+    }
+
+    private void renderLiveSubCard(GuiGraphicsExtractor extractor, Font font, UiRect rect, String title, String line1, String line2) {
+        GZTheme.drawCard(extractor, rect, GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
+        int x = rect.x() + 3;
+        int maxW = Math.max(10, rect.width() - 6);
+        TextUtil.drawScaledText(extractor, font, title, x, rect.y() + 2, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        TextUtil.drawScaledEllipsizedText(extractor, font, line1, x, rect.y() + 11, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
+        TextUtil.drawScaledEllipsizedText(extractor, font, line2, x, rect.y() + 20, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
     }
 
     // ------------------------------------------------------------------
@@ -338,7 +479,8 @@ public class HomeTabComponent {
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
         if (button != 0) return false;
-        calculateLayout(bounds);
+        // Must match the same scroll offset render() drew with, so hit-rects line up with what's on screen.
+        calculateLayout(new UiRect(bounds.x(), bounds.y() - homeScrollOffset, bounds.width(), bounds.height()));
 
         if (showAdvisor) {
             for (AdvisorHit hit : advisorHitTargets) {
@@ -379,6 +521,12 @@ public class HomeTabComponent {
         }
 
         return false;
+    }
+
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (showAdvisor) return false;
+        homeScrollOffset = Math.max(0, Math.min(homeMaxScroll, homeScrollOffset - (int) (scrollY * 14)));
+        return true;
     }
 
     private void showToast(String message, long durationMs) {
