@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.0-alpha.3] - 2026-09-13
+
+A minimal validation release with no gameplay changes - its sole purpose is proving the complete
+real-world self-update path end to end (discover on GitHub → download → verify → close Minecraft
+safely → update → relaunch on the new version) now that `0.1.0-alpha.2` is live as the bootstrap
+release testers installed manually.
+
+### Changed
+- Första versionen distribuerad via GZ Companions inbyggda updater.
+- Verifierar automatiskt GitHub Release-flödet.
+- Verifierar säker nedladdning och installationsbyte.
+- Inga gameplay-funktioner ändrade.
+
 ## [0.1.0-alpha.2] - 2026-09-12
 
 The final bootstrap release testers must install manually - every release after this one is

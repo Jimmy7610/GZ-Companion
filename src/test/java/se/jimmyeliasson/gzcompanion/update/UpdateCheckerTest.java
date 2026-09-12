@@ -147,6 +147,34 @@ class UpdateCheckerTest {
     }
 
     @Test
+    @DisplayName("0.1.0-alpha.2 accepts a real v0.1.0-alpha.3 GitHub prerelease as an update, and the reverse never happens")
+    void alpha2ToAlpha3RealWorldUpdatePathAccepted_andReverseNeverAnUpdate() {
+        // Forward: this is the exact real-world shape of the alpha.3 self-update validation
+        // release - a real GitHub prerelease (prerelease=true), tag v0.1.0-alpha.3, manifest
+        // channel "alpha". The currently-installed 0.1.0-alpha.2 client must classify it as an
+        // available update. (prereleaseAlphaAcceptedOnAlphaChannel above already covers the same
+        // shape generically - this test exists specifically to pin the alpha.2/alpha.3 real
+        // version pair itself as a named regression, since that is the exact pair being shipped.)
+        GitHubRelease releaseAlpha3 = releaseWithAssets("v0.1.0-alpha.3", false, true, true, true);
+        FakeReleaseSource sourceForward = new FakeReleaseSource(List.of(releaseAlpha3));
+        sourceForward.putManifest("https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.3/manifest", manifestFor("0.1.0-alpha.3"));
+
+        Optional<UpdateRelease> forward = UpdateChecker.findUpdate(List.of(releaseAlpha3), CURRENT, UpdateChannel.ALPHA, sourceForward);
+        assertTrue(forward.isPresent(), "0.1.0-alpha.2 must accept a real v0.1.0-alpha.3 prerelease as an update");
+        assertEquals("0.1.0-alpha.3", forward.get().version().toDisplayString());
+
+        // Reverse: once a client is already running 0.1.0-alpha.3, the older 0.1.0-alpha.2 release
+        // still sitting on GitHub must never be offered back as "an update".
+        SemanticVersion alpha3 = SemanticVersion.parse("0.1.0-alpha.3").orElseThrow();
+        GitHubRelease releaseAlpha2 = releaseWithAssets("v0.1.0-alpha.2", false, true, true, true);
+        FakeReleaseSource sourceReverse = new FakeReleaseSource(List.of(releaseAlpha2));
+        sourceReverse.putManifest("https://github.com/Jimmy7610/GZ-Companion/releases/download/v0.1.0-alpha.2/manifest", manifestFor("0.1.0-alpha.2"));
+
+        Optional<UpdateRelease> reverse = UpdateChecker.findUpdate(List.of(releaseAlpha2), alpha3, UpdateChannel.ALPHA, sourceReverse);
+        assertTrue(reverse.isEmpty(), "0.1.0-alpha.3 must never consider the older 0.1.0-alpha.2 release an update");
+    }
+
+    @Test
     @DisplayName("A stable-channel client never receives a prerelease update")
     void stableChannelNeverReceivesPrerelease() {
         GitHubRelease release = releaseWithAssets("v0.1.0-alpha.3", false, true, true, true);

@@ -15,7 +15,7 @@ public final class CompanionConstants {
     public static final String AUTHOR = "Jimmy Eliasson";
     public static final String TARGET_MINECRAFT_VERSION = "26.1.2";
 
-    private static final String FALLBACK_VERSION = "0.1.0-alpha.2";
+    private static final String FALLBACK_VERSION = "0.1.0-alpha.3";
 
     private CompanionConstants() {
     }

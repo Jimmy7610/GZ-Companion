@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-11T00:00:00Z",
+  "generatedAt": "2026-09-13T00:00:00Z",
   "supported": [
     {
       "status": "VERIFIED",
-      "companionVersion": "0.1.0-alpha.2",
+      "companionVersion": "0.1.0-alpha.3",
       "minecraftVersion": "26.1.2",
       "fabricLoaderVersion": "0.19.5",
       "fabricApiVersion": "0.155.3+26.1.2",
       "companionJar": {
-        "fileName": "gzcompanion-0.1.0-alpha.2.jar",
-        "sha256": "22a5eb63ec17caba793a861a393ff31d4ec747edb03f6a1b149644ace0d2928c",
+        "fileName": "gzcompanion-0.1.0-alpha.3.jar",
+        "sha256": "5c793cb68e48a19a579b24acee26edf8a99a648d5c6875d4713bb4a349b89088",
         "sizeBytes": 683196,
         "source": "embedded",
         "note": "Bundled inside the installer as an embedded resource - built from this repository via .\\gradlew.bat build. Never downloaded."
