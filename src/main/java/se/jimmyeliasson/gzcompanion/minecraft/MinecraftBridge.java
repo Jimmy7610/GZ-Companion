@@ -23,4 +23,14 @@ public interface MinecraftBridge {
      * GameZone-aware built on top of this.
      */
     List<OnlinePlayerSnapshot> getOnlinePlayers();
+
+    /**
+     * The vanilla TAB list header text currently shown above the player list - the exact same
+     * {@code Component} text every vanilla client already receives and renders when a player opens
+     * the player list, flattened to plain text. Empty when not connected, or the server hasn't set
+     * one. No GameZone-specific parsing belongs here - see
+     * {@code se.jimmyeliasson.gzcompanion.gamezone.settlement} for anything GameZone-aware built on
+     * top of this.
+     */
+    Optional<String> getTabHeaderText();
 }

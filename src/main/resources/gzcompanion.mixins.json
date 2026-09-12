@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "se.jimmyeliasson.gzcompanion.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "PlayerTabOverlayAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

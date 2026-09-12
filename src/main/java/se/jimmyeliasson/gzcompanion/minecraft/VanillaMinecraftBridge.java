@@ -2,10 +2,13 @@ package se.jimmyeliasson.gzcompanion.minecraft;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.PlayerTabOverlay;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.multiplayer.ServerData;
+import net.minecraft.network.chat.Component;
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
+import se.jimmyeliasson.gzcompanion.mixin.PlayerTabOverlayAccessor;
 import se.jimmyeliasson.gzcompanion.profile.ServerDetection;
 
 import java.util.ArrayList;
@@ -120,16 +123,53 @@ public class VanillaMinecraftBridge implements MinecraftBridge {
         try {
             Minecraft client = Minecraft.getInstance();
             if (client != null && client.getConnection() != null) {
+                PlayerTabOverlay tabOverlay = client.gui != null ? client.gui.getTabList() : null;
                 for (PlayerInfo info : client.getConnection().getListedOnlinePlayers()) {
                     GameProfile profile = info.getProfile();
                     if (profile == null || profile.name() == null || profile.name().isBlank()) continue;
                     boolean isLocal = client.isLocalPlayer(profile.id());
-                    result.add(new OnlinePlayerSnapshot(profile.name(), isLocal, info.getLatency()));
+                    String tabDisplayText = null;
+                    if (tabOverlay != null) {
+                        try {
+                            Component displayName = tabOverlay.getNameForDisplay(info);
+                            tabDisplayText = displayName != null ? displayName.getString() : null;
+                        } catch (Exception ignored) {}
+                    }
+                    result.add(new OnlinePlayerSnapshot(profile.name(), isLocal, info.getLatency(), tabDisplayText));
                 }
             }
         } catch (Exception ignored) {
             // Best-effort - an empty list is always a safe fallback, never a crash.
         }
         return result;
+    }
+
+    /**
+     * Reads the same TAB header {@code Component} vanilla already received from the server and
+     * shows above the player list - via {@link PlayerTabOverlayAccessor}, the smallest possible
+     * Mixin accessor exposing a private vanilla field vanilla itself only offers a setter for
+     * (see that class's javadoc). No GameZone parsing happens here - just flattening the already-
+     * received Component to plain text.
+     */
+    @Override
+    public Optional<String> getTabHeaderText() {
+        try {
+            Minecraft client = Minecraft.getInstance();
+            if (client != null && client.gui != null) {
+                PlayerTabOverlay tabOverlay = client.gui.getTabList();
+                if (tabOverlay instanceof PlayerTabOverlayAccessor accessor) {
+                    Component header = accessor.gzcompanion$getHeader();
+                    if (header != null) {
+                        String text = header.getString();
+                        if (text != null && !text.isBlank()) {
+                            return Optional.of(text);
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Best-effort - absent header is always a safe fallback, never a crash.
+        }
+        return Optional.empty();
     }
 }

@@ -7,6 +7,8 @@ import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import org.lwjgl.glfw.GLFW;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
+import se.jimmyeliasson.gzcompanion.gamezone.settlement.GameZoneSettlementIdentity;
+import se.jimmyeliasson.gzcompanion.gamezone.settlement.GameZoneSettlementTracker;
 import se.jimmyeliasson.gzcompanion.minecraft.OnlinePlayerSnapshot;
 import se.jimmyeliasson.gzcompanion.online.OnlinePlayerRow;
 import se.jimmyeliasson.gzcompanion.online.OnlinePlayersGrouping;
@@ -14,7 +16,6 @@ import se.jimmyeliasson.gzcompanion.online.OnlinePlayersView;
 import se.jimmyeliasson.gzcompanion.online.OnlinePresence;
 import se.jimmyeliasson.gzcompanion.online.PingQuality;
 import se.jimmyeliasson.gzcompanion.settings.SettingsManager;
-import se.jimmyeliasson.gzcompanion.settlement.storage.MemberNote;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
@@ -74,9 +75,11 @@ public class OnlineTabComponent implements TextInputHandler {
         boolean connected = session.getBridge().isConnectedToGameZone();
         List<OnlinePlayerSnapshot> onlinePlayers = connected ? session.getBridge().getOnlinePlayers() : List.of();
         List<String> favorites = settingsManager.getSettings().favoritePlayers();
-        List<String> settlementMembers = session.getSettlementPlannerManager()
-                .getMembers(session.getCurrentStorageContext())
-                .stream().map(MemberNote::playerName).toList();
+
+        GameZoneSettlementTracker settlementTracker = session.getSettlementTracker();
+        String tabHeaderText = connected ? session.getBridge().getTabHeaderText().orElse(null) : null;
+        GameZoneSettlementIdentity settlementIdentity = settlementTracker.update(connected, tabHeaderText, onlinePlayers);
+        List<String> settlementMembers = List.copyOf(settlementTracker.sameSettlementOnlineUsernames(onlinePlayers));
 
         OnlinePlayersView view = OnlinePlayersGrouping.build(onlinePlayers, connected, favorites, settlementMembers, searchText);
 
@@ -86,13 +89,13 @@ public class OnlineTabComponent implements TextInputHandler {
 
         if (layout.isCompact()) {
             if (compactShowingDetail && selectedPlayerName != null) {
-                renderDetail(extractor, font, layout.detailRect(), mouseX, mouseY, view, session, true);
+                renderDetail(extractor, font, layout.detailRect(), mouseX, mouseY, view, session, true, settlementIdentity);
             } else {
-                renderList(extractor, font, layout.listRect(), mouseX, mouseY, view, connected, settingsManager);
+                renderList(extractor, font, layout.listRect(), mouseX, mouseY, view, connected, settingsManager, settlementIdentity);
             }
         } else {
-            renderList(extractor, font, layout.listRect(), mouseX, mouseY, view, connected, settingsManager);
-            renderDetail(extractor, font, layout.detailRect(), mouseX, mouseY, view, session, false);
+            renderList(extractor, font, layout.listRect(), mouseX, mouseY, view, connected, settingsManager, settlementIdentity);
+            renderDetail(extractor, font, layout.detailRect(), mouseX, mouseY, view, session, false, settlementIdentity);
         }
     }
 
@@ -179,7 +182,8 @@ public class OnlineTabComponent implements TextInputHandler {
     }
 
     private void renderList(GuiGraphicsExtractor extractor, Font font, UiRect listRect, int mouseX, int mouseY,
-                             OnlinePlayersView view, boolean connected, SettingsManager settingsManager) {
+                             OnlinePlayersView view, boolean connected, SettingsManager settingsManager,
+                             GameZoneSettlementIdentity settlementIdentity) {
         GZTheme.drawCard(extractor, listRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
 
         int innerX = listRect.x() + 2;
@@ -209,7 +213,10 @@ public class OnlineTabComponent implements TextInputHandler {
         } else {
             if (!view.settlementMembers().isEmpty()) {
                 if (any) currentY += SECTION_GAP;
-                currentY = renderSection(extractor, font, innerX, currentY, innerW, "MIN SETTLEMENT", view.settlementMembers(), mouseX, mouseY, listRect, settingsManager);
+                String settlementTitle = settlementIdentity.known()
+                        ? "MIN SETTLEMENT · " + settlementIdentity.settlementName()
+                        : "MIN SETTLEMENT";
+                currentY = renderSection(extractor, font, innerX, currentY, innerW, settlementTitle, view.settlementMembers(), mouseX, mouseY, listRect, settingsManager);
                 any = true;
             }
             if (!view.others().isEmpty()) {
@@ -301,7 +308,8 @@ public class OnlineTabComponent implements TextInputHandler {
     // ------------------------------------------------------------------
 
     private void renderDetail(GuiGraphicsExtractor extractor, Font font, UiRect detailRect, int mouseX, int mouseY,
-                               OnlinePlayersView view, CompanionSession session, boolean isCompact) {
+                               OnlinePlayersView view, CompanionSession session, boolean isCompact,
+                               GameZoneSettlementIdentity settlementIdentity) {
         GZTheme.drawCard(extractor, detailRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
 
         int contentTop = detailRect.y() + (isCompact ? 16 : 4);
@@ -357,7 +365,10 @@ public class OnlineTabComponent implements TextInputHandler {
             y += 10;
         }
         if (row.settlementMember()) {
-            TextUtil.drawScaledText(extractor, font, "Settlementmedlem", x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+            String settlementLabel = settlementIdentity.known()
+                    ? "Settlementmedlem · " + settlementIdentity.settlementName()
+                    : "Settlementmedlem";
+            TextUtil.drawScaledText(extractor, font, settlementLabel, x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
             y += 10;
         }
 

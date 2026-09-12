@@ -11,6 +11,7 @@ import se.jimmyeliasson.gzcompanion.gamezone.RulePackLoader;
 import se.jimmyeliasson.gzcompanion.gamezone.bridge.GameZoneChatObserver;
 import se.jimmyeliasson.gzcompanion.gamezone.parsing.GameZoneParserCatalog;
 import se.jimmyeliasson.gzcompanion.gamezone.parsing.GameZoneParserLoader;
+import se.jimmyeliasson.gzcompanion.gamezone.settlement.GameZoneSettlementTracker;
 import se.jimmyeliasson.gzcompanion.gamezone.toast.GameZoneToastManager;
 import se.jimmyeliasson.gzcompanion.guide.GuideEngine;
 import se.jimmyeliasson.gzcompanion.guide.GuideLoader;
@@ -83,6 +84,7 @@ public class CompanionSession {
     private KnowledgeModuleStatus parserCatalogStatus = KnowledgeModuleStatus.UNAVAILABLE;
     private final GameZoneToastManager toastManager = new GameZoneToastManager();
     private final GameZoneChatObserver chatObserver = new GameZoneChatObserver(() -> parserCatalog, toastManager, this::isConnectedToGameZone);
+    private final GameZoneSettlementTracker settlementTracker = new GameZoneSettlementTracker();
 
     private CompanionSession() {
         this.bridge = new VanillaMinecraftBridge();
@@ -328,6 +330,10 @@ public class CompanionSession {
 
     public SettingsManager getSettingsManager() {
         return settingsManager;
+    }
+
+    public GameZoneSettlementTracker getSettlementTracker() {
+        return settlementTracker;
     }
 
     public GameZoneParserCatalog getParserCatalog() {
