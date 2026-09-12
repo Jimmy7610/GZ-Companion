@@ -1,6 +1,7 @@
 # Online Players & Favorites
 
-Status: **Implemented, pending human gameplay QA.**
+Status: **Implemented and verified via human QA on the real GameZoneMC server**, including
+automatic settlement detection (section 6).
 
 > **GZ Companion is an unofficial community project for GameZoneMC. It is not affiliated with or
 > endorsed by GameZoneMC.**
@@ -105,17 +106,26 @@ does not scan entities, does not send any command, and does not automatically op
 GameZone's own `/settlement menu → Medlemmar` GUI to discover membership.
 
 - **Settlement name + role**: `GameZoneTabIdentityParser` scans the TAB header's text line-by-line
-  for one shaped like `<settlement name> · <ROLE> · <bonus>` (the format human QA observed on the
-  real server, e.g. `Trälskärsbukten · MEMBER · +44.3%`). It never assumes a fixed line index -
-  unrelated header lines (server MOTD, tips, etc.) are simply skipped - and only recognizes the
-  known role words `KING`, `LORD`, `MEMBER`. Anything it cannot confidently match is UNKNOWN; it
-  never guesses a settlement name.
+  for one shaped like `<settlement name> <separator> <ROLE> <separator> <bonus>`. Real captured
+  runtime data from the live server confirmed the separator is `•` (U+2022 BULLET) - an earlier
+  screenshot had suggested `·` (U+00B7 MIDDLE DOT), so both are accepted (never arbitrary
+  punctuation), e.g. both `Trälskärsbukten • MEMBER • +44.3%` and `Trälskärsbukten · MEMBER ·
+  +44.3%` parse identically. It never assumes a fixed line index - unrelated header lines (server
+  MOTD, player/coin counts, tips, etc.) are simply skipped - and only recognizes the known role
+  words `KING`, `LORD`, `MEMBER`. Anything it cannot confidently match is UNKNOWN; it never guesses
+  a settlement name.
 - **Settlement prefix**: the SAME parser looks at the local player's own current TAB display text
-  (vanilla's `PlayerTabOverlay.getNameForDisplay`) for a short bracketed code immediately before
-  their name (the shape GameZone's real TAB list was observed to use, e.g. `[BUS]`). This is never
-  a hardcoded table of known prefixes - only the local player's own currently-rendered prefix is
-  ever used as the reference, and it is deliberately narrow enough to avoid mistaking a culture
-  sigil, a King/Lord role symbol, or a level indicator for a settlement prefix.
+  (vanilla's `PlayerTabOverlay.getNameForDisplay`), specifically the text BEFORE the player's own
+  username, for a short bracketed code shaped like `[PREFIX]` (letters/digits only). Real captured
+  runtime data confirmed this code can contain non-ASCII letters - the real local row
+  `[TRÄ] ⚜ jbl76 [2]` produces the prefix `TRÄ` exactly, never transliterated to `TRA` - so
+  matching is Unicode-aware, not ASCII-only. `TRÄ` (and `[BUS]` from earlier evidence) are
+  captured EXAMPLES only, never a hardcoded table of known prefixes; only the local player's own
+  currently-rendered prefix is ever used as the reference. One or more glyphs (culture sigil, role
+  symbol) may sit between the prefix and the name, and a trailing bracketed level (e.g. `[2]`)
+  always comes AFTER the name - both are correctly ignored, and exactly one bracketed candidate
+  before the name is required (zero or more than one both fail safely to UNKNOWN rather than
+  guessing).
 - **Same-settlement classification**: every other currently-listed player's own TAB display text is
   compared against that same local prefix. A match means "GameZone is currently rendering this
   player with my same settlement tag" - a live, current-session signal only. This prefix is **not**
@@ -140,6 +150,12 @@ be labeled "Lokala anteckningar - inte serverns riktiga medlemslista" - it is si
 by the Online tab.
 
 ## 7. Human QA sequence
+
+This exact sequence has been run and passed on the real GameZoneMC server, including automatic
+settlement detection (steps 6-9): settlement `Trälskärsbukten`, role `MEMBER`, prefix `TRÄ` were
+detected correctly, `MIN SETTLEMENT · Trälskärsbukten` appeared with the right online members, the
+local player was marked `DU`, and favorite precedence worked with no duplicates. Kept here as the
+repeatable regression checklist for future changes to this feature.
 
 1. Connect to GameZoneMC. Open the Companion (`G`) → **Online**. Confirm the player count in the
    header matches what the vanilla player list (tab key) shows, and that your own name is marked
