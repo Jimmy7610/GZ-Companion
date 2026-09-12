@@ -207,6 +207,60 @@ public class InstallEngineTests : IDisposable
         Assert.Equal("""{"completedSteps": 7}""", File.ReadAllText(userDataFile));
     }
 
+    [Fact]
+    public async Task RealRun_WritesExplicitFileOwnershipInInstalledState()
+    {
+        var (paths, target, _, engine) = Build();
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        var state = InstalledStateStore.TryRead(paths.InstalledManifestPath);
+        Assert.NotNull(state);
+        Assert.Equal(2, state!.SchemaVersion);
+        Assert.Equal(target.CompanionJar.FileName, state.CompanionJarFileName);
+        Assert.Equal(target.FabricApi.FileName, state.FabricApiFileName);
+    }
+
+    // Blocker 2 (2026-09-12 follow-up pass): a Fabric API version bump can also change its
+    // filename - the full-update path must clean up a previously GZ-owned Fabric API jar under a
+    // DIFFERENT filename once the new one is confirmed in place, but ONLY when a previous
+    // installed.json explicitly recorded that ownership (schema v2+) - never guessed from a naming
+    // convention. See FabricApiOwnershipTests for the equivalent fast-path coverage.
+    [Fact]
+    public async Task RealRun_RemovesPreviouslyOwnedFabricApiJarUnderDifferentFilename()
+    {
+        var (paths, target, _, engine) = Build();
+        Directory.CreateDirectory(paths.GzCompanionModsDir);
+        string oldApiPath = Path.Combine(paths.GzCompanionModsDir, "fabric-api-0.150.0+26.1.2.jar");
+        File.WriteAllBytes(oldApiPath, new byte[] { 1, 2, 3 });
+        InstalledStateStore.Write(paths.InstalledManifestPath, new InstalledState(
+            "0.1.0-alpha.0", "26.1.2", "0.19.5", "0.150.0+26.1.2", "2026-01-01T00:00:00Z",
+            SchemaVersion: 2, CompanionJarFileName: "gzcompanion-0.1.0-alpha.0.jar", FabricApiFileName: "fabric-api-0.150.0+26.1.2.jar"));
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.False(File.Exists(oldApiPath), "a previously GZ-owned Fabric API jar under a different, explicitly-recorded filename must be cleaned up by a full install");
+        Assert.True(File.Exists(Path.Combine(paths.GzCompanionModsDir, target.FabricApi.FileName)));
+    }
+
+    [Fact]
+    public async Task RealRun_UnknownFabricApiOwnership_DoesNotDeleteUnrelatedJars()
+    {
+        var (paths, target, _, engine) = Build();
+        Directory.CreateDirectory(paths.GzCompanionModsDir);
+        // Superficially looks like an old Fabric API jar, but there is no installed.json at all -
+        // zero recorded ownership - so it must never be guessed at or deleted.
+        string unrelatedJar = Path.Combine(paths.GzCompanionModsDir, "fabric-api-0.140.0+26.0.0.jar");
+        File.WriteAllBytes(unrelatedJar, new byte[] { 9, 9 });
+
+        var outcome = await engine.RunAsync(target, dryRun: false, log: null, CancellationToken.None);
+
+        Assert.True(outcome.Success, outcome.ErrorMessage);
+        Assert.True(File.Exists(unrelatedJar), "a file with no recorded GZ ownership must never be guessed at or deleted");
+    }
+
     // ------------------------------------------------------------------
     // Final friend-test polish: a fresh isolated install seeds servers.dat with GameZoneMC, so
     // Multiplayer isn't empty and nobody has to type play.gamezonemc.se by hand. Isolated-only,

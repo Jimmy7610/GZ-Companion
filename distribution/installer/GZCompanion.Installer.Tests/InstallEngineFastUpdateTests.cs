@@ -200,23 +200,26 @@ public class InstallEngineFastUpdateTests : IDisposable
     }
 
     // ------------------------------------------------------------------
-    // 5. Stale-jar cleanup failure -> no false success and no duplicate active Companion jar
+    // 5. Stale-jar retirement failure -> no false success and no duplicate active Companion jar
     // ------------------------------------------------------------------
     [Fact]
     public async Task StaleJarCleanupFailure_NoFalseSuccessAndNoDuplicateJar()
     {
         var (paths, target, _, fileOps, engine) = Build();
-        // An unrelated pre-existing stray jar that the cleanup pass will try (and fail) to delete.
+        // An unrelated pre-existing stray jar that the transaction will try (and fail) to back up
+        // (rename to .update-backup) before placing the new jar - stale files are retired via a
+        // reversible rename, never deleted outright, so a failure here must roll back cleanly.
         string strayJarPath = Path.Combine(paths.GzCompanionModsDir, "gzcompanion-0.1.0-alpha.1.jar");
         File.WriteAllBytes(strayJarPath, new byte[] { 9 });
-        fileOps.ThrowOnDelete = path => path == strayJarPath;
+        fileOps.ThrowOnMove = (from, to) => from == strayJarPath;
 
         var outcome = await engine.RunFastUpdateAsync(target, PreviouslyInstalled, dryRun: false, log: null, CancellationToken.None);
 
-        Assert.False(outcome.Success, "a cleanup failure must never be reported as success");
+        Assert.False(outcome.Success, "a retirement failure must never be reported as success");
         // The transaction rolls back to exactly the previous working state - the old owned jar is restored.
         Assert.True(File.Exists(OldJarPath(paths)));
         Assert.False(File.Exists(NewJarPath(paths, target)), "the new jar must not remain active after a failed transaction");
+        Assert.True(File.Exists(strayJarPath), "the stray jar itself is left in place if it could not be safely backed up");
     }
 
     // ------------------------------------------------------------------

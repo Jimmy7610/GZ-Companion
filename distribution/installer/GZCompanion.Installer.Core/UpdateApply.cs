@@ -29,6 +29,31 @@ public static class PidWaiter
         return !isStillRunning(pid);
     }
 
+    /// <summary>
+    /// Genuinely asynchronous twin of <see cref="WaitForExit"/> - used by
+    /// <see cref="MinecraftExitGuard.WaitUntilSafeToMutateAsync"/> so a real wait (which can take
+    /// minutes at the real poll budgets) never blocks its caller's thread, most importantly the
+    /// WinForms UI thread driving <see cref="Object"/>-less orchestration in
+    /// GZCompanion.Installer.App. <paramref name="delayAsync"/> is real
+    /// <c>ct =&gt; Task.Delay(1000, ct)</c> in production and <c>_ =&gt; Task.CompletedTask</c> in
+    /// tests, so tests never actually sleep. Honors <paramref name="ct"/> between every poll and
+    /// every delay, so cancelling stops the wait immediately rather than only at the next full poll.
+    /// </summary>
+    public static async Task<bool> WaitForExitAsync(int pid, Func<int, bool> isStillRunning, Func<CancellationToken, Task> delayAsync, int maxPolls, CancellationToken ct)
+    {
+        for (int i = 0; i < maxPolls; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!isStillRunning(pid))
+            {
+                return true;
+            }
+            await delayAsync(ct).ConfigureAwait(false);
+        }
+        ct.ThrowIfCancellationRequested();
+        return !isStillRunning(pid);
+    }
+
     /// <summary>Real "is this PID still running" probe - a PID that no longer exists reports NOT running (already exited).</summary>
     public static bool IsProcessRunning(int pid)
     {

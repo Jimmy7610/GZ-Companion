@@ -36,7 +36,7 @@ public class UpdateApplyCoordinatorTests : IDisposable
             FromVersion: "0.1.0-alpha.1",
             IsPidRunning: isPidRunning,
             IsAnyMinecraftGameRunning: isAnyMinecraftGameRunning,
-            Delay: () => { },
+            DelayAsync: _ => Task.CompletedTask,
             PidMaxPolls: pidMaxPolls,
             OtherProcessMaxPolls: otherProcessMaxPolls,
             Downloader: downloader ?? new FakeDownloader(),
@@ -114,5 +114,38 @@ public class UpdateApplyCoordinatorTests : IDisposable
         Assert.NotNull(outcome.InstallResult); // InstallEngine.RunAsync was actually invoked
         Assert.False(outcome.UsedFastPath);
         Assert.NotEmpty(downloader.RequestedUrls); // it genuinely tried to fetch the loader profile
+    }
+
+    // --- Cancellation (Blocker 1B): the user may only cancel before mutation could have started. ---
+
+    [Fact]
+    public async Task CancelledBeforePidExits_ReturnsCancelled_NoDownloadsNoEngineInvoked()
+    {
+        var downloader = new FakeDownloader();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel(); // simulates the user clicking "Avbryt" while still WaitingForMinecraft
+        var request = BuildRequest(isPidRunning: _ => true, isAnyMinecraftGameRunning: () => false, downloader: downloader);
+
+        var outcome = await new UpdateApplyCoordinator().RunAsync(request, progress: null, cts.Token);
+
+        Assert.Equal(UpdateApplyPhase.Cancelled, outcome.Phase);
+        Assert.Null(outcome.InstallResult); // InstallEngine never constructed
+        Assert.Empty(downloader.RequestedUrls); // zero file mutation
+        Assert.False(Directory.Exists(Path.Combine(_tempRoot, "local")));
+    }
+
+    [Fact]
+    public async Task CancelledBeforePidExits_ReportsWaitingThenCancelledPhases()
+    {
+        var progress = new SyncProgress<UpdateApplyProgress>();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var request = BuildRequest(isPidRunning: _ => true, isAnyMinecraftGameRunning: () => false);
+
+        await new UpdateApplyCoordinator().RunAsync(request, progress, cts.Token);
+
+        Assert.Equal(
+            new[] { UpdateApplyPhase.WaitingForMinecraft, UpdateApplyPhase.Cancelled },
+            progress.Reported.Select(p => p.Phase));
     }
 }

@@ -51,4 +51,46 @@ public static class MinecraftExitGuard
         }
         return new MinecraftExitGuardResult(true, null);
     }
+
+    /// <summary>
+    /// Genuinely asynchronous twin of <see cref="WaitUntilSafeToMutate"/> - the real poll budgets
+    /// (up to 300 + 60 polls, ~6 minutes worst case) must never synchronously block a caller's
+    /// thread, most importantly the WinForms UI thread that owns the update-status window. Identical
+    /// decision logic to the sync version; only the waiting mechanism changed.
+    ///
+    /// <para>Honors <paramref name="ct"/> by letting <see cref="OperationCanceledException"/>
+    /// propagate rather than swallowing it into an "unsafe" result - the caller
+    /// (<see cref="UpdateApplyCoordinator"/>) distinguishes "the user cancelled" from "it's unsafe to
+    /// mutate" and reports them as different outcomes, but both guarantee the same thing: this method
+    /// returns (or throws) before <see cref="InstallEngine"/> is ever constructed.</para>
+    /// </summary>
+    public static async Task<MinecraftExitGuardResult> WaitUntilSafeToMutateAsync(
+        int targetPid,
+        Func<int, bool> isPidRunning,
+        Func<bool> isAnyMinecraftGameRunning,
+        Func<CancellationToken, Task> delayAsync,
+        int pidMaxPolls,
+        int otherProcessMaxPolls,
+        CancellationToken ct)
+    {
+        bool targetExited = await PidWaiter.WaitForExitAsync(targetPid, isPidRunning, delayAsync, pidMaxPolls, ct).ConfigureAwait(false);
+
+        if (targetExited)
+        {
+            for (int i = 0; i < otherProcessMaxPolls && isAnyMinecraftGameRunning(); i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                await delayAsync(ct).ConfigureAwait(false);
+            }
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        bool stillUnsafe = !targetExited || isAnyMinecraftGameRunning();
+        if (stillUnsafe)
+        {
+            return new MinecraftExitGuardResult(false, "Minecraft kör fortfarande. Stäng Minecraft och försök igen.");
+        }
+        return new MinecraftExitGuardResult(true, null);
+    }
 }

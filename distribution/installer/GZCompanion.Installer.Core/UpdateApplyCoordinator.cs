@@ -5,6 +5,9 @@ public enum UpdateApplyPhase
     WaitingForMinecraft,
     /// <summary>Terminal failure - the update worker aborted with ZERO file mutation.</summary>
     OtherMinecraftRunning,
+    /// <summary>Terminal - the user cancelled while still waiting for Minecraft to close, before any
+    /// file mutation could possibly have started. See <see cref="UpdateApplyClosePolicy"/>.</summary>
+    Cancelled,
     Verifying,
     Installing,
     /// <summary>Terminal - the full-update path is required but the Launcher app is open. Never force-closed.</summary>
@@ -28,7 +31,9 @@ public sealed record UpdateApplyRequest(
     string FromVersion,
     Func<int, bool> IsPidRunning,
     Func<bool> IsAnyMinecraftGameRunning,
-    Action Delay,
+    /// <summary>Real: <c>ct =&gt; Task.Delay(1000, ct)</c>. Tests: <c>_ =&gt; Task.CompletedTask</c> -
+    /// never a real sleep. See <see cref="MinecraftExitGuard.WaitUntilSafeToMutateAsync"/>.</summary>
+    Func<CancellationToken, Task> DelayAsync,
     int PidMaxPolls,
     int OtherProcessMaxPolls,
     IFileDownloader Downloader,
@@ -62,8 +67,23 @@ public sealed class UpdateApplyCoordinator
     {
         progress?.Report(new UpdateApplyProgress(UpdateApplyPhase.WaitingForMinecraft, "Väntar på att Minecraft ska stängas..."));
 
-        var guard = MinecraftExitGuard.WaitUntilSafeToMutate(
-            req.WaitPid, req.IsPidRunning, req.IsAnyMinecraftGameRunning, req.Delay, req.PidMaxPolls, req.OtherProcessMaxPolls);
+        MinecraftExitGuardResult guard;
+        try
+        {
+            // Genuinely async - the real poll budgets (up to ~6 minutes) must never block the
+            // caller's thread. Cancelling here (only possible before this returns, i.e. only while
+            // still WaitingForMinecraft - see UpdateApplyClosePolicy) throws OperationCanceledException,
+            // caught below, WITHOUT ever constructing InstallEngineDependencies or InstallEngine.
+            guard = await MinecraftExitGuard.WaitUntilSafeToMutateAsync(
+                req.WaitPid, req.IsPidRunning, req.IsAnyMinecraftGameRunning, req.DelayAsync,
+                req.PidMaxPolls, req.OtherProcessMaxPolls, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            const string msg = "Uppdateringen avbröts.";
+            progress?.Report(new UpdateApplyProgress(UpdateApplyPhase.Cancelled, msg));
+            return new UpdateApplyOutcome(UpdateApplyPhase.Cancelled, null, msg, UsedFastPath: false);
+        }
 
         if (!guard.SafeToMutate)
         {

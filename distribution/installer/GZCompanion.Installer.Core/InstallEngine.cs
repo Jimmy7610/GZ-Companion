@@ -234,6 +234,11 @@ public sealed class InstallEngine
             //    directory (unlike the loader itself, this is never shared launcher infrastructure).
             Emit("Hämtar Fabric API...");
             string fabricApiPath = Path.Combine(paths.GzCompanionModsDir, target.FabricApi.FileName);
+            // Read BEFORE step 7 overwrites installed.json, so a previously GZ-owned Fabric API
+            // jar under a DIFFERENT filename (e.g. a Fabric API version bump alongside this
+            // Minecraft/Fabric Loader change) can be identified and removed after the new one is
+            // safely in place - see the ownership note on step 4b below.
+            string? previousOwnedFabricApiFileName = InstalledStateStore.TryRead(paths.InstalledManifestPath)?.FabricApiFileName;
             if (!dryRun)
             {
                 bool alreadyGood = File.Exists(fabricApiPath) && HashMatches(fabricApiPath, target.FabricApi.Sha256);
@@ -244,6 +249,26 @@ public sealed class InstallEngine
                 }
             }
             Record("fabric-api", target.FabricApi.FileName);
+
+            // 4b. Clean up a PREVIOUSLY GZ-owned Fabric API jar left under a different filename,
+            //     now that the new one above is confirmed correctly in place. Ownership must be
+            //     EXPLICIT (InstalledState.FabricApiFileName, schema v2+) - an old installed.json
+            //     with no recorded ownership (schema v1) is left alone rather than guessed at from
+            //     a naming convention, exactly like the fast path (see
+            //     InstallEngine.RunFastUpdateAsync and InstalledState's doc comment). This is a
+            //     plain delete, not a backed-up rename, matching this method's existing (non-
+            //     transactional) risk profile - see the stale gzcompanion-*.jar cleanup two lines
+            //     above step 5, which has always worked the same way.
+            if (!dryRun && previousOwnedFabricApiFileName is not null
+                && !string.Equals(previousOwnedFabricApiFileName, target.FabricApi.FileName, StringComparison.OrdinalIgnoreCase))
+            {
+                string previousFabricApiPath = Path.Combine(paths.GzCompanionModsDir, previousOwnedFabricApiFileName);
+                if (File.Exists(previousFabricApiPath))
+                {
+                    File.Delete(previousFabricApiPath);
+                }
+                Record("fabric-api-old-cleanup", $"removed {previousOwnedFabricApiFileName}");
+            }
 
             // 5. GZ Companion's own jar - embedded inside this installer, never downloaded, and
             //    any older gzcompanion-*.jar in mods is removed first so a reinstall/update never
@@ -293,12 +318,17 @@ public sealed class InstallEngine
                 Record("launcher-profile", Path.GetFileName(profilePath));
             }
 
-            // 7. Our own install-state bookkeeping (for future reinstall/update/uninstall).
+            // 7. Our own install-state bookkeeping (for future reinstall/update/uninstall). Always
+            //    written as schema v2 with explicit file ownership, even when this install replaced
+            //    a schema v1 (ownership-less) previous state - see InstalledState's doc comment.
             if (!dryRun)
             {
                 InstalledStateStore.Write(paths.InstalledManifestPath, new InstalledState(
                     target.CompanionVersion, target.MinecraftVersion, target.FabricLoaderVersion, target.FabricApiVersion,
-                    _deps.Clock().ToString("O")));
+                    _deps.Clock().ToString("O"),
+                    SchemaVersion: 2,
+                    CompanionJarFileName: target.CompanionJar.FileName,
+                    FabricApiFileName: target.FabricApi.FileName));
             }
             Record("installed-state", target.CompanionVersion);
 
@@ -313,32 +343,44 @@ public sealed class InstallEngine
     /// <summary>
     /// The SAFE UPDATE FAST PATH for <c>--apply-update</c> (see <see cref="FastPathDecision.CanUseFastPath"/>):
     /// updates ONLY the files GZ Companion exclusively owns (its own mod jar, and Fabric API if its
-    /// hash changed) and rewrites <c>installed.json</c> - and NOTHING else. Deliberately does NOT:
-    /// check whether the Minecraft Launcher app is open (safe, since launcher_profiles.json is never
-    /// touched), create the shared Fabric versions/libraries directories, contact the Fabric Meta
-    /// API, seed servers.dat, or write to any launcher profile file. The caller is responsible for
-    /// having already confirmed the Minecraft GAME process has exited before calling this.
+    /// hash or filename changed) and rewrites <c>installed.json</c> - and NOTHING else. Deliberately
+    /// does NOT: check whether the Minecraft Launcher app is open (safe, since launcher_profiles.json
+    /// is never touched), create the shared Fabric versions/libraries directories, contact the
+    /// Fabric Meta API, seed servers.dat, or write to any launcher profile file. The caller is
+    /// responsible for having already confirmed the Minecraft GAME process has exited before calling
+    /// this.
     ///
     /// <para><b>This is a genuine transaction, not merely staged-then-verified:</b></para>
     /// <list type="number">
-    ///   <item>Ownership of the currently-active jar is derived from <paramref name="previouslyInstalled"/>
-    ///     (<c>gzcompanion-&lt;installed CompanionVersion&gt;.jar</c>) - never guessed from a directory scan.</item>
+    ///   <item>Ownership of the currently-active Companion jar comes from
+    ///     <paramref name="previouslyInstalled"/>.CompanionJarFileName when explicitly recorded
+    ///     (schema v2+), falling back to the pre-existing <c>gzcompanion-&lt;installed
+    ///     CompanionVersion&gt;.jar</c> convention only when it isn't - never guessed beyond that.
+    ///     Ownership of the currently-active Fabric API jar is EXPLICIT ONLY
+    ///     (<paramref name="previouslyInstalled"/>.FabricApiFileName) - an old installed.json with no
+    ///     recorded ownership (schema v1) means "not confidently known", and this never guesses a
+    ///     filename from the version string for Fabric API. See <see cref="InstalledState"/>.</item>
     ///   <item>The new Fabric API (if needed) and the new Companion jar are BOTH staged and
     ///     hash-verified in full BEFORE anything old is touched.</item>
-    ///   <item>Only then does the commit begin: the old owned jar (and old Fabric API, if it's
-    ///     being replaced) are renamed to a <c>.update-backup</c> file - never deleted outright -
-    ///     before the new, verified file is moved into the active place.</item>
-    ///   <item>Any other stale <c>gzcompanion-*.jar</c> is removed only after the new jar is
-    ///     confirmed active.</item>
+    ///   <item>Only then does the commit begin: every old owned file being retired - the previous
+    ///     Companion jar(s) (there should normally be exactly one, but a prior interrupted run could
+    ///     have left more than one stale copy behind) and the old Fabric API jar, if one is being
+    ///     replaced - is renamed to its own <c>.update-backup</c> file - never deleted outright -
+    ///     before the new, verified file is moved into the active place. This covers a Fabric API
+    ///     filename change too (e.g. a Fabric API version bump on its own): the old-named file is
+    ///     retired and the new-named file is placed alongside it, never left as two active copies.
+    ///     When ownership of the Fabric API is unknown (schema v1), no old file is touched at all -
+    ///     only whatever already occupies the NEW target path (if anything) gets backed up before
+    ///     being overwritten, exactly as if this were a same-filename update.</item>
     ///   <item><c>installed.json</c> is written LAST, only once every file operation above
-    ///     succeeded.</item>
+    ///     succeeded - always as schema v2, recording both files' exact names for the next update.</item>
     ///   <item>Only once installed-state is confirmed written are the <c>.update-backup</c> files
     ///     deleted for good.</item>
     ///   <item>If ANY step from the commit phase onward throws, EVERYTHING done since backups were
-    ///     created is undone: the new files are removed, the old jar/Fabric API are restored from
-    ///     their backups, and installed-state is restored to its previous content (or removed if it
-    ///     didn't exist before) - leaving exactly the previous working version active, never two
-    ///     Companion jars and never a false success.</item>
+    ///     created is undone: the new files are removed, every retired file is restored from its
+    ///     backup, and installed-state is restored to its previous content (or removed if it didn't
+    ///     exist before) - leaving exactly the previous working version active, never two active
+    ///     Companion or Fabric API jars and never a false success.</item>
     /// </list>
     /// </summary>
     public async Task<InstallOutcome> RunFastUpdateAsync(SupportedEntry target, InstalledState previouslyInstalled, bool dryRun, IProgress<string>? log, CancellationToken ct)
@@ -349,22 +391,31 @@ public sealed class InstallEngine
         var paths = _deps.Paths;
         var fileOps = _deps.FastUpdateFileOps ?? new RealFastUpdateFileOps();
 
-        string ownedJarFileName = $"gzcompanion-{previouslyInstalled.CompanionVersion}.jar";
+        string ownedJarFileName = previouslyInstalled.CompanionJarFileName ?? $"gzcompanion-{previouslyInstalled.CompanionVersion}.jar";
         string oldJarPath = Path.Combine(paths.GzCompanionModsDir, ownedJarFileName);
         string newJarPath = Path.Combine(paths.GzCompanionModsDir, target.CompanionJar.FileName);
         string newJarStagingPath = newJarPath + ".staging";
-        string jarBackupPath = oldJarPath + ".update-backup";
-
-        string fabricApiPath = Path.Combine(paths.GzCompanionModsDir, target.FabricApi.FileName);
-        string fabricApiStagingPath = fabricApiPath + ".staging";
-        string fabricApiBackupPath = fabricApiPath + ".update-backup";
-
         bool sameJarName = string.Equals(oldJarPath, newJarPath, StringComparison.OrdinalIgnoreCase);
-        bool jarBackedUp = false;
+
+        // Fabric API ownership is EXPLICIT ONLY (never guessed from FabricApiVersion) - see the doc
+        // comment above and InstalledState.FabricApiFileName.
+        string? oldFabricApiFileName = previouslyInstalled.FabricApiFileName;
+        string newFabricApiFileName = target.FabricApi.FileName;
+        string newFabricApiPath = Path.Combine(paths.GzCompanionModsDir, newFabricApiFileName);
+        string newFabricApiStagingPath = newFabricApiPath + ".staging";
+        bool fabricApiOwnershipKnownAndDifferentName = oldFabricApiFileName is not null
+            && !string.Equals(oldFabricApiFileName, newFabricApiFileName, StringComparison.OrdinalIgnoreCase);
+        string? oldFabricApiPathIfKnown = oldFabricApiFileName is not null
+            ? Path.Combine(paths.GzCompanionModsDir, oldFabricApiFileName)
+            : null;
+
         bool newJarPlaced = false;
-        bool fabricApiNeedsReplace = false;
-        bool fabricApiBackedUp = false;
+        var companionRetireesBackedUp = new List<(string Original, string Backup)>();
+        bool fabricApiNeedsDownload = false;
         bool fabricApiPlaced = false;
+        string? fabricApiRetireePath = null;
+        string? fabricApiRetireeBackupPath = null;
+        bool fabricApiRetireeBackedUp = false;
         bool installedStateWritten = false;
         string? previousInstalledStateJson = null;
 
@@ -378,11 +429,12 @@ public sealed class InstallEngine
 
             // --- STAGE everything new FIRST - nothing old is touched yet. ---
             Emit("Kontrollerar Fabric API...");
-            fabricApiNeedsReplace = !(fileOps.Exists(fabricApiPath) && HashMatches(fabricApiPath, target.FabricApi.Sha256));
-            if (!dryRun && fabricApiNeedsReplace)
+            bool newFabricApiAlreadyGood = fileOps.Exists(newFabricApiPath) && HashMatches(newFabricApiPath, target.FabricApi.Sha256);
+            fabricApiNeedsDownload = !newFabricApiAlreadyGood;
+            if (!dryRun && fabricApiNeedsDownload)
             {
-                await _deps.Downloader.DownloadToFileAsync(new Uri(target.FabricApi.DownloadUrl), fabricApiStagingPath, progress: null, ct).ConfigureAwait(false);
-                Sha256.VerifyOrThrow(fabricApiStagingPath, target.FabricApi.Sha256, "Fabric API");
+                await _deps.Downloader.DownloadToFileAsync(new Uri(target.FabricApi.DownloadUrl), newFabricApiStagingPath, progress: null, ct).ConfigureAwait(false);
+                Sha256.VerifyOrThrow(newFabricApiStagingPath, target.FabricApi.Sha256, "Fabric API");
             }
 
             Emit("Hämtar ny GZ Companion-version...");
@@ -394,50 +446,77 @@ public sealed class InstallEngine
             }
             Record("staged", "new files downloaded and hash-verified");
 
-            // --- COMMIT: back up the old owned files, then swap in the new, verified ones. ---
+            // Every gzcompanion-*.jar currently present, other than the new target file, is an "old
+            // owned" file to retire - normally just the single previously-active jar, but a prior
+            // interrupted run could have left more than one. Determined here (read-only), acted on
+            // in the commit phase below - this is what fixes the previous "stale jar cleanup can
+            // delete outside the rollback's reach" gap: every retiree is renamed (reversible), never
+            // deleted outright, until the whole transaction is confirmed successful.
+            var companionRetireePaths = new List<string>();
+            if (!sameJarName && fileOps.Exists(oldJarPath))
+            {
+                companionRetireePaths.Add(oldJarPath);
+            }
+            if (Directory.Exists(paths.GzCompanionModsDir))
+            {
+                foreach (var existing in Directory.EnumerateFiles(paths.GzCompanionModsDir, "gzcompanion-*.jar"))
+                {
+                    if (existing.EndsWith(".update-backup", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (string.Equals(Path.GetFileName(existing), target.CompanionJar.FileName, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!companionRetireePaths.Any(p => string.Equals(p, existing, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        companionRetireePaths.Add(existing);
+                    }
+                }
+            }
+
+            // The ONE old Fabric API file (if any) that needs backing up before the new one is
+            // placed - either the explicitly-owned old-named file (a genuine filename change), or
+            // whatever already occupies the NEW target path when ownership is unknown or the
+            // filename is unchanged (a same-path overwrite, exactly like before this change).
+            if (fabricApiNeedsDownload)
+            {
+                if (fabricApiOwnershipKnownAndDifferentName && fileOps.Exists(oldFabricApiPathIfKnown!))
+                {
+                    fabricApiRetireePath = oldFabricApiPathIfKnown;
+                }
+                else if (!fabricApiOwnershipKnownAndDifferentName && fileOps.Exists(newFabricApiPath))
+                {
+                    fabricApiRetireePath = newFabricApiPath;
+                }
+                if (fabricApiRetireePath is not null)
+                {
+                    fabricApiRetireeBackupPath = fabricApiRetireePath + ".update-backup";
+                }
+            }
+
+            // --- COMMIT: back up every old owned file, then swap in the new, verified ones. ---
             if (!dryRun)
             {
                 Emit("Byter ut GZ Companion...");
 
-                if (!sameJarName && fileOps.Exists(oldJarPath))
+                foreach (var retiree in companionRetireePaths)
                 {
-                    fileOps.Move(oldJarPath, jarBackupPath);
-                    jarBackedUp = true;
+                    string backupPath = retiree + ".update-backup";
+                    fileOps.Move(retiree, backupPath);
+                    companionRetireesBackedUp.Add((retiree, backupPath));
                 }
                 fileOps.Move(newJarStagingPath, newJarPath);
                 newJarPlaced = true;
 
-                if (fabricApiNeedsReplace)
+                if (fabricApiRetireePath is not null)
                 {
-                    if (fileOps.Exists(fabricApiPath))
-                    {
-                        fileOps.Move(fabricApiPath, fabricApiBackupPath);
-                        fabricApiBackedUp = true;
-                    }
-                    fileOps.Move(fabricApiStagingPath, fabricApiPath);
+                    fileOps.Move(fabricApiRetireePath, fabricApiRetireeBackupPath!);
+                    fabricApiRetireeBackedUp = true;
+                }
+                if (fabricApiNeedsDownload)
+                {
+                    fileOps.Move(newFabricApiStagingPath, newFabricApiPath);
                     fabricApiPlaced = true;
                 }
             }
             Record("fabric-api", target.FabricApi.FileName);
             Record("companion-jar", target.CompanionJar.FileName);
-
-            // Remove any OTHER stale gzcompanion-*.jar - the just-backed-up old owned jar is
-            // already gone from this directory listing (it was moved to its backup name above), so
-            // this only ever catches a genuinely unrelated leftover. A failure here still rolls
-            // back the WHOLE transaction (see catch below) - a stray extra jar must never be
-            // reported as a successful, single-active-jar update.
-            if (!dryRun && Directory.Exists(paths.GzCompanionModsDir))
-            {
-                foreach (var stale in Directory.EnumerateFiles(paths.GzCompanionModsDir, "gzcompanion-*.jar"))
-                {
-                    string staleName = Path.GetFileName(stale);
-                    if (staleName.EndsWith(".update-backup", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!string.Equals(staleName, target.CompanionJar.FileName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        fileOps.Delete(stale);
-                    }
-                }
-            }
 
             // --- installed.json is written LAST, only once every file operation above succeeded. ---
             if (!dryRun)
@@ -449,7 +528,10 @@ public sealed class InstallEngine
                 }
                 string newStateJson = InstalledStateStore.Serialize(new InstalledState(
                     target.CompanionVersion, target.MinecraftVersion, target.FabricLoaderVersion, target.FabricApiVersion,
-                    _deps.Clock().ToString("O")));
+                    _deps.Clock().ToString("O"),
+                    SchemaVersion: 2,
+                    CompanionJarFileName: target.CompanionJar.FileName,
+                    FabricApiFileName: target.FabricApi.FileName));
                 fileOps.WriteAllText(paths.InstalledManifestPath, newStateJson);
                 installedStateWritten = true;
             }
@@ -458,8 +540,14 @@ public sealed class InstallEngine
             // --- Only now, after installed-state is confirmed written, discard the backups. ---
             if (!dryRun)
             {
-                TryDeleteQuietly(jarBackupPath);
-                TryDeleteQuietly(fabricApiBackupPath);
+                foreach (var (_, backup) in companionRetireesBackedUp)
+                {
+                    TryDeleteQuietly(backup);
+                }
+                if (fabricApiRetireeBackedUp)
+                {
+                    TryDeleteQuietly(fabricApiRetireeBackupPath!);
+                }
             }
             Record("launcher-profile-skipped", "fast path - Minecraft/Fabric Loader version unchanged, launcher_profiles.json was never opened");
 
@@ -469,8 +557,9 @@ public sealed class InstallEngine
         {
             if (!dryRun)
             {
-                RollBackFastUpdate(paths, fileOps, newJarPath, newJarStagingPath, oldJarPath, jarBackupPath, jarBackedUp, newJarPlaced,
-                    fabricApiPath, fabricApiStagingPath, fabricApiBackupPath, fabricApiBackedUp, fabricApiPlaced,
+                RollBackFastUpdate(paths, fileOps, newJarPath, newJarStagingPath, newJarPlaced, companionRetireesBackedUp,
+                    newFabricApiPath, newFabricApiStagingPath, fabricApiPlaced,
+                    fabricApiRetireePath, fabricApiRetireeBackupPath, fabricApiRetireeBackedUp,
                     installedStateWritten, previousInstalledStateJson);
             }
             return new InstallOutcome(Success: false, DryRun: dryRun, Steps: steps, ErrorMessage: ex.Message);
@@ -485,25 +574,26 @@ public sealed class InstallEngine
     /// </summary>
     private static void RollBackFastUpdate(
         InstallPaths paths, IFastUpdateFileOps fileOps,
-        string newJarPath, string newJarStagingPath, string oldJarPath, string jarBackupPath, bool jarBackedUp, bool newJarPlaced,
-        string fabricApiPath, string fabricApiStagingPath, string fabricApiBackupPath, bool fabricApiBackedUp, bool fabricApiPlaced,
+        string newJarPath, string newJarStagingPath, bool newJarPlaced, List<(string Original, string Backup)> companionRetireesBackedUp,
+        string newFabricApiPath, string newFabricApiStagingPath, bool fabricApiPlaced,
+        string? fabricApiRetireePath, string? fabricApiRetireeBackupPath, bool fabricApiRetireeBackedUp,
         bool installedStateWritten, string? previousInstalledStateJson)
     {
         if (newJarPlaced)
         {
             TryDeleteQuietly(newJarPath);
         }
-        if (jarBackedUp)
+        foreach (var (original, backup) in companionRetireesBackedUp)
         {
-            TryMoveBackQuietly(fileOps, jarBackupPath, oldJarPath);
+            TryMoveBackQuietly(fileOps, backup, original);
         }
         if (fabricApiPlaced)
         {
-            TryDeleteQuietly(fabricApiPath);
+            TryDeleteQuietly(newFabricApiPath);
         }
-        if (fabricApiBackedUp)
+        if (fabricApiRetireeBackedUp)
         {
-            TryMoveBackQuietly(fileOps, fabricApiBackupPath, fabricApiPath);
+            TryMoveBackQuietly(fileOps, fabricApiRetireeBackupPath!, fabricApiRetireePath!);
         }
         if (installedStateWritten)
         {
@@ -517,7 +607,7 @@ public sealed class InstallEngine
             }
         }
         TryDeleteQuietly(newJarStagingPath);
-        TryDeleteQuietly(fabricApiStagingPath);
+        TryDeleteQuietly(newFabricApiStagingPath);
     }
 
     private static void TryMoveBackQuietly(IFastUpdateFileOps fileOps, string from, string to)

@@ -201,7 +201,8 @@ internal static class Program
             isPidRunning: _ => false, // an isolated test-root run has no real PID to wait for
             isAnyMinecraftGameRunning: () => false,
             pidMaxPolls: 0, otherProcessMaxPolls: 0,
-            isLauncherRunning: () => false); // isolated sandbox - never touches a real launcher_profiles.json
+            isLauncherRunning: () => false, // isolated sandbox - never touches a real launcher_profiles.json
+            delayAsync: _ => Task.CompletedTask); // headless smoke test - never a real sleep
     }
 
     private static UpdateApplyRequest BuildRealApplyUpdateRequest(int waitPid, string fromVersion)
@@ -212,13 +213,15 @@ internal static class Program
             isPidRunning: PidWaiter.IsProcessRunning,
             isAnyMinecraftGameRunning: () => EnvironmentDetection.IsMinecraftLikelyRunning(realProcessLister),
             pidMaxPolls: 300, otherProcessMaxPolls: 60, // ~5 minutes, then ~1 more minute grace for any other MC process
-            isLauncherRunning: () => EnvironmentDetection.IsMinecraftLauncherRunning(realProcessLister));
+            isLauncherRunning: () => EnvironmentDetection.IsMinecraftLauncherRunning(realProcessLister),
+            delayAsync: ct => Task.Delay(1000, ct)); // genuinely async - never blocks the WinForms UI thread
     }
 
     private static UpdateApplyRequest BuildApplyUpdateRequest(
         InstallPaths paths, int waitPid, string fromVersion,
         Func<int, bool> isPidRunning, Func<bool> isAnyMinecraftGameRunning,
-        int pidMaxPolls, int otherProcessMaxPolls, Func<bool> isLauncherRunning)
+        int pidMaxPolls, int otherProcessMaxPolls, Func<bool> isLauncherRunning,
+        Func<CancellationToken, Task> delayAsync)
     {
         CompatibilityManifest manifest;
         using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("compatibility.json")!)
@@ -233,7 +236,7 @@ internal static class Program
             FromVersion: fromVersion,
             IsPidRunning: isPidRunning,
             IsAnyMinecraftGameRunning: isAnyMinecraftGameRunning,
-            Delay: () => Thread.Sleep(1000),
+            DelayAsync: delayAsync,
             PidMaxPolls: pidMaxPolls,
             OtherProcessMaxPolls: otherProcessMaxPolls,
             Downloader: new HttpsFileDownloader($"GZCompanionInstaller/{InstallerVersion}"),

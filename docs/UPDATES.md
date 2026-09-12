@@ -158,19 +158,39 @@ leaves the game already closed with nothing able to apply the update.
 
 The update worker first waits for that specific Minecraft process to exit, then additionally
 confirms no other Minecraft game process is still using the installation, before touching any
-file. It then picks one of two paths:
+file. This wait is genuinely asynchronous (`MinecraftExitGuard.WaitUntilSafeToMutateAsync`), so
+the dedicated update-status window stays fully responsive - repaints, moves, and reacts to
+"Avbryt"/"Stäng" - for the entire wait, which can take minutes at the real poll budgets (~5
+minutes for the target process, plus ~1 more minute grace for any other Minecraft process). Before
+that wait completes, a player may safely cancel via "Avbryt" (or the window's own close button/X/
+Alt+F4, which behave the same at this stage) - nothing has been touched yet. Once the wait
+completes and file mutation could possibly begin (Verifying/Installing), the window can no longer
+be closed by any means until the transaction reaches a terminal outcome - see
+`UpdateApplyClosePolicy`.
+
+It then picks one of two paths:
 
 - **Safe fast path** (the common case): if the previous installation already targets the exact
   same Minecraft version AND Fabric Loader version the update also targets, `launcher_profiles.json`
   is NEVER opened, and the Minecraft Launcher app may stay open the whole time. Only GZ Companion's
-  own mod jar (and Fabric API, if its hash changed) are replaced, using the same staged-then-
-  verified-then-atomically-renamed pattern as a fresh install, and the OLD jar is only removed
-  after the NEW one is confirmed good.
+  own mod jar and Fabric API jar are touched, using the same staged-then-verified-then-atomically-
+  renamed pattern as a fresh install. Fabric API can change FILENAME between versions (not just
+  hash) - the old file is identified via `installed.json`'s explicit ownership record
+  (`companionJarFileName`/`fabricApiFileName`, schema v2+) and retired via the same backup-rename
+  as the Companion jar, never left behind under its old name. A schema v1 `installed.json` (written
+  by 0.1.0-alpha.2's original release, before this ownership tracking existed) has no such record;
+  in that legacy case a differently-named old Fabric API file is left alone entirely rather than
+  guessed at - it is orphaned, not deleted, and self-heals on the NEXT update once ownership has
+  been recorded once. Every retired file (the OLD jar, and any other stray `gzcompanion-*.jar`
+  found alongside it) is renamed to `.update-backup`, never deleted outright, until the whole
+  transaction including the final `installed.json` write is confirmed successful.
 - **Full path fallback**: if the Minecraft or Fabric Loader version is changing (or there's no
   readable previous install-state to safely confirm otherwise), the existing, already-proven full
   `InstallEngine` install path is reused - which DOES require the Minecraft Launcher app closed,
   exactly like a first-time install. If it's open, the player sees "Stäng Minecraft Launcher för
   att fortsätta" with a "Försök igen" button; GZ Companion never force-closes the Launcher itself.
+  This path also removes a previously GZ-owned Fabric API jar under a different filename once the
+  new one is confirmed in place, using the same explicit-ownership-only rule as the fast path.
 
 Either way, updater failures never destroy a working installation: every new file is staged and
 hash-verified before anything old is removed, and `installed.json` is written last, only once
