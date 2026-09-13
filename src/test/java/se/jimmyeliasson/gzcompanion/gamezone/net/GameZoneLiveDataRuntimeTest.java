@@ -12,7 +12,10 @@ import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardStatus;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -37,16 +40,31 @@ class GameZoneLiveDataRuntimeTest {
     }
 
     @Test
-    @DisplayName("executor() creates the worker only on first call, then reuses the same instance")
-    void executorIsCreatedOnceAndReused() {
+    @DisplayName("submit() creates the worker only on first call, then reuses the same one for later submissions")
+    void executorIsCreatedOnceAndReused() throws InterruptedException {
         GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test");
         assertFalse(runtime.isExecutorInitializedForTesting());
 
-        ExecutorService first = runtime.executor();
+        AtomicReference<Thread> firstThread = new AtomicReference<>();
+        CountDownLatch firstDone = new CountDownLatch(1);
+        assertTrue(runtime.submit(() -> {
+            firstThread.set(Thread.currentThread());
+            firstDone.countDown();
+        }));
+        assertTrue(firstDone.await(2, TimeUnit.SECONDS));
         assertTrue(runtime.isExecutorInitializedForTesting());
 
-        ExecutorService second = runtime.executor();
-        assertSame(first, second, "repeated calls must return the identical executor, never a new one");
+        AtomicReference<Thread> secondThread = new AtomicReference<>();
+        CountDownLatch secondDone = new CountDownLatch(1);
+        assertTrue(runtime.submit(() -> {
+            secondThread.set(Thread.currentThread());
+            secondDone.countDown();
+        }));
+        assertTrue(secondDone.await(2, TimeUnit.SECONDS));
+
+        assertSame(firstThread.get(), secondThread.get(), "repeated submissions must run on the identical worker thread, never a new one");
+        assertEquals("gzcompanion-gamezone-live", firstThread.get().getName());
+        assertTrue(firstThread.get().isDaemon());
     }
 
     @Test
@@ -70,13 +88,13 @@ class GameZoneLiveDataRuntimeTest {
     }
 
     @Test
-    @DisplayName("Requesting the executor never creates the HttpClient, and vice versa - the two are independently lazy")
+    @DisplayName("Submitting work never creates the HttpClient, and vice versa - the two are independently lazy")
     void executorAndHttpClientAreIndependentlyLazy() {
         GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test");
 
-        runtime.executor();
+        runtime.submit(() -> {});
         assertTrue(runtime.isExecutorInitializedForTesting());
-        assertFalse(runtime.isHttpClientInitializedForTesting(), "requesting the executor alone must not construct the HttpClient");
+        assertFalse(runtime.isHttpClientInitializedForTesting(), "submitting work alone must not construct the HttpClient");
 
         GameZoneLiveDataRuntime runtime2 = new GameZoneLiveDataRuntime("0.1.0-test");
         runtime2.httpClient();
@@ -132,5 +150,75 @@ class GameZoneLiveDataRuntimeTest {
         GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test", Duration.ofMillis(250));
         assertNotNull(runtime.httpClient().connectTimeout());
         assertEquals(Duration.ofMillis(250), runtime.httpClient().connectTimeout().orElseThrow());
+    }
+
+    // ------------------------------------------------------------------
+    // Bounded scheduling / explicit rejection (correctness follow-up): the shared worker's queue
+    // is bounded and a rejection is always explicit - never CallerRunsPolicy, which could
+    // otherwise run GameZone HTTP work on whatever thread called submit().
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Once the worker is busy and the bounded queue is completely full, a further submit() is explicitly rejected (returns false)")
+    void submitIsRejectedOnceQueueIsSaturated() throws InterruptedException {
+        GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test");
+        CountDownLatch blockWorker = new CountDownLatch(1);
+        CountDownLatch workerEntered = new CountDownLatch(1);
+
+        // Occupies the single worker thread, blocked, so nothing queued behind it can start.
+        assertTrue(runtime.submit(() -> {
+            workerEntered.countDown();
+            try {
+                blockWorker.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        assertTrue(workerEntered.await(2, TimeUnit.SECONDS));
+
+        // Fill the bounded queue completely.
+        for (int i = 0; i < GameZoneLiveDataRuntime.MAX_QUEUED_JOBS; i++) {
+            assertTrue(runtime.submit(() -> {}), "job " + i + " should still fit in the bounded queue");
+        }
+
+        // The queue is now completely full (worker busy + MAX_QUEUED_JOBS queued) - one more must be rejected.
+        boolean accepted = runtime.submit(() -> {});
+        assertFalse(accepted, "a submit() beyond the bounded capacity must be explicitly rejected, not silently queued or run inline");
+
+        blockWorker.countDown(); // release the worker so the JVM can shut down cleanly
+    }
+
+    @Test
+    @DisplayName("A rejected submit() never runs the task on the calling thread")
+    void rejectedSubmitNeverRunsOnCallingThread() throws InterruptedException {
+        GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test");
+        CountDownLatch blockWorker = new CountDownLatch(1);
+        CountDownLatch workerEntered = new CountDownLatch(1);
+        Thread testThread = Thread.currentThread();
+
+        assertTrue(runtime.submit(() -> {
+            workerEntered.countDown();
+            try {
+                blockWorker.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        assertTrue(workerEntered.await(2, TimeUnit.SECONDS));
+        for (int i = 0; i < GameZoneLiveDataRuntime.MAX_QUEUED_JOBS; i++) {
+            runtime.submit(() -> {});
+        }
+
+        AtomicInteger ranOnCallingThread = new AtomicInteger(0);
+        boolean accepted = runtime.submit(() -> {
+            if (Thread.currentThread() == testThread) {
+                ranOnCallingThread.incrementAndGet();
+            }
+        });
+
+        assertFalse(accepted);
+        assertEquals(0, ranOnCallingThread.get(), "a rejected job must never execute at all, and certainly never on the calling thread");
+
+        blockWorker.countDown();
     }
 }

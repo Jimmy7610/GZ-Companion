@@ -589,3 +589,162 @@ still requires a human at the keyboard - this environment has no tool that can d
 Minecraft/LWJGL window. The static/unit-test evidence above proves the scheduling and laziness
 logic is correct in isolation; it does not substitute for a real interactive session. See this
 pass's final report for the precise, itemized list of what still needs Jimmy's own testing.
+
+---
+
+## Follow-up (2026-09-13): correctness fixes to the performance foundation
+
+This section is dated and appended, not a rewrite of the two sections above - both the original
+audit and the first follow-up's reasoning stand as recorded. An independent code review of the
+first follow-up's implementation (commit `6174970`) found two correctness blockers and one
+foundation-hardening gap in that implementation itself. This section documents what was wrong and
+what was actually fixed. No feature, UI, or version change happened in this pass either.
+
+### What the review found
+
+1. **BLOCKER - production guide-save failures were invisible.** `AsyncGuideProgressStore` was
+   written to catch an exception from `delegate.save(...)`, but the production delegate,
+   `JsonGuideProgressStore.save()`, caught its own `IOException` internally, logged it, and
+   returned normally - it never actually threw. So a real disk failure was silently treated as a
+   success: `lastSaveFailed` stayed `false`, and `flushBounded` could report `true` even though the
+   latest guide state was never actually written to disk. The `FakeStore`-based tests from the
+   first follow-up did not catch this because `FakeStore` itself was written to throw, which the
+   real production store never did.
+2. **BLOCKER - a reset could still be overwritten by a stale pre-reset save.** The first
+   follow-up's `resetContext` bumped an epoch counter and checked it inside the background writer
+   immediately before calling `delegate.save(...)` - but the check and the actual write were two
+   separate steps, not one atomic operation. A worker could pass the epoch check, then have
+   `resetContext` complete and bump the epoch again, and only then perform the actual (now stale)
+   write - undoing the reset. The existing test only proved a *queued-but-not-yet-started* save was
+   dropped; it did not exercise the actual dangerous ordering (a save already accepted/in-flight).
+3. **SHOULD FIX - the shared runtimes exposed a raw, unbounded executor.** `GameZoneLiveDataRuntime`
+   /`LocalPersistenceRuntime` handed out a plain `ExecutorService` built with
+   `Executors.newSingleThreadExecutor` - which uses an unbounded internal queue. `LeaderboardManager`
+   itself never exploits this (its own active+pending scheme keeps at most one job outstanding), but
+   nothing stopped a future, less careful GameZone module from calling `execute()` in a loop and
+   growing that shared queue without bound - and `ThreadingInfrastructureRulesTest` could not have
+   caught that, since such a module would be using the *approved* shared executor, not creating its
+   own.
+
+### Fix 1 - real persistence failure contract
+
+`JsonGuideProgressStore.save()` now throws a new unchecked `GuideProgressPersistenceException`
+(wrapping the underlying `IOException`) instead of catching it and returning normally - it still
+logs, but no longer silently swallows the failure. `GuideProgressStore.resetContext()`'s existing
+implementation calls `save(...)` internally with no try/catch, so the exception propagates through
+it automatically with no code change needed there. `AsyncGuideProgressStore.runSaveThenAdvance()`
+catches this exception specifically (plus a broad `Exception` catch as defense in depth against
+anything unforeseen) - exactly the catch block the first follow-up already had, which simply never
+fired against the real delegate before this fix.
+
+**Retry/durability semantics after a failure**: a failed (or even a couldn't-be-scheduled, see Fix
+3) write is retained as a single `dirtyAfterFailure` field - never discarded - unless a *newer*
+`save()` request has since arrived (a newer `GuideProgressData` snapshot is always a superset of an
+older one, since `GuideEngine` only ever adds completions, so a fresh save silently "retrying" a
+stale failed one loses nothing). `flushBounded(timeout)` gives a dirty write exactly **one** fresh
+retry attempt per call - proven by a dedicated test asserting the delegate is invoked exactly twice
+(the original failed attempt plus one retry), never a repeated hammering loop against a persistently
+broken destination. `flushBounded` now returns `true` if and only if nothing remains active,
+pending, or dirty when it returns - i.e. the latest requested state is actually confirmed persisted,
+closing the exact "flushBounded can report true although the latest state is not durably persisted"
+gap the review found.
+
+### Fix 2 - reset is now a full guarantee, not best-effort
+
+The epoch-counter approach was replaced entirely. `resetContext` now synchronously **drains**
+everything outstanding first - waiting (bounded) for an active write to actually finish, and
+letting any pending write actually run rather than dropping it (so a different context's
+concurrently-queued progress is never lost just because another context was reset) - and only THEN
+performs the reset. This works as a genuine guarantee, not a best-effort one, because Minecraft's
+client/tick/render/input handling is single-threaded and `resetContext` is always called from that
+one thread: while a call to it is on the call stack, no OTHER save can possibly be dispatched from
+production code, so once the drain observes "nothing active or pending," that state cannot change
+underneath it before the reset's own write runs. The wait is bounded (5 seconds, a small
+package-private test-only constructor overload allows a shorter bound for tests) purely so a
+truly-hung disk I/O call cannot hang the reset button forever - hitting that bound in practice would
+mean the underlying disk write itself is stuck, a far bigger problem than this specific ordering
+guarantee, and is logged loudly if it ever happens.
+
+**Deterministic proof of the exact dangerous ordering** the review specified: a test dispatches a
+save, waits for it to be genuinely accepted and paused immediately before its durable write (using
+a `CountDownLatch` pair, no sleep-and-hope), calls `resetContext` from the main test thread (which
+blocks, waiting for the paused write), then releases the paused write. The required result - no
+pre-reset state visible once `resetContext()` returns, using a real `JsonGuideProgressStore` under a
+`ControllableStore` test wrapper, not just call-order bookkeeping - is asserted directly against the
+actual persisted JSON content. Also covered: a save still only pending (not yet dispatched) before
+reset is drained (allowed to run), not dropped; a save requested strictly after reset returns is
+completely unaffected; two contexts' data - one reset, one not - proves the untouched context's
+progress survives; a reset whose own underlying write fails is caught and observable via
+`lastSaveFailed()` without throwing; and a reset whose active write never finishes within the wait
+bound still returns promptly (proceeding with the reset) rather than hanging indefinitely.
+
+### Fix 3 - bounded shared-runtime scheduling, no raw executor exposure
+
+`GameZoneLiveDataRuntime`/`LocalPersistenceRuntime` no longer expose an `ExecutorService` at all.
+The only way to run work on either shared worker now is `boolean submit(Runnable)`. Internally,
+both are backed by a `ThreadPoolExecutor` with a single worker thread (unchanged - still exactly one
+shared daemon thread each) but now a **bounded** `ArrayBlockingQueue` (capacity
+`MAX_QUEUED_JOBS = 8`, comfortably larger than the number of live-data modules this is designed for,
+since each well-behaved module keeps at most one job outstanding at a time) and an explicit
+`ThreadPoolExecutor.AbortPolicy` - **never** `CallerRunsPolicy`, which could otherwise silently run
+a GameZone HTTP request (or a disk write) on whatever thread called `submit` - potentially the
+render/tick thread. A rejection is always just a rejection: `submit` returns `false`, and the caller
+must handle it explicitly.
+
+`LeaderboardManager.startFetchLocked` now checks `submit`'s return value: on rejection, the board's
+snapshot reverts to its previous status (never left stuck showing LOADING for a fetch that will now
+never run) and `activeFetch` is cleared so a later request can still try again. A genuine, if subtle,
+correctness bug surfaced while implementing this: `lastFetchAttemptAt` was previously being recorded
+*before* checking whether the job was actually accepted, which meant a rejected fetch would still
+count against the 60-second auto-refresh floor and silently block a real retry for up to a minute
+even though no network request had actually happened. Fixed by only recording the attempt timestamp
+once `submit` actually returns `true`. `AsyncGuideProgressStore.dispatchLocked` was given the
+equivalent treatment: a rejected submission is treated exactly like a failed write (retained as
+`dirtyAfterFailure`, observable via `lastSaveFailed()`), never silently dropped and never left
+holding an "active" slot with no job that will ever clear it.
+
+### Regression protections added this pass
+
+- `GameZoneLiveDataRuntimeTest`/`LocalPersistenceRuntimeTest` - new tests prove: once the worker is
+  busy and the bounded queue is completely full, a further `submit()` is explicitly rejected; a
+  rejected `submit()` never runs its task on the calling thread (proven by identity-checking
+  `Thread.currentThread()` against the test's own thread from inside the task).
+- `LeaderboardManagerTest` - a new test saturates the shared runtime from outside
+  `LeaderboardManager` entirely (simulating other modules), then proves a rejected fetch reverts to
+  its previous status instead of sticking in LOADING, performs zero actual network work, and that a
+  later request succeeds normally once the runtime is no longer saturated.
+- `AsyncGuideProgressStoreTest` - substantially expanded: real `JsonGuideProgressStore` failure
+  end-to-end (using a deterministic, cross-platform filesystem obstruction - pre-creating a
+  directory at the exact `.tmp` path the store's atomic write needs, which fails the write before
+  any file is touched, needing no OS-specific permissions/ACLs), proving the failure is signaled,
+  the previously-valid file is left byte-for-byte intact, `lastSaveFailed()` becomes true,
+  `flushBounded` reports false, and recovery (removing the obstruction) lets the retained dirty
+  state finally persist and clears the failure flag; the exact required deterministic active-save/
+  reset race, asserted against real persisted JSON content; pending-save draining before reset;
+  other-context preservation; reset-with-failure; reset-timeout-proceeds-anyway.
+- `ThreadingInfrastructureRulesTest` - extended with: a check that neither shared runtime file
+  exposes a public method returning a raw `ExecutorService`/`ThreadPoolExecutor`, that both declare
+  the controlled `submit(...)` API, that neither uses `CallerRunsPolicy` (checked as an actual
+  instantiation, `CallerRunsPolicy(`, not merely the class name appearing in explanatory Javadoc,
+  to avoid a self-defeating false positive against the very comments explaining why it's avoided),
+  and that both use an explicit rejection signal (`AbortPolicy`/`RejectedExecutionException`); a
+  new forbidden-pattern check that no non-allow-listed file may even reference
+  `java.util.concurrent.ExecutorService`/`ScheduledExecutorService` (fully-qualified/import form
+  only, to avoid false-positiving on prose) or directly construct a `ThreadPoolExecutor`/
+  `ScheduledThreadPoolExecutor`.
+
+### Validation performed this pass
+
+- `.\gradlew.bat clean test` - **BUILD SUCCESSFUL**, full suite, zero failures (835 tests total, up
+  from 821 before this pass).
+- `.\gradlew.bat build` - **BUILD SUCCESSFUL**; jar used only for the `runClient`/live-smoke checks
+  below, never rebuilt into a release bundle.
+- `.\gradlew.bat runClient` plus a fresh live GameZone 27-board smoke test and a live thread dump -
+  see this pass's final report for the exact counts and excerpt.
+
+### Human QA still required
+
+Unchanged from the prior follow-up's note: interactive verification inside a real running client
+(opening Leaderboards, repeated UI open/close, completing a guide step and confirming it survives a
+normal game exit) still requires a human at the keyboard - this environment has no tool to drive the
+native Minecraft/LWJGL window. See this pass's final report for the itemized list.

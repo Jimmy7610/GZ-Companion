@@ -52,14 +52,22 @@ import java.util.function.Supplier;
  *       above) is never left stuck showing "loading" for a fetch that never happened.</li>
  * </ul>
  *
- * <h2>Shared executor (2026-09-13 follow-up)</h2>
- * This class no longer constructs its own {@code ExecutorService}. It holds a {@link
- * GameZoneLiveDataRuntime} and only calls {@link GameZoneLiveDataRuntime#executor()} at the moment
- * a fetch actually starts ({@link #startFetchLocked}) - never in a constructor, never eagerly.
- * Constructing a {@code LeaderboardManager} (which happens once, at {@code CompanionSession}
- * startup) therefore creates no thread by itself; the shared {@code gzcompanion-gamezone-live}
- * worker thread is created only the first time ANY GameZone live-data feature (Leaderboards today,
- * others later) actually submits work to it. See docs/PERFORMANCE-AUDIT-ALPHA4.md.
+ * <h2>Shared runtime (2026-09-13 follow-up)</h2>
+ * This class no longer constructs its own executor. It holds a {@link GameZoneLiveDataRuntime} and
+ * only calls {@link GameZoneLiveDataRuntime#submit} at the moment a fetch actually starts ({@link
+ * #startFetchLocked}) - never in a constructor, never eagerly. Constructing a {@code
+ * LeaderboardManager} (which happens once, at {@code CompanionSession} startup) therefore creates
+ * no thread by itself; the shared {@code gzcompanion-gamezone-live} worker thread is created only
+ * the first time ANY GameZone live-data feature (Leaderboards today, others later) actually submits
+ * work to it. See docs/PERFORMANCE-AUDIT-ALPHA4.md.
+ *
+ * <h2>Bounded submission (2026-09-13 correctness follow-up)</h2>
+ * The shared runtime's queue is bounded (see {@link GameZoneLiveDataRuntime#MAX_QUEUED_JOBS}), so
+ * {@link GameZoneLiveDataRuntime#submit} can return {@code false} if it is ever saturated (only
+ * realistically possible if several other GameZone live-data modules are also hammering it at once
+ * - this manager alone never keeps more than one job outstanding there). {@link #startFetchLocked}
+ * handles that explicitly: the board reverts to its previous status (never left stuck LOADING) and
+ * {@link #activeFetch} is cleared so a later request can still try again.
  */
 public final class LeaderboardManager {
     /** Automatic (board-opened/selector-cycled) refreshes never happen more often than this per board. */
@@ -180,17 +188,33 @@ public final class LeaderboardManager {
 
     /** Must be called while holding {@link #scheduleLock}. Marks {@code definition} as the active
      * fetch, transitions its snapshot to LOADING (preserving any prior entries), and submits the
-     * real fetch to the executor. */
+     * real fetch to the shared runtime. If the shared runtime's bounded queue rejects the job (see
+     * {@link GameZoneLiveDataRuntime#MAX_QUEUED_JOBS}), this board is reverted to its previous
+     * status and {@link #activeFetch} is cleared - it must never be left stuck showing LOADING for
+     * a fetch that will now never run. Crucially, {@link #lastFetchAttemptAt} is only recorded once
+     * the job is actually accepted - a rejected job never touched the network at all, so it must
+     * not count against the 60s auto-refresh floor and silently block a genuine retry for up to a
+     * minute; a later request for this board can therefore try again immediately. */
     private void startFetchLocked(LeaderboardDefinition definition) {
         activeFetch = definition;
         String id = definition.id();
-        lastFetchAttemptAt.put(id, clock.get());
         LeaderboardSnapshot previous = snapshots.get(id);
         snapshots.put(id, new LeaderboardSnapshot(definition, LeaderboardStatus.LOADING,
                 previous != null ? previous.entries() : List.of(),
                 previous != null ? previous.fetchedAt() : null, null));
 
-        runtime.executor().execute(() -> runFetchThenAdvance(definition, previous));
+        boolean accepted = runtime.submit(() -> runFetchThenAdvance(definition, previous));
+        if (accepted) {
+            lastFetchAttemptAt.put(id, clock.get());
+        } else {
+            snapshots.put(id, previous != null ? previous : LeaderboardSnapshot.idle(definition));
+            activeFetch = null;
+            if (pendingRequest != null) {
+                LeaderboardDefinition next = pendingRequest.definition();
+                pendingRequest = null;
+                startFetchLocked(next);
+            }
+        }
     }
 
     /** Runs the real fetch for {@code definition} (the current active fetch), applies its result,

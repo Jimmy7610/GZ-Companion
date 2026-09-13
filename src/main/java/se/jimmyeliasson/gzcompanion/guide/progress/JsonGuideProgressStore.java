@@ -94,6 +94,15 @@ public class JsonGuideProgressStore implements GuideProgressStore {
         }
     }
 
+    /**
+     * @throws GuideProgressPersistenceException if the write genuinely fails - never swallowed
+     * and returned as a silent success (see docs/PERFORMANCE-AUDIT-ALPHA4.md's "2026-09-13
+     * correctness follow-up" section: a prior version of this method caught the IOException here
+     * and simply logged it, which made a real disk failure invisible to {@code
+     * AsyncGuideProgressStore}). The atomic temp-file-then-move write itself is unchanged - a
+     * failure at any point before the final {@link Files#move} leaves the previously-valid file,
+     * if any, completely untouched.
+     */
     @Override
     public synchronized void save(GuideProgressData data) {
         if (data == null) return;
@@ -111,6 +120,7 @@ public class JsonGuideProgressStore implements GuideProgressStore {
             Files.move(tmpFile, filePath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             LOGGER.error("Failed to save guide progress data to {}", filePath, e);
+            throw new GuideProgressPersistenceException("Failed to save guide progress data to " + filePath, e);
         }
     }
 

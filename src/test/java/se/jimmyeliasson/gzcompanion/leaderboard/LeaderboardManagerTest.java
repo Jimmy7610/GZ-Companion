@@ -469,8 +469,6 @@ class LeaderboardManagerTest {
         awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
 
         assertTrue(freshRuntime.isExecutorInitializedForTesting(), "the shared worker must exist once a fetch actually ran");
-        assertSame(freshRuntime.executor(), freshRuntime.executor(),
-                "the shared runtime must always hand back the identical executor instance, never a fresh one");
     }
 
     @Test
@@ -511,20 +509,85 @@ class LeaderboardManagerTest {
     @DisplayName("Reopening/reconstructing a manager against the same runtime never creates a second worker")
     void reconstructingManagerNeverCreatesAnotherWorker() {
         GameZoneLiveDataRuntime sharedRuntime = new GameZoneLiveDataRuntime("0.1.0-test");
-        FakeSource source = new FakeSource();
+        List<Thread> observedThreads = Collections.synchronizedList(new ArrayList<>());
 
-        LeaderboardManager firstOpen = new LeaderboardManager(source, sharedRuntime);
+        FakeSource firstSource = new FakeSource();
+        firstSource.behavior = def -> {
+            observedThreads.add(Thread.currentThread());
+            return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "One", "1", "Coins")));
+        };
+        LeaderboardManager firstOpen = new LeaderboardManager(firstSource, sharedRuntime);
         firstOpen.ensureFresh(BOARD_A);
         awaitStatus(firstOpen, BOARD_A, LeaderboardStatus.LOADED, 2000);
         assertTrue(sharedRuntime.isExecutorInitializedForTesting());
 
         // Simulates the player closing and reopening the Companion UI - a fresh LeaderboardManager-
         // like consumer object is created, but it is handed the SAME session-scoped runtime.
-        java.util.concurrent.ExecutorService executorAfterFirstOpen = sharedRuntime.executor();
-        LeaderboardManager secondOpen = new LeaderboardManager(new FakeSource(), sharedRuntime);
+        FakeSource secondSource = new FakeSource();
+        secondSource.behavior = def -> {
+            observedThreads.add(Thread.currentThread());
+            return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "Two", "1", "Coins")));
+        };
+        LeaderboardManager secondOpen = new LeaderboardManager(secondSource, sharedRuntime);
         secondOpen.ensureFresh(BOARD_B);
         awaitStatus(secondOpen, BOARD_B, LeaderboardStatus.LOADED, 2000);
 
-        assertSame(executorAfterFirstOpen, sharedRuntime.executor(), "the same executor instance must be reused, never recreated");
+        assertEquals(2, observedThreads.size());
+        assertSame(observedThreads.get(0), observedThreads.get(1), "the same worker thread must be reused, never recreated");
+    }
+
+    @Test
+    @DisplayName("If the shared runtime rejects a fetch (its bounded queue is saturated), the board reverts to its previous status instead of being stuck LOADING, and a later request can still succeed")
+    void rejectedSubmissionRevertsSnapshotInsteadOfStickingInLoading() throws InterruptedException {
+        GameZoneLiveDataRuntime sharedRuntime = new GameZoneLiveDataRuntime("0.1.0-test");
+
+        // Saturate the shared runtime's bounded queue from outside LeaderboardManager entirely,
+        // simulating several other GameZone live-data modules hammering it at once.
+        CountDownLatch blockWorker = new CountDownLatch(1);
+        CountDownLatch workerEntered = new CountDownLatch(1);
+        assertTrue(sharedRuntime.submit(() -> {
+            workerEntered.countDown();
+            try {
+                blockWorker.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        assertTrue(workerEntered.await(2, TimeUnit.SECONDS));
+        for (int i = 0; i < GameZoneLiveDataRuntime.MAX_QUEUED_JOBS; i++) {
+            assertTrue(sharedRuntime.submit(() -> {}));
+        }
+
+        FakeSource source = new FakeSource();
+        LeaderboardManager manager = new LeaderboardManager(source, sharedRuntime);
+        LeaderboardSnapshot before = manager.getSnapshot(BOARD_A);
+
+        manager.ensureFresh(BOARD_A); // must be rejected - the shared queue is completely full
+
+        assertEquals(before.status(), manager.getSnapshot(BOARD_A).status(),
+                "a rejected fetch must revert to the board's previous status, never stay stuck LOADING");
+        assertEquals(0, source.callCount.get(), "a rejected job must never actually run the fetch");
+
+        blockWorker.countDown(); // let the blocking job and queued no-ops start draining
+
+        // Deterministically wait for the shared queue to fully drain: keep retrying a marker
+        // submission until accepted (proves there is finally room), then wait for it to actually
+        // run (proves everything queued ahead of it, including the former blocker, is done).
+        CountDownLatch drained = new CountDownLatch(1);
+        long deadline = System.currentTimeMillis() + 2000;
+        boolean markerAccepted = false;
+        while (System.currentTimeMillis() < deadline && !markerAccepted) {
+            markerAccepted = sharedRuntime.submit(drained::countDown);
+            if (!markerAccepted) {
+                Thread.sleep(5);
+            }
+        }
+        assertTrue(markerAccepted, "the shared queue must eventually have room once the blocking job and queued no-ops drain");
+        assertTrue(drained.await(2, TimeUnit.SECONDS));
+
+        // A later request, once the shared runtime is no longer saturated, must still work normally.
+        manager.ensureFresh(BOARD_A);
+        awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
+        assertEquals(1, source.callCount.get());
     }
 }
