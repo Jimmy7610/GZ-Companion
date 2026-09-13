@@ -168,7 +168,21 @@ Leaderboards tab is open and a board is actually selected.
 - HTTPS only, to the single allowlisted host `www.gamezonemc.se`; the underlying `HttpClient` never
   follows redirects automatically (`Redirect.NEVER`) - if GameZone's server ever responds with a
   redirect, that is treated as a failure, never silently followed to a different host. A response
-  size ceiling (a few MB) protects against an unexpectedly huge response.
+  size ceiling (a few MB) protects against an unexpectedly huge response, in two layers: a response
+  with an honestly-declared oversized `Content-Length` is rejected before its body is even read;
+  a chunked response with no `Content-Length` at all is still caught by a post-hoc length check
+  once decoded. Neither layer is a true mid-stream abort (Java's `HttpClient` body-handler API
+  doesn't expose that), so a genuinely lying, unbounded chunked stream from a compromised host would
+  still be fully buffered before rejection - a real streaming cap would need a custom
+  `BodySubscriber`, tracked as a possible future hardening item rather than done now, since this
+  two-layer version already handles both realistic cases (an honest oversized page, and normal
+  chunked encoding) without that added complexity.
+- Rapid selector cycling (e.g. holding the right arrow across many uncached boards) never queues
+  one network request per board cycled through - `LeaderboardManager` runs at most one active fetch
+  at a time with at most one pending "latest relevant request" superseding slot, so intermediate
+  boards cycled past before their turn are dropped, never fetched and never left stuck showing a
+  loading state. A manual "Uppdatera" click always claims that pending slot over a mere auto-cycle,
+  but a pending manual request is never silently displaced by further auto-cycling.
 
 ## 11. Graceful degradation / source-change behavior
 

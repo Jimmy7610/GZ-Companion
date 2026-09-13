@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-13T01:30:00Z",
+  "generatedAt": "2026-09-13T10:19:00Z",
   "supported": [
     {
       "status": "VERIFIED",
@@ -10,8 +10,8 @@
       "fabricApiVersion": "0.155.3+26.1.2",
       "companionJar": {
         "fileName": "gzcompanion-0.1.0-alpha.4.jar",
-        "sha256": "14fddd7a486ded733e242e92c57c9e5096b19281fe97a8072200c80175c23cf4",
-        "sizeBytes": 728921,
+        "sha256": "c52fcdbba4ae89597bcf52c63f80af9b68fe99d32e8ea81865ef61a017d67424",
+        "sizeBytes": 736411,
         "source": "embedded",
         "note": "Bundled inside the installer as an embedded resource - built from this repository via .\\gradlew.bat build. Never downloaded."
       },

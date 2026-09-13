@@ -109,10 +109,31 @@ class GameZoneLeaderboardSourceTest {
     }
 
     @Test
-    @DisplayName("A response exceeding the size ceiling is reported as Unavailable")
-    void oversizedResponseReportedAsUnavailable() throws Exception {
+    @DisplayName("A response with an honest oversized Content-Length is rejected before the body is even read")
+    void oversizedDeclaredContentLengthReportedAsUnavailable() throws Exception {
+        // respond() calls sendResponseHeaders(status, bytes.length), which sets a real, accurate
+        // Content-Length header - this exercises the EARLY rejection layer (checked against
+        // ResponseInfo before any body bytes are handled), not just the post-hoc body.length() check.
         String big = "x".repeat(20_000); // sourceFor() below caps at 10_000 chars
         String baseUrl = startServerAndGetBaseUrl(exchange -> respond(exchange, 200, big));
+        GameZoneLeaderboardSource source = sourceFor(baseUrl);
+
+        LeaderboardFetchResult result = source.fetch(GameZoneLeaderboardRegistry.byId("player_coins").orElseThrow());
+
+        assertInstanceOf(LeaderboardFetchResult.Unavailable.class, result);
+    }
+
+    @Test
+    @DisplayName("An oversized CHUNKED response (no Content-Length header at all) is still caught by the post-hoc size check")
+    void oversizedChunkedResponseWithoutContentLengthStillRejected() throws Exception {
+        String big = "x".repeat(20_000);
+        String baseUrl = startServerAndGetBaseUrl(exchange -> {
+            byte[] bytes = big.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, 0); // 0 forces chunked transfer encoding - no Content-Length header is sent
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        });
         GameZoneLeaderboardSource source = sourceFor(baseUrl);
 
         LeaderboardFetchResult result = source.fetch(GameZoneLeaderboardRegistry.byId("player_coins").orElseThrow());

@@ -55,11 +55,56 @@ public class LeaderboardsTabComponent {
     private boolean pickerOpen = false;
     private int listScrollOffset = 0;
 
+    /** Normal (non-overlay) controls: header/group tabs/selector arrows+center/list/footer. */
     private final List<Hit> hitTargets = new ArrayList<>();
+    /** Picker-row controls only, populated exclusively by {@link #renderPicker} - kept in a
+     * SEPARATE list from {@link #hitTargets} so the picker overlay's input priority never depends
+     * on insertion order (see {@link #resolveClick} and this project's Blocker 1 fix history: the
+     * picker used to share {@code hitTargets} with everything underneath it, so a click on a picker
+     * row that visually overlapped the selector could be swallowed by the selector's hit rect
+     * instead, since it was registered earlier in the same list). */
+    private final List<Hit> pickerHitTargets = new ArrayList<>();
     private record Hit(UiRect rect, Runnable action) {}
+
+    /**
+     * What a click at a given point resolves to - the ONE place that decides input layering
+     * between the modal picker overlay and everything underneath it. Pure and static (plain
+     * {@link UiRect} lists, no Font/instance state) so the exact overlay-priority policy is
+     * directly unit-testable without a live Minecraft client - see
+     * {@code LeaderboardsTabComponentTest}.
+     *
+     * <p>Rule: while the picker is open, it is the ONLY thing that can be hit - a click on a
+     * picker row resolves to that row; any other click while the picker is open resolves to
+     * {@link ClosePicker} (never touches a normal control underneath, no matter its coordinates).
+     * While the picker is closed, normal controls resolve exactly as before.
+     */
+    sealed interface ClickResolution {
+        record PickerRow(int index) implements ClickResolution {}
+        record ClosePicker() implements ClickResolution {}
+        record Normal(int index) implements ClickResolution {}
+        record None() implements ClickResolution {}
+    }
+
+    static ClickResolution resolveClick(boolean pickerOpen, List<UiRect> pickerRowRects, List<UiRect> normalRects, double x, double y) {
+        if (pickerOpen) {
+            for (int i = 0; i < pickerRowRects.size(); i++) {
+                if (pickerRowRects.get(i).contains(x, y)) {
+                    return new ClickResolution.PickerRow(i);
+                }
+            }
+            return new ClickResolution.ClosePicker();
+        }
+        for (int i = 0; i < normalRects.size(); i++) {
+            if (normalRects.get(i).contains(x, y)) {
+                return new ClickResolution.Normal(i);
+            }
+        }
+        return new ClickResolution.None();
+    }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         hitTargets.clear();
+        pickerHitTargets.clear();
         CompanionSession session = CompanionSession.getInstance();
         LeaderboardManager manager = session.getLeaderboardManager();
         LeaderboardDefinition current = currentDefinition();
@@ -232,7 +277,7 @@ public class LeaderboardsTabComponent {
             }
             TextUtil.drawScaledEllipsizedText(extractor, font, def.title(), rowRect.x() + 3, rowRect.y() + 2, rowRect.width() - 6,
                     TypographyScale.SMALL.getScale(), isCurrent ? GZTheme.COLOR_MINT : GZTheme.COLOR_TEXT_SECONDARY, false);
-            hitTargets.add(new Hit(rowRect, () -> {
+            pickerHitTargets.add(new Hit(rowRect, () -> {
                 selectedBoardByGroup.put(selectedGroup, def);
                 pickerOpen = false;
                 listScrollOffset = 0;
@@ -240,7 +285,8 @@ public class LeaderboardsTabComponent {
             rowY += rowH;
         }
 
-        // Clicking anywhere else while open closes the picker - handled in mouseClicked's fallback.
+        // Clicking anywhere else while open closes the picker without activating whatever is
+        // underneath - see resolveClick's ClosePicker case, handled in mouseClicked.
     }
 
     // ------------------------------------------------------------------
@@ -406,20 +452,36 @@ public class LeaderboardsTabComponent {
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
         if (button != 0) return false;
-        for (Hit hit : hitTargets) {
-            if (hit.rect().contains(mouseX, mouseY)) {
-                hit.action().run();
-                return true;
+
+        List<UiRect> pickerRects = pickerHitTargets.stream().map(Hit::rect).toList();
+        List<UiRect> normalRects = hitTargets.stream().map(Hit::rect).toList();
+        ClickResolution resolution = resolveClick(pickerOpen, pickerRects, normalRects, mouseX, mouseY);
+
+        return switch (resolution) {
+            case ClickResolution.PickerRow pickerRow -> {
+                pickerHitTargets.get(pickerRow.index()).action().run();
+                yield true;
             }
-        }
-        if (pickerOpen) {
-            pickerOpen = false;
-            return true;
-        }
-        return false;
+            case ClickResolution.ClosePicker ignored -> {
+                // Consumed - closes the picker and activates NOTHING underneath, regardless of
+                // what control (if any) happens to occupy this point.
+                pickerOpen = false;
+                yield true;
+            }
+            case ClickResolution.Normal normal -> {
+                hitTargets.get(normal.index()).action().run();
+                yield true;
+            }
+            case ClickResolution.None ignored -> false;
+        };
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (pickerOpen) {
+            // The picker overlay is modal - never let the wheel silently scroll the ranking list
+            // sitting behind it (see Blocker 1's required behavior list).
+            return true;
+        }
         listScrollOffset = Math.max(0, listScrollOffset - (int) (scrollY * 14));
         return true;
     }

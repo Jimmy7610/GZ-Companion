@@ -5,6 +5,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -131,7 +132,30 @@ public final class GameZoneLeaderboardSource implements LeaderboardSource {
                     .timeout(timeout)
                     .GET()
                     .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            // Two-layer size ceiling: reject BEFORE buffering when the server honestly declares an
+            // oversized Content-Length (the common case - never materializes the body at all), and
+            // still re-check the actual decoded length afterward for the chunked-encoding case
+            // (no Content-Length header at all), where the only way to know the true size is to
+            // have already read it. Neither layer is a true streaming abort mid-read - Java's
+            // HttpClient body-handler API only lets a BodyHandler swap in a different
+            // BodySubscriber before the body starts downloading, not truncate an in-progress one -
+            // but this still avoids fully buffering the common "server tells the truth" case, which
+            // is the simple, safe improvement available without a custom BodySubscriber.
+            java.util.concurrent.atomic.AtomicBoolean rejectedForDeclaredSize = new java.util.concurrent.atomic.AtomicBoolean(false);
+            HttpResponse.BodyHandler<String> sizeAwareHandler = responseInfo -> {
+                java.util.OptionalLong declaredLength = responseInfo.headers().firstValueAsLong("Content-Length");
+                if (declaredLength.isPresent() && declaredLength.getAsLong() > maxResponseChars) {
+                    rejectedForDeclaredSize.set(true);
+                    return HttpResponse.BodySubscribers.replacing("");
+                }
+                return HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8);
+            };
+
+            HttpResponse<String> response = httpClient.send(request, sizeAwareHandler);
+            if (rejectedForDeclaredSize.get()) {
+                throw new IOException("Response's declared Content-Length exceeded the size ceiling for " + url);
+            }
             int status = response.statusCode();
             if (status >= 300 && status < 400) {
                 throw new IOException("Refusing to follow redirect (HTTP " + status + ") for " + url);

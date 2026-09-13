@@ -4,6 +4,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -297,5 +299,134 @@ class LeaderboardManagerTest {
         assertNotNull(summary.lastSuccessfulRefreshAt());
         assertNull(summary.lastErrorCategory());
         assertEquals(LeaderboardManager.ADAPTER_VERSION, summary.adapterVersion());
+    }
+
+    // ------------------------------------------------------------------
+    // Blocker 2 (2026-09-13 follow-up review): rapid selector cycling must never queue every
+    // intermediate board's fetch - only the LATEST relevant request survives once the currently
+    // active fetch finishes. See LeaderboardManager's own "latest relevant request wins" doc
+    // comment for the full policy this proves.
+    // ------------------------------------------------------------------
+
+    private static final LeaderboardDefinition BOARD_C = GameZoneLeaderboardRegistry.byId("company_wealth").orElseThrow();
+    private static final LeaderboardDefinition BOARD_D = GameZoneLeaderboardRegistry.byId("player_kills").orElseThrow();
+    private static final LeaderboardDefinition BOARD_E = GameZoneLeaderboardRegistry.byId("player_deaths").orElseThrow();
+
+    @Test
+    @DisplayName("Rapid cycling A->B->C->D while A is in flight results in exactly 2 network fetches: A, then D - B and C never hit the network")
+    void rapidCyclingCoalescesToOnlyTheLatestRequest() {
+        FakeSource source = new FakeSource();
+        List<String> fetchOrder = Collections.synchronizedList(new ArrayList<>());
+        source.behavior = def -> {
+            fetchOrder.add(def.id());
+            return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "Entity-" + def.id(), "1 coins", "Coins")));
+        };
+        source.blockUntil = new CountDownLatch(1); // blocks whichever fetch is actually running (A's)
+        LeaderboardManager manager = new LeaderboardManager(source);
+
+        // activeFetch is assigned SYNCHRONOUSLY inside ensureFresh (before the executor thread even
+        // starts running), so each of these calls deterministically sees the previous one's effect
+        // with no sleep/race needed - all on this single test thread.
+        manager.ensureFresh(BOARD_A);   // becomes the active fetch; blocks inside FakeSource.fetch
+        manager.ensureFresh(BOARD_B);   // A still active -> B becomes pending
+        manager.ensureFresh(BOARD_C);   // C supersedes B in the pending slot
+        manager.ensureFresh(BOARD_D);   // D supersedes C in the pending slot
+
+        source.blockUntil.countDown(); // let A's fetch complete, which should immediately advance to D
+        awaitStatus(manager, BOARD_D, LeaderboardStatus.LOADED, 2000);
+
+        assertEquals(List.of(BOARD_A.id(), BOARD_D.id()), fetchOrder, "only A then D should have ever reached the network - B and C must be dropped, not queued");
+        assertEquals(2, source.callCount.get(), "exactly 2 network fetches total, not 4");
+        assertEquals(LeaderboardStatus.IDLE, manager.getSnapshot(BOARD_B).status(), "B must never be left LOADING - it was superseded before ever becoming the active fetch");
+        assertEquals(LeaderboardStatus.IDLE, manager.getSnapshot(BOARD_C).status(), "C must never be left LOADING either");
+        assertEquals(LeaderboardStatus.LOADED, manager.getSnapshot(BOARD_D).status());
+    }
+
+    @Test
+    @DisplayName("Repeated ensureFresh for the SAME board while it is already the active fetch still coalesces (no duplicate pending entry, no extra network call)")
+    void sameBoardCoalescingStillWorksViaEnsureFresh() {
+        FakeSource source = new FakeSource();
+        source.blockUntil = new CountDownLatch(1);
+        LeaderboardManager manager = new LeaderboardManager(source);
+
+        manager.ensureFresh(BOARD_A);
+        manager.ensureFresh(BOARD_A); // same board, still active - must coalesce, not become "pending"
+        manager.ensureFresh(BOARD_A);
+
+        source.blockUntil.countDown();
+        awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
+
+        assertEquals(1, source.callCount.get());
+    }
+
+    @Test
+    @DisplayName("A manual request claims the pending slot even over an already-pending AUTO request")
+    void manualRequestOverridesPendingAutoRequest() {
+        FakeSource source = new FakeSource();
+        List<String> fetchOrder = Collections.synchronizedList(new ArrayList<>());
+        source.behavior = def -> {
+            fetchOrder.add(def.id());
+            return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "Entity", "1", "Coins")));
+        };
+        source.blockUntil = new CountDownLatch(1);
+        LeaderboardManager manager = new LeaderboardManager(source);
+
+        manager.ensureFresh(BOARD_A);           // active
+        manager.ensureFresh(BOARD_B);           // pending (auto)
+        boolean manualAccepted = manager.manualRefresh(BOARD_E); // manual - must override B in the pending slot
+
+        source.blockUntil.countDown();
+        awaitStatus(manager, BOARD_E, LeaderboardStatus.LOADED, 2000);
+
+        assertTrue(manualAccepted);
+        assertEquals(List.of(BOARD_A.id(), BOARD_E.id()), fetchOrder, "the manual request for E must win the pending slot over the earlier auto request for B");
+        assertEquals(LeaderboardStatus.IDLE, manager.getSnapshot(BOARD_B).status());
+    }
+
+    @Test
+    @DisplayName("An auto request never displaces an already-pending MANUAL request")
+    void autoRequestNeverDisplacesPendingManualRequest() {
+        FakeSource source = new FakeSource();
+        List<String> fetchOrder = Collections.synchronizedList(new ArrayList<>());
+        source.behavior = def -> {
+            fetchOrder.add(def.id());
+            return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "Entity", "1", "Coins")));
+        };
+        source.blockUntil = new CountDownLatch(1);
+        LeaderboardManager manager = new LeaderboardManager(source);
+
+        manager.ensureFresh(BOARD_A);            // active
+        manager.manualRefresh(BOARD_E);          // pending (manual)
+        manager.ensureFresh(BOARD_B);            // auto - must NOT displace the pending manual request for E
+        manager.ensureFresh(BOARD_C);            // auto - same, must not displace E either
+
+        source.blockUntil.countDown();
+        awaitStatus(manager, BOARD_E, LeaderboardStatus.LOADED, 2000);
+
+        assertEquals(List.of(BOARD_A.id(), BOARD_E.id()), fetchOrder, "B and C must never displace the already-pending manual request for E");
+        assertEquals(2, source.callCount.get());
+    }
+
+    @Test
+    @DisplayName("No unbounded pending jobs are created regardless of how many boards are cycled through")
+    void noUnboundedPendingJobsRegardlessOfCycleLength() {
+        FakeSource source = new FakeSource();
+        source.blockUntil = new CountDownLatch(1);
+        LeaderboardManager manager = new LeaderboardManager(source);
+        List<LeaderboardDefinition> allBoards = GameZoneLeaderboardRegistry.all();
+
+        manager.ensureFresh(allBoards.get(0)); // active
+        for (LeaderboardDefinition def : allBoards) {
+            manager.ensureFresh(def); // 27 rapid requests - at most one may ever become "pending"
+        }
+
+        source.blockUntil.countDown();
+        // Whichever board ended up as the final pending one must reach LOADED; total fetches must
+        // be small (2: the active one plus exactly one advance), never anywhere near 27.
+        long deadline = System.currentTimeMillis() + 2000;
+        while (System.currentTimeMillis() < deadline && source.callCount.get() < 2) {
+            try { Thread.sleep(5); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+        }
+        assertEquals(2, source.callCount.get(), "cycling through all 27 boards while one fetch is active must still only ever produce 2 total network fetches");
     }
 }
