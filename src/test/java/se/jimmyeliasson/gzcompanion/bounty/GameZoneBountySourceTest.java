@@ -147,6 +147,22 @@ class GameZoneBountySourceTest {
     }
 
     @Test
+    @DisplayName("A nonempty registry where every entry fails to parse (e.g. a renamed reward field) is "
+            + "Incompatible end to end - never a false Success(empty)")
+    void allEntriesMalformedReportedAsIncompatibleNotEmptySuccess() throws Exception {
+        String json = "{\"status\":\"success\",\"data\":{\"active\":["
+                + "{\"name\":\"Gorgash\",\"rewardCoins\":1000,\"status\":\"ACTIVE\"}"
+                + "],\"count\":1}}";
+        String url = startServerAndGetBaseUrl(exchange -> respond(exchange, 200, json));
+        GameZoneBountySource source = sourceFor(url);
+
+        BountyFetchResult result = source.fetch();
+
+        assertInstanceOf(BountyFetchResult.Incompatible.class, result,
+                "a real bounty existing server-side that this parser can no longer read must never surface as \"zero active bounties\"");
+    }
+
+    @Test
     @DisplayName("The HttpClient never automatically follows redirects")
     void neverFollowsRedirectsAutomatically() {
         GameZoneBountySource source = sourceFor("http://127.0.0.1:1/api/bounties");

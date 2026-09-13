@@ -48,6 +48,18 @@ import java.util.List;
  * single entry missing its required {@code name} or {@code reward} is silently skipped (never a
  * guessed fallback name/reward) rather than failing the whole registry - see
  * {@link #parseActiveBounties(String)}.
+ *
+ * <p><b>A genuinely empty registry is not the same thing as a registry every entry of which failed
+ * to parse.</b> If {@code data.active} is a NONEMPTY array but every single element fails per-entry
+ * validation (e.g. GameZone renamed {@code reward} to something else), that is a contract change,
+ * not "zero active bounties" - {@link #parseActiveBounties(String)} throws {@link
+ * BountyIncompatibleException} in that case rather than silently returning an empty list, so the UI
+ * never claims "no active hunts" when the truth is "this parser can no longer read any of them."
+ *
+ * <p><b>{@code data.count}</b> is present in the real contract but deliberately NOT read or
+ * cross-checked here - GameZone's public contract does not document it as authoritative, so a
+ * mismatch between {@code count} and the actual number of parsed/skipped entries must never by
+ * itself cause a rejection.
  */
 public final class BountyJsonParser {
     private BountyJsonParser() {}
@@ -94,6 +106,15 @@ public final class BountyJsonParser {
             // A malformed/incomplete individual entry is silently skipped - never crashes the
             // whole registry fetch, never a guessed fallback name/reward/entityType.
         }
+
+        // A NONEMPTY active array where NOTHING parsed means the per-entry contract itself broke
+        // (e.g. a renamed required field) - that is a schema change, never a genuine "zero active
+        // bounties" success. Only an active array that was ALREADY empty may legitimately produce
+        // an empty result.
+        if (!active.isEmpty() && entries.isEmpty()) {
+            throw new BountyIncompatibleException(
+                    "data.active contained " + active.size() + " entrie(s) but none matched the expected per-entry contract");
+        }
         return entries;
     }
 
@@ -111,12 +132,48 @@ public final class BountyJsonParser {
         String hint = optString(obj, "hint");
         String status = optString(obj, "status");
         Instant createdAt = optInstant(obj, "createdAt");
-        Instant expiresAt = optInstant(obj, "expiresAt");
+        BountyExpiry expiry = parseExpiry(obj, "expiresAt");
 
         try {
-            return new BountyEntry(name, entityType, reward, hint, status, createdAt, expiresAt);
+            return new BountyEntry(name, entityType, reward, hint, status, createdAt, expiry);
         } catch (IllegalArgumentException e) {
             return null; // defense in depth - the record's own compact constructor rejected it
+        }
+    }
+
+    /**
+     * Maps GameZone's {@code expiresAt} field to one of {@link BountyExpiry}'s three explicit
+     * states - see that type's own doc comment for why these must never be collapsed together:
+     *
+     * <ul>
+     *     <li>field ABSENT entirely &rarr; {@link BountyExpiry#UNKNOWN} (the source told us
+     *         nothing - never guessed as "no limit")</li>
+     *     <li>explicit JSON {@code null} &rarr; {@link BountyExpiry#NO_LIMIT} (the source itself
+     *         says there is no time limit)</li>
+     *     <li>a valid ISO-8601 string &rarr; {@code BountyExpiry.ExpiresAt}</li>
+     *     <li>any other value - non-string, blank, or an unparseable non-null string &rarr;
+     *         {@link BountyExpiry#UNKNOWN} (malformed, never silently treated as "no limit")</li>
+     * </ul>
+     */
+    private static BountyExpiry parseExpiry(JsonObject obj, String key) {
+        if (obj == null || !obj.has(key)) {
+            return BountyExpiry.UNKNOWN;
+        }
+        JsonElement el = obj.get(key);
+        if (el == null || el.isJsonNull()) {
+            return BountyExpiry.NO_LIMIT;
+        }
+        if (!el.isJsonPrimitive() || !el.getAsJsonPrimitive().isString()) {
+            return BountyExpiry.UNKNOWN;
+        }
+        String raw = el.getAsString();
+        if (raw.isBlank()) {
+            return BountyExpiry.UNKNOWN;
+        }
+        try {
+            return new BountyExpiry.ExpiresAt(Instant.parse(raw));
+        } catch (DateTimeParseException e) {
+            return BountyExpiry.UNKNOWN; // malformed non-null value - never becomes "no limit"
         }
     }
 

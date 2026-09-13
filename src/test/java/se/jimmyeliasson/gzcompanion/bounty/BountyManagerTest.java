@@ -26,7 +26,7 @@ class BountyManagerTest {
     private static final class FakeSource implements BountySource {
         final AtomicInteger callCount = new AtomicInteger();
         volatile Function<Void, BountyFetchResult> behavior =
-                v -> new BountyFetchResult.Success(List.of(new BountyEntry("Alfa", null, 100, null, "ACTIVE", null, null)));
+                v -> new BountyFetchResult.Success(List.of(new BountyEntry("Alfa", null, 100, null, "ACTIVE", null, BountyExpiry.UNKNOWN)));
         volatile CountDownLatch blockUntil;
         volatile CountDownLatch enteredFetch;
 

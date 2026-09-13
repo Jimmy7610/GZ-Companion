@@ -33,7 +33,7 @@ class BountyFormatterTest {
     void remainingTimeDaysAndHours() {
         Instant now = Instant.parse("2026-09-13T00:00:00Z");
         Instant expiresAt = now.plusSeconds(52 * 3600); // 2 days 4 hours
-        assertEquals("2 d 4 h", BountyFormatter.formatRemainingTime(expiresAt, now));
+        assertEquals("2 d 4 h", BountyFormatter.formatRemainingTime(new BountyExpiry.ExpiresAt(expiresAt), now));
     }
 
     @Test
@@ -41,7 +41,7 @@ class BountyFormatterTest {
     void remainingTimeHoursAndMinutes() {
         Instant now = Instant.parse("2026-09-13T00:00:00Z");
         Instant expiresAt = now.plusSeconds(5 * 3600 + 18 * 60);
-        assertEquals("5 h 18 min", BountyFormatter.formatRemainingTime(expiresAt, now));
+        assertEquals("5 h 18 min", BountyFormatter.formatRemainingTime(new BountyExpiry.ExpiresAt(expiresAt), now));
     }
 
     @Test
@@ -49,7 +49,7 @@ class BountyFormatterTest {
     void remainingTimeMinutesOnly() {
         Instant now = Instant.parse("2026-09-13T00:00:00Z");
         Instant expiresAt = now.plusSeconds(42 * 60);
-        assertEquals("42 min", BountyFormatter.formatRemainingTime(expiresAt, now));
+        assertEquals("42 min", BountyFormatter.formatRemainingTime(new BountyExpiry.ExpiresAt(expiresAt), now));
     }
 
     @Test
@@ -57,13 +57,20 @@ class BountyFormatterTest {
     void remainingTimeUnderAMinute() {
         Instant now = Instant.parse("2026-09-13T00:00:00Z");
         Instant expiresAt = now.plusSeconds(30);
-        assertEquals("< 1 min", BountyFormatter.formatRemainingTime(expiresAt, now));
+        assertEquals("< 1 min", BountyFormatter.formatRemainingTime(new BountyExpiry.ExpiresAt(expiresAt), now));
     }
 
     @Test
-    @DisplayName("Remaining time: no expiry at all")
-    void remainingTimeNoExpiry() {
-        assertEquals("Ingen tidsgräns", BountyFormatter.formatRemainingTime(null, Instant.now()));
+    @DisplayName("Remaining time: source explicitly says no time limit (NoLimit)")
+    void remainingTimeNoLimit() {
+        assertEquals("Ingen tidsgräns", BountyFormatter.formatRemainingTime(BountyExpiry.NO_LIMIT, Instant.now()));
+    }
+
+    @Test
+    @DisplayName("Remaining time: source did not say (Unknown) is presented distinctly from NoLimit - never guessed as unlimited")
+    void remainingTimeUnknownIsDistinctFromNoLimit() {
+        assertEquals("Tidsgräns okänd", BountyFormatter.formatRemainingTime(BountyExpiry.UNKNOWN, Instant.now()));
+        assertEquals("Tidsgräns okänd", BountyFormatter.formatRemainingTime(null, Instant.now()));
     }
 
     @Test
@@ -71,14 +78,14 @@ class BountyFormatterTest {
     void remainingTimeExpiredPresentation() {
         Instant now = Instant.parse("2026-09-13T00:00:00Z");
         Instant expiresAt = now.minusSeconds(10);
-        assertEquals("Kan ha löpt ut - uppdatera", BountyFormatter.formatRemainingTime(expiresAt, now));
+        assertEquals("Kan ha löpt ut - uppdatera", BountyFormatter.formatRemainingTime(new BountyExpiry.ExpiresAt(expiresAt), now));
     }
 
     @Test
     @DisplayName("Remaining time: exactly at expiry is treated as expired, not '< 1 min' still remaining")
     void remainingTimeExactlyAtExpiry() {
         Instant now = Instant.parse("2026-09-13T00:00:00Z");
-        assertEquals("Kan ha löpt ut - uppdatera", BountyFormatter.formatRemainingTime(now, now));
+        assertEquals("Kan ha löpt ut - uppdatera", BountyFormatter.formatRemainingTime(new BountyExpiry.ExpiresAt(now), now));
     }
 
     @Test

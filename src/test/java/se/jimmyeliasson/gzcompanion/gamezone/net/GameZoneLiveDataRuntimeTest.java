@@ -7,6 +7,7 @@ import se.jimmyeliasson.gzcompanion.bounty.BountySource;
 import se.jimmyeliasson.gzcompanion.bounty.BountyStatus;
 import se.jimmyeliasson.gzcompanion.bounty.BountyFetchResult;
 import se.jimmyeliasson.gzcompanion.bounty.BountyEntry;
+import se.jimmyeliasson.gzcompanion.bounty.BountyExpiry;
 import se.jimmyeliasson.gzcompanion.leaderboard.GameZoneLeaderboardRegistry;
 import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardManager;
 import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardFetchResult;
@@ -170,7 +171,7 @@ class GameZoneLiveDataRuntimeTest {
     void actualBountyFetchCreatesOnlyTheExecutor() {
         GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test");
         BountySource fakeSource = () -> new BountyFetchResult.Success(
-                List.of(new BountyEntry("Alfa", null, 100, null, "ACTIVE", null, null)));
+                List.of(new BountyEntry("Alfa", null, 100, null, "ACTIVE", null, BountyExpiry.UNKNOWN)));
         BountyManager manager = new BountyManager(fakeSource, runtime);
 
         manager.ensureFresh();
@@ -201,7 +202,7 @@ class GameZoneLiveDataRuntimeTest {
         };
         BountySource bountySource = () -> {
             observedThreads.add(Thread.currentThread());
-            return new BountyFetchResult.Success(List.of(new BountyEntry("Alfa", null, 100, null, "ACTIVE", null, null)));
+            return new BountyFetchResult.Success(List.of(new BountyEntry("Alfa", null, 100, null, "ACTIVE", null, BountyExpiry.UNKNOWN)));
         };
 
         LeaderboardManager leaderboardManager = new LeaderboardManager(leaderboardSource, sharedRuntime);

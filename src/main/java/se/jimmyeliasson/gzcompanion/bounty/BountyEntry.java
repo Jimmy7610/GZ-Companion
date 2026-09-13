@@ -9,10 +9,14 @@ import java.time.Instant;
  * https://www.gamezonemc.se/wiki/bounties/bounties) - {@code name} is that entity's given name
  * (e.g. GameZone's own wiki example "Gorgash"), not a generic mob-type label.
  *
- * <p>Only fields the source actually publishes are modeled here - {@code entityType}, {@code hint},
- * and {@code expiresAt} are all legitimately nullable (a bounty may have no public clue, and may
- * have no expiry at all per GameZone's own documented "kan sakna tidsgräns helt"). Companion never
- * guesses a value for an absent field - see {@link BountyJsonParser}.
+ * <p>Only fields the source actually publishes are modeled here - {@code entityType} and {@code
+ * hint} are both legitimately nullable (a bounty may have no public clue). Companion never guesses
+ * a value for an absent field - see {@link BountyJsonParser}.
+ *
+ * <p>{@code expiry} is never null - it is always one of {@link BountyExpiry}'s three explicit
+ * states ({@code NoLimit}/{@code ExpiresAt}/{@code Unknown}), because "the source didn't say" and
+ * "the source said there is no limit" are different facts that must never be collapsed into each
+ * other. See {@link BountyExpiry}'s own doc comment.
  *
  * @param name        the bounty target's given name - GameZone shows this in red above the mob
  *                    in-game. Never blank.
@@ -28,8 +32,7 @@ import java.time.Instant;
  *                    Companion version doesn't specifically know about is still shown honestly
  *                    rather than silently reinterpreted.
  * @param createdAt   when the bounty was published, if the source provided a parseable timestamp.
- * @param expiresAt   when the bounty expires, if it has an expiry the source published as a
- *                    parseable timestamp - null when the bounty has no expiry (never invented).
+ * @param expiry      the bounty's expiry status - see {@link BountyExpiry}. Never null.
  */
 public record BountyEntry(
         String name,
@@ -38,7 +41,7 @@ public record BountyEntry(
         String hint,
         String status,
         Instant createdAt,
-        Instant expiresAt
+        BountyExpiry expiry
 ) {
     public BountyEntry {
         if (name == null || name.isBlank()) {
@@ -47,14 +50,20 @@ public record BountyEntry(
         if (rewardCoins < 0) {
             throw new IllegalArgumentException("rewardCoins must not be negative, was " + rewardCoins);
         }
+        if (expiry == null) {
+            throw new IllegalArgumentException("expiry must not be null - use BountyExpiry.UNKNOWN instead");
+        }
     }
 
     public boolean hasHint() {
         return hint != null && !hint.isBlank();
     }
 
+    /** True only when the source published a real, parseable expiry timestamp - false for both
+     * {@code NoLimit} and {@code Unknown}. Use {@code expiry()} directly (with {@link
+     * BountyFormatter#formatRemainingTime}) to distinguish those two remaining cases for display. */
     public boolean hasExpiry() {
-        return expiresAt != null;
+        return expiry instanceof BountyExpiry.ExpiresAt;
     }
 
     public boolean hasEntityType() {

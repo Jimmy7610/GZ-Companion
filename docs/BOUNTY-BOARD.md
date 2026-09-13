@@ -69,14 +69,36 @@ Leaderboards (which had no such dedicated endpoint and had to read rendered HTML
 |---|---|---|---|
 | `status` (top-level) | string | required | Must equal `"success"` - any other value is treated as an incompatible/changed contract (§9), never silently accepted. |
 | `data.active` | array | required | The current active-bounty registry. Empty array = zero active bounties (a real success - see §7). |
-| `data.count` | number | present, not required to match | Cross-check only, not relied upon for correctness. |
+| `data.count` | number | present in the real response | **Deliberately NOT read or cross-checked.** GameZone's public contract does not document `count` as authoritative, so this parser never compares it against the actual number of parsed/skipped entries and never rejects a response solely because they differ. |
 | `active[].name` | string | **required per entry** | The target's given name (GameZone's own "Gorgash"-style identity) - never blank. An entry missing this is skipped, never given a guessed name. |
 | `active[].reward` | number | **required per entry** | Coin reward, mapped as a `long` (large values observed possible - see tests for beyond-`int`-range handling). An entry missing or with a negative reward is skipped, never clamped/guessed. |
 | `active[].entityType` | string | optional | e.g. `"WITHER_SKELETON"`. Cosmetically underscore-to-space converted for display only - never mapped to a different/guessed value. |
 | `active[].hint` | string, nullable | optional | The public clue, shown byte-for-byte. `null`/absent means no clue was published - Companion shows "Ingen offentlig ledtråd," never a placeholder pretending one exists. |
 | `active[].status` | string | optional | The source's own per-entry status (observed value: `"ACTIVE"`), preserved as-delivered. |
 | `active[].createdAt` | ISO-8601 string, nullable | optional | Publish timestamp. An unparseable value degrades that one field to absent rather than discarding the whole entry. |
-| `active[].expiresAt` | ISO-8601 string or `null` | optional | Expiry. `null` means the bounty genuinely has no time limit (GameZone's own documented "kan sakna tidsgräns helt") - Companion never invents an expiry when none was published. |
+| `active[].expiresAt` | ISO-8601 string, explicit `null`, or absent | optional | Expiry - see "Expiry semantics" immediately below. The three possible source facts are modeled as three distinct `BountyExpiry` states and are NEVER collapsed into each other. |
+
+### Expiry semantics (`BountyExpiry`)
+
+An earlier version of this parser collapsed "explicit `null`," "field absent," and "malformed
+non-null value" all into a single `null` `Instant`, which the UI then unconditionally rendered as
+"Ingen tidsgräns" (no time limit). That was wrong for two of those three cases: an absent or
+malformed field is not GameZone telling us there is no time limit - it is GameZone telling us
+nothing at all. `BountyEntry.expiry()` now always holds one of three explicit `BountyExpiry` states,
+decided only by `BountyJsonParser.parseExpiry`:
+
+| Source fact | `BountyExpiry` state | UI wording |
+|---|---|---|
+| Explicit JSON `"expiresAt": null"` | `NoLimit` | "Ingen tidsgräns" |
+| A valid ISO-8601 timestamp string | `ExpiresAt(Instant)` | locally-computed countdown ("2 d 4 h", "42 min", etc.) |
+| Field absent entirely | `Unknown` | "Tidsgräns okänd" |
+| Present but non-string, blank, or an unparseable non-null string | `Unknown` | "Tidsgräns okänd" |
+
+Only the real captured contract's explicit `null` case has been observed in practice as of this
+writing (see §3's captured sample) - "field absent" and "malformed" are defensive handling for a
+future response shape this parser hasn't seen yet, never assumed to mean "unlimited." See
+`BountyJsonParserTest`'s dedicated expiry tests and `BountyFormatterTest`'s
+`formatRemainingTime` tests for all four states.
 
 Behavior at the documented edge cases, all covered by deterministic tests (`BountyJsonParserTest`,
 `GameZoneBountySourceTest`):
@@ -86,6 +108,13 @@ Behavior at the documented edge cases, all covered by deterministic tests (`Boun
 - **One / several active bounties**: parse independently; order preserved.
 - **A malformed individual entry** (missing `name` or `reward`, a non-object element in the array,
   a negative reward): that one entry is silently skipped; the rest of the registry still loads.
+- **A NONEMPTY `data.active` where every single entry fails to parse** (e.g. GameZone renames a
+  required field such as `reward`): the WHOLE fetch is reported `Incompatible`, never a false
+  `Success([])`. A genuinely empty `data.active` is the only way to legitimately reach an empty
+  result - "every entry present failed to parse" and "there were no entries to begin with" are
+  different facts and must never produce the same outcome (see `BountyJsonParser`'s own doc
+  comment and its `nonemptyRegistryAllMalformedIsIncompatible`/`renamedRequiredFieldInEveryEntryIsIncompatible`
+  tests).
 - **A malformed top-level response** (not JSON at all; missing `data`/`data.active`; an unexpected
   top-level `status` value; `data.active` present but not an array): the WHOLE fetch is reported
   `Incompatible` - GameZone most likely changed the contract shape, not a transient network issue.
@@ -175,6 +204,11 @@ fetch already produces:
 - **A failed refresh with prior valid data becomes `STALE`**, keeping the old bounties (or the old
   "zero active" result) visible, clearly marked cached ("CACHAD" badge / "Cachad data - X sedan"
   footer) - never re-labeled LIVE.
+- **`STALE` with zero cached entries is presented distinctly from a genuine current-zero `LOADED`
+  result** - see §8's empty-state table. The last successful fetch found nothing, but the CURRENT
+  state is unknown (the refresh that would confirm it just failed), so Companion never claims
+  "there is no active hunt right now" for a `STALE` empty snapshot - a bounty may have been created
+  since that last successful fetch.
 
 ## 8. UI
 
@@ -187,15 +221,27 @@ BountyLayout`, mirroring `GuideLayout`'s pattern exactly):
   compact scrollable list on the left (name, reward, entity type, remaining time per row) and the
   selected bounty's full detail on the right - no horizontal overflow at any tested viewport.
 - **Compact** (< 300px): a single-pane Guide-style list → select → detail → "< Lista" back button.
-- **Empty state** ("INGA AKTIVA BOUNTIES" / "Det finns ingen aktiv jakt just nu. Kontrollera igen
-  senare.") is deliberately NOT styled as a failure - a genuine `LOADED` status with zero entries
-  gets this friendly copy, while `UNAVAILABLE`/`ERROR`/`INCOMPATIBLE` get distinct, honest failure
-  copy (`BountiesTabComponent.emptyStateHeadline`/`emptyStateBody`, both directly unit-tested).
+- **Empty state** is deliberately NOT one-size-fits-all - four distinct statuses produce four
+  distinct headlines/bodies (`BountiesTabComponent.emptyStateHeadline`/`emptyStateBody`, both
+  directly unit-tested), because "zero entries" means a different thing depending on WHY there are
+  zero:
+
+  | Status | Headline | Body | What it actually means |
+  |---|---|---|---|
+  | `LOADED` (empty) | "INGA AKTIVA BOUNTIES" | "Det finns ingen aktiv jakt just nu. Kontrollera igen senare." | The CURRENT fetch succeeded and genuinely found nothing - a real success, not a failure. |
+  | `STALE` (empty) | "INGA BOUNTIES I CACHAD DATA" | "Senast hämtade data innehöll inga aktiva jakter. Uppdatera för aktuell status." | The LAST successful fetch found nothing, but a MORE RECENT refresh just failed - the current state is unknown, so this deliberately does NOT say "no active hunt right now." |
+  | `UNAVAILABLE`/`ERROR` | "KUNDE INTE HÄMTA" | "Kunde inte hämta bounty-registret just nu." | A genuine network-level failure with no usable cache at all. |
+  | `INCOMPATIBLE` | "OTILLGÄNGLIG" | "GameZone har ändrat gränssnittet - stöds inte just nu." | The response was reachable but this parser could no longer understand it (see the expiry/malformed-registry sections in §3). |
+
+  The header/footer freshness badge still shows "CACHAD" for `STALE` regardless of whether the
+  cached data is empty or not, so a `STALE`-empty view is never visually indistinguishable from a
+  genuinely live empty result.
 - **Detail pane**: name, entity type, "BELÖNING" (formatted reward), "LEDTRÅD" (the clue verbatim,
   or "Ingen offentlig ledtråd"), "TID KVAR" (locally-computed remaining time from a real expiry
-  timestamp, or "Ingen tidsgräns" when the bounty genuinely has none, or "Kan ha löpt ut -
-  uppdatera" once cached data has crossed its known expiry without a fresher server response), and
-  the command-copy button (omitted entirely for an unsafe-to-quote name).
+  timestamp; "Ingen tidsgräns" only when the source explicitly said there is no limit; "Tidsgräns
+  okänd" when the source simply didn't say; or "Kan ha löpt ut - uppdatera" once cached data has
+  crossed its known expiry without a fresher server response), and the command-copy button
+  (omitted entirely for an unsafe-to-quote name).
 - **Footer**: freshness detail line ("Uppdaterad just nu" / "Uppdaterad 34 sek sedan" / "Cachad
   data - X sedan") plus the "Uppdatera" button, disabled during the cooldown/an active fetch -
   identical family of behavior to Leaderboards' footer.
@@ -225,13 +271,21 @@ needed a new static fact beyond what §2 already documents inline.
 
 - `BountyJsonParserTest` - pure JSON-in/entries-out tests against fixtures shaped exactly like the
   real captured contract (§3): empty/one/many active bounties, reward parsing including
-  beyond-`int`-range values, Unicode names, clue present/absent, expiry present/absent, malformed
-  individual entries (skipped), malformed top-level responses and an unexpected top-level `status`
-  value (both `Incompatible`), unparseable individual timestamps (degrade gracefully).
+  beyond-`int`-range values, Unicode names, clue present/absent, all four `BountyExpiry` states
+  (explicit `null` &rarr; `NoLimit`, valid timestamp &rarr; `ExpiresAt`, absent field &rarr;
+  `Unknown`, non-string/malformed value &rarr; `Unknown` - never collapsed into each other),
+  malformed individual entries (skipped), malformed top-level responses and an unexpected top-level
+  `status` value (both `Incompatible`), unparseable `createdAt` (degrades gracefully, unlike
+  `expiresAt` which becomes `Unknown`), and the nonempty-registry-but-nothing-parsed case (several
+  malformed entries alongside one valid one still succeeds; a nonempty registry where EVERY entry
+  is malformed, or where a required field was renamed in every entry, or where every element is a
+  non-object, is `Incompatible` rather than a false empty `Success`).
 - `GameZoneBountySourceTest` - HTTP-level tests against a local JDK `HttpServer` (no real network):
   success, non-2xx, offline, redirect refusal, host allowlisting, the two-layer response-size
-  ceiling (declared-oversized and chunked-oversized), and a direct assertion that the outgoing
-  request carries no cookie/auth header and no header beyond the minimal expected set.
+  ceiling (declared-oversized and chunked-oversized), a direct assertion that the outgoing request
+  carries no cookie/auth header and no header beyond the minimal expected set, and an end-to-end
+  confirmation that a nonempty-but-entirely-malformed registry surfaces as `Incompatible` through
+  the real HTTP path, not just at the pure-parser level.
 - `BountyManagerTest` - mirrors `LeaderboardManagerTest`'s deterministic latch-based convention:
   constructing the manager causes zero fetches; the first `ensureFresh` fetches once; repeated
   render-loop-style calls within the 60s window never refetch; the 12s manual cooldown; a
@@ -241,13 +295,16 @@ needed a new static fact beyond what §2 already documents inline.
   is `LOADED`, never an error; up to 100 rapid concurrent requests while one fetch is active still
   produce exactly one network call.
 - `BountyFormatterTest` - reward grouping (including large values), remaining-time formatting for
-  every documented shape (days+hours, hours+minutes, minutes-only, under a minute, no expiry,
-  crossed-expiry wording), command-copy safety (whitespace/quote/backslash/slash/blank all refused
-  cleanly), entity-type cosmetic formatting, and freshness label/detail text.
+  every documented shape (days+hours, hours+minutes, minutes-only, under a minute, explicit
+  `NoLimit`, `Unknown` - distinct from `NoLimit` - and crossed-expiry wording), command-copy safety
+  (whitespace/quote/backslash/slash/blank all refused cleanly), entity-type cosmetic formatting,
+  and freshness label/detail text.
 - `BountiesTabComponentTest` - pure Font-free tests for `clampIndex`, `clampScroll`, the
-  empty-state headline/body pairing per status, `rowIndexAt`'s click-to-row resolution (including
-  scroll-offset accounting and out-of-bounds clicks), and `BountyLayout`'s wide/compact breakpoint
-  and non-overlapping-panes guarantees.
+  empty-state headline/body pairing per status (including a dedicated proof that all four of
+  `LOADED`/`STALE`/`UNAVAILABLE`/`INCOMPATIBLE` produce four genuinely distinct headlines, and that
+  `STALE`-empty never reuses `LOADED`-empty's "no active hunt right now" wording), `rowIndexAt`'s
+  click-to-row resolution (including scroll-offset accounting and out-of-bounds clicks), and
+  `BountyLayout`'s wide/compact breakpoint and non-overlapping-panes guarantees.
 - `BountyFairPlayTest` - structural source-scanning (mirroring `LeaderboardFairPlayTest`) proving
   no entity/world-scanning API, no packet/chat/command-sending API (only `setClipboard`), and no
   non-GameZone host literal is referenced anywhere in this feature's source.
@@ -260,3 +317,29 @@ needed a new static fact beyond what §2 already documents inline.
 This document describes work implemented on `main` at commit-time. `mod_version` remains
 `0.1.0-alpha.4` - this feature is intended for `0.1.0-alpha.5`, which has not been prepared,
 tagged, or released. No installer/release artifact was touched by this feature's implementation.
+
+## 14. Correctness hardening follow-up (2026-09-13)
+
+An independent review of the initial implementation (commit `4fdb95e`) found three correctness
+issues, all fixed in this follow-up pass:
+
+1. **Expiry ambiguity** - the original parser collapsed "explicit `null`," "field absent," and "a
+   malformed non-null value" into a single `null` `Instant`, which the UI then always rendered as
+   "Ingen tidsgräns" (no time limit). A malformed or absent field is not the source telling us
+   there is no limit. Fixed by introducing `BountyExpiry` (`NoLimit`/`ExpiresAt`/`Unknown`) - see
+   the "Expiry semantics" subsection under §3.
+2. **A nonempty registry every entry of which failed to parse could silently become an empty
+   `Success`**, which the UI would then present as "INGA AKTIVA BOUNTIES" even though bounties
+   genuinely existed server-side. Fixed: `BountyJsonParser.parseActiveBounties` now throws
+   `BountyIncompatibleException` when `data.active` is nonempty but zero entries survive per-entry
+   validation - see §3's "Behavior at the documented edge cases" list. `data.count` remains
+   deliberately unused for this or any other decision (documented, not silently claimed elsewhere).
+3. **`STALE` with zero cached entries was presented with the same wording as a genuine current
+   `LOADED` zero-bounty result**, which could claim "there is no active hunt right now" based on
+   stale information after a failed refresh. Fixed with distinct `STALE`-empty copy - see §8's
+   empty-state table.
+
+No changes were made to: the public source/endpoint, the shared-runtime wiring, the 60s/12s
+refresh policy, the coalescing scheduler, fair-play boundaries, or the unrelated
+`AsyncGuideProgressStore.drainBounded` retry-timing fix from `4fdb95e` (reviewed again in this
+pass and confirmed still correct, unchanged).

@@ -75,9 +75,24 @@ class BountiesTabComponentTest {
     }
 
     @Test
-    @DisplayName("Empty state: STALE with no cached entries is also presented as the friendly empty state, not an error")
+    @DisplayName("Empty state: STALE with no cached entries gets its OWN distinct wording - it must NEVER claim "
+            + "'there is no active hunt right now', since the CURRENT state is unknown (the refresh that would "
+            + "confirm it failed) and a bounty may have appeared since the last successful (empty) fetch")
     void emptyStateForStaleWithNoEntries() {
-        assertEquals("INGA AKTIVA BOUNTIES", BountiesTabComponent.emptyStateHeadline(BountyStatus.STALE));
+        String headline = BountiesTabComponent.emptyStateHeadline(BountyStatus.STALE);
+        String body = BountiesTabComponent.emptyStateBody(BountyStatus.STALE);
+
+        assertNotEquals("INGA AKTIVA BOUNTIES", headline, "STALE-empty must not reuse the genuine-current-zero headline");
+        assertFalse(body.contains("ingen aktiv jakt just nu"),
+                "STALE-empty must never assert there is currently no active hunt - that was only true as of the last successful fetch");
+    }
+
+    @Test
+    @DisplayName("Empty state: LOADED with zero entries (a genuine, current, successful result) IS presented as "
+            + "'no active hunt right now' - this is the one status allowed to say that")
+    void emptyStateForLoadedIsGenuineCurrentZero() {
+        assertEquals("INGA AKTIVA BOUNTIES", BountiesTabComponent.emptyStateHeadline(BountyStatus.LOADED));
+        assertTrue(BountiesTabComponent.emptyStateBody(BountyStatus.LOADED).contains("ingen aktiv jakt just nu"));
     }
 
     @Test
@@ -88,12 +103,28 @@ class BountiesTabComponentTest {
     }
 
     @Test
-    @DisplayName("Empty state: UNAVAILABLE/ERROR/INCOMPATIBLE show a genuine failure message, distinct from the empty-success one")
+    @DisplayName("Empty state: UNAVAILABLE/ERROR/INCOMPATIBLE show a genuine failure message, distinct from the "
+            + "empty-success one AND distinct from the STALE-empty wording")
     void emptyStateForRealFailures() {
         assertEquals("KUNDE INTE HÄMTA", BountiesTabComponent.emptyStateHeadline(BountyStatus.UNAVAILABLE));
         assertEquals("KUNDE INTE HÄMTA", BountiesTabComponent.emptyStateHeadline(BountyStatus.ERROR));
         assertEquals("OTILLGÄNGLIG", BountiesTabComponent.emptyStateHeadline(BountyStatus.INCOMPATIBLE));
         assertFalse(BountiesTabComponent.emptyStateBody(BountyStatus.UNAVAILABLE).contains("ingen aktiv jakt"));
+
+        assertNotEquals(BountiesTabComponent.emptyStateHeadline(BountyStatus.UNAVAILABLE), BountiesTabComponent.emptyStateHeadline(BountyStatus.STALE));
+        assertNotEquals(BountiesTabComponent.emptyStateHeadline(BountyStatus.INCOMPATIBLE), BountiesTabComponent.emptyStateHeadline(BountyStatus.STALE));
+    }
+
+    @Test
+    @DisplayName("Empty state: all four distinct statuses (LOADED/STALE/UNAVAILABLE/INCOMPATIBLE) produce four distinct headlines")
+    void emptyStateHeadlinesAreAllDistinctAcrossStatuses() {
+        String loaded = BountiesTabComponent.emptyStateHeadline(BountyStatus.LOADED);
+        String stale = BountiesTabComponent.emptyStateHeadline(BountyStatus.STALE);
+        String unavailable = BountiesTabComponent.emptyStateHeadline(BountyStatus.UNAVAILABLE);
+        String incompatible = BountiesTabComponent.emptyStateHeadline(BountyStatus.INCOMPATIBLE);
+
+        assertEquals(4, java.util.Set.of(loaded, stale, unavailable, incompatible).size(),
+                "each of these four states communicates a genuinely different fact and must not share wording");
     }
 
     // ------------------------------------------------------------------

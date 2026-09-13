@@ -22,7 +22,7 @@ remains `0.1.0-alpha.4` until this work has been code-reviewed and human-QA test
   automatically - the one command-related action is a deliberate clipboard-copy button. See
   `docs/BOUNTY-BOARD.md`.
 - `bounty` package: `BountyEntry`/`BountyStatus`/`BountySnapshot`/`BountyFetchResult`,
-  `BountyJsonParser`, `GameZoneBountySource`, `BountyManager`, `BountyFormatter`.
+  `BountyJsonParser`, `GameZoneBountySource`, `BountyManager`, `BountyFormatter`, `BountyExpiry`.
 - New `BOUNTY` icon (`textures/gui/icons/bounty.png`) and `TabType.BOUNTIES` nav entry, positioned
   between MarketWatch and Leaderboards.
 
@@ -30,6 +30,14 @@ remains `0.1.0-alpha.4` until this work has been code-reviewed and human-QA test
 - `MainScreenLayout`'s sidebar tab-height calculation could force a taller-than-available tab
   height once enough nav tabs existed, overflowing the sidebar at small viewports - fixed to never
   exceed what actually fits, regardless of tab count.
+- **Bounty Board correctness hardening** (independent review follow-up): a missing/malformed
+  `expiresAt` was indistinguishable from GameZone explicitly saying "no time limit" - fixed with a
+  new explicit `BountyExpiry` (`NoLimit`/`ExpiresAt`/`Unknown`) model; a nonempty bounty registry
+  where every entry failed to parse (e.g. a renamed required field) could silently present as "no
+  active bounties" - fixed to report `Incompatible` instead; a `STALE` empty cache could claim
+  "there is no active hunt right now," which is only true of the last successful fetch, not
+  necessarily the current state - fixed with distinct `STALE`-empty wording. See
+  `docs/BOUNTY-BOARD.md` §14.
 
 ## [0.1.0-alpha.4] - 2026-09-13
 

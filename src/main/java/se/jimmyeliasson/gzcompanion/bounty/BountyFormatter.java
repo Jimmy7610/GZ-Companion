@@ -71,14 +71,19 @@ public final class BountyFormatter {
     }
 
     /**
-     * Locally-calculated remaining time from a real expiry timestamp - {@code "2 d 4 h"} /
-     * {@code "5 h 18 min"} / {@code "42 min"} / {@code "< 1 min"}. Returns a distinct, honest
-     * "may have expired" message once the known expiry has passed but no fresher server response
-     * has arrived yet - never silently keeps presenting a crossed expiry as though it were still
-     * definitely active.
+     * Locally-calculated remaining time from a {@link BountyExpiry} - {@code "2 d 4 h"} /
+     * {@code "5 h 18 min"} / {@code "42 min"} / {@code "< 1 min"} for a real timestamp,
+     * {@code "Ingen tidsgräns"} only when the source EXPLICITLY said there is no limit
+     * ({@link BountyExpiry.NoLimit}), and {@code "Tidsgräns okänd"} when the source simply didn't
+     * say ({@link BountyExpiry.Unknown}) - these two are never conflated. Returns a distinct,
+     * honest "may have expired" message once a known expiry has passed but no fresher server
+     * response has arrived yet - never silently keeps presenting a crossed expiry as though it
+     * were still definitely active.
      */
-    public static String formatRemainingTime(Instant expiresAt, Instant now) {
-        if (expiresAt == null) return "Ingen tidsgräns";
+    public static String formatRemainingTime(BountyExpiry expiry, Instant now) {
+        if (expiry == null || expiry instanceof BountyExpiry.Unknown) return "Tidsgräns okänd";
+        if (expiry instanceof BountyExpiry.NoLimit) return "Ingen tidsgräns";
+        Instant expiresAt = ((BountyExpiry.ExpiresAt) expiry).instant();
         Duration remaining = Duration.between(now, expiresAt);
         if (remaining.isNegative() || remaining.isZero()) {
             return "Kan ha löpt ut - uppdatera";

@@ -96,13 +96,20 @@ public class BountiesTabComponent {
      * The message shown in place of a list when there are no entries to show - distinguishes a
      * genuine "zero active bounties" SUCCESS from a real loading/failure state, per this feature's
      * explicit "do not show Error when the real result is simply no active bounties" requirement.
+     *
+     * <p><b>{@code STALE} is deliberately its own case, not folded into the {@code LOADED}
+     * wording.</b> A {@code STALE} empty snapshot means the LAST successful fetch found zero
+     * bounties, but a MORE RECENT refresh attempt failed - GameZone may have created a bounty since
+     * then, so Companion must never claim "there is no active hunt right now" here. Only a genuine
+     * {@code LOADED} empty result (the current refresh itself succeeded) may say that.
      */
     static String emptyStateHeadline(BountyStatus status) {
         return switch (status) {
             case LOADING -> "HÄMTAR BOUNTIES...";
             case UNAVAILABLE, ERROR -> "KUNDE INTE HÄMTA";
             case INCOMPATIBLE -> "OTILLGÄNGLIG";
-            default -> "INGA AKTIVA BOUNTIES";
+            case STALE -> "INGA BOUNTIES I CACHAD DATA";
+            default -> "INGA AKTIVA BOUNTIES"; // LOADED (genuine current zero) / IDLE
         };
     }
 
@@ -111,6 +118,7 @@ public class BountiesTabComponent {
             case LOADING -> "";
             case UNAVAILABLE, ERROR -> "Kunde inte hämta bounty-registret just nu.";
             case INCOMPATIBLE -> "GameZone har ändrat gränssnittet - stöds inte just nu.";
+            case STALE -> "Senast hämtade data innehöll inga aktiva jakter. Uppdatera för aktuell status.";
             default -> "Det finns ingen aktiv jakt just nu. Kontrollera igen senare.";
         };
     }
@@ -206,7 +214,7 @@ public class BountiesTabComponent {
                 TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
 
         String subtitle = entry.hasEntityType() ? BountyFormatter.formatEntityType(entry.entityType()) : "";
-        String remaining = entry.hasExpiry() ? BountyFormatter.formatRemainingTime(entry.expiresAt(), Instant.now()) : "Ingen tidsgräns";
+        String remaining = BountyFormatter.formatRemainingTime(entry.expiry(), Instant.now());
         String secondLine = subtitle.isBlank() ? remaining : (subtitle + "  •  " + remaining);
         TextUtil.drawScaledEllipsizedText(extractor, font, secondLine, x + 3, y + 11, width - 6,
                 TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
@@ -262,7 +270,7 @@ public class BountiesTabComponent {
                 TypographyScale.SMALL.getScale(), 4, 2, GZTheme.COLOR_TEXT_SECONDARY, false);
         y += 4;
 
-        String remaining = entry.hasExpiry() ? BountyFormatter.formatRemainingTime(entry.expiresAt(), Instant.now()) : "Ingen tidsgräns";
+        String remaining = BountyFormatter.formatRemainingTime(entry.expiry(), Instant.now());
         y = renderDetailSection(extractor, font, contentX, y, contentW, "TID KVAR", remaining, GZTheme.COLOR_TEXT_PRIMARY);
 
         String command = BountyFormatter.bountyInfoCommand(entry.name());

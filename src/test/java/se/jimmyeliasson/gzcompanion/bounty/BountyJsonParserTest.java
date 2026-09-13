@@ -35,7 +35,7 @@ class BountyJsonParserTest {
         assertEquals("En armé av fientliga mobs har invaderat byn utanför västra bron!", entry.hint());
         assertEquals("ACTIVE", entry.status());
         assertEquals(Instant.parse("2026-08-29T20:42:37Z"), entry.createdAt());
-        assertNull(entry.expiresAt());
+        assertEquals(BountyExpiry.NO_LIMIT, entry.expiry(), "an explicit JSON null must map to NoLimit, not Unknown");
         assertFalse(entry.hasExpiry());
         assertTrue(entry.hasHint());
         assertTrue(entry.hasEntityType());
@@ -113,17 +113,40 @@ class BountyJsonParserTest {
                 + "],\"count\":1}}";
         BountyEntry entry = BountyJsonParser.parseActiveBounties(json).get(0);
         assertTrue(entry.hasExpiry());
-        assertEquals(Instant.parse("2026-09-14T12:00:00Z"), entry.expiresAt());
+        assertInstanceOf(BountyExpiry.ExpiresAt.class, entry.expiry());
+        assertEquals(Instant.parse("2026-09-14T12:00:00Z"), ((BountyExpiry.ExpiresAt) entry.expiry()).instant());
     }
 
     @Test
-    @DisplayName("A bounty with expiresAt: null (no time limit) reports hasExpiry() false - never an invented expiry")
-    void bountyWithNullExpiryHasNoExpiry() throws Exception {
+    @DisplayName("A bounty with an EXPLICIT expiresAt: null maps to NoLimit - GameZone itself says no time limit")
+    void explicitNullExpiryMapsToNoLimit() throws Exception {
         String json = "{\"status\":\"success\",\"data\":{\"active\":["
                 + "{\"name\":\"Forever\",\"reward\":100,\"status\":\"ACTIVE\",\"expiresAt\":null}"
                 + "],\"count\":1}}";
         BountyEntry entry = BountyJsonParser.parseActiveBounties(json).get(0);
         assertFalse(entry.hasExpiry());
+        assertEquals(BountyExpiry.NO_LIMIT, entry.expiry());
+    }
+
+    @Test
+    @DisplayName("An ABSENT expiresAt field maps to Unknown, never guessed as NoLimit")
+    void absentExpiryFieldMapsToUnknown() throws Exception {
+        String json = "{\"status\":\"success\",\"data\":{\"active\":["
+                + "{\"name\":\"NoField\",\"reward\":100,\"status\":\"ACTIVE\"}"
+                + "],\"count\":1}}";
+        BountyEntry entry = BountyJsonParser.parseActiveBounties(json).get(0);
+        assertFalse(entry.hasExpiry());
+        assertEquals(BountyExpiry.UNKNOWN, entry.expiry(), "an absent field is not the same fact as an explicit null");
+    }
+
+    @Test
+    @DisplayName("A non-string, non-null expiresAt value maps to Unknown, never NoLimit")
+    void nonStringExpiryValueMapsToUnknown() throws Exception {
+        String json = "{\"status\":\"success\",\"data\":{\"active\":["
+                + "{\"name\":\"Weird\",\"reward\":100,\"status\":\"ACTIVE\",\"expiresAt\":12345}"
+                + "],\"count\":1}}";
+        BountyEntry entry = BountyJsonParser.parseActiveBounties(json).get(0);
+        assertEquals(BountyExpiry.UNKNOWN, entry.expiry());
     }
 
     @Test
@@ -196,7 +219,8 @@ class BountyJsonParserTest {
     }
 
     @Test
-    @DisplayName("An unparseable individual timestamp degrades that field to absent, not fatal to the entry")
+    @DisplayName("An unparseable createdAt degrades that field to absent; an unparseable expiresAt maps to Unknown - "
+            + "NEVER to NoLimit, since a parse failure is not the source telling us there is no time limit")
     void unparseableTimestampDegradesGracefully() throws Exception {
         String json = "{\"status\":\"success\",\"data\":{\"active\":["
                 + "{\"name\":\"BadDate\",\"reward\":100,\"status\":\"ACTIVE\",\"createdAt\":\"not-a-date\",\"expiresAt\":\"also-bad\"}"
@@ -204,8 +228,8 @@ class BountyJsonParserTest {
         BountyEntry entry = BountyJsonParser.parseActiveBounties(json).get(0);
         assertEquals("BadDate", entry.name());
         assertNull(entry.createdAt());
-        assertNull(entry.expiresAt());
         assertFalse(entry.hasExpiry());
+        assertEquals(BountyExpiry.UNKNOWN, entry.expiry(), "a malformed non-null expiresAt must map to Unknown, not NoLimit");
     }
 
     @Test
@@ -218,5 +242,63 @@ class BountyJsonParserTest {
         List<BountyEntry> entries = BountyJsonParser.parseActiveBounties(json);
         assertEquals(1, entries.size());
         assertEquals("Valid", entries.get(0).name());
+    }
+
+    // ------------------------------------------------------------------
+    // Nonempty-registry-but-nothing-parsed must be INCOMPATIBLE, never a false "zero bounties"
+    // success (see BountyManager's applyResult - a false empty-Success here would surface as
+    // "INGA AKTIVA BOUNTIES" even though bounties genuinely exist server-side).
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Several malformed entries alongside one valid entry still yields Success(valid) - partial parsing is fine")
+    void severalMalformedWithOneValidStillSucceeds() throws Exception {
+        String json = "{\"status\":\"success\",\"data\":{\"active\":["
+                + "{\"reward\":100,\"status\":\"ACTIVE\"},"
+                + "{\"name\":\"NoReward\",\"status\":\"ACTIVE\"},"
+                + "{\"name\":\"Negative\",\"reward\":-1,\"status\":\"ACTIVE\"},"
+                + "\"not-an-object\","
+                + "{\"name\":\"Valid\",\"reward\":200,\"status\":\"ACTIVE\"}"
+                + "],\"count\":5}}";
+        List<BountyEntry> entries = BountyJsonParser.parseActiveBounties(json);
+        assertEquals(1, entries.size());
+        assertEquals("Valid", entries.get(0).name());
+    }
+
+    @Test
+    @DisplayName("A NONEMPTY active array where EVERY entry is malformed is INCOMPATIBLE, never an empty success")
+    void nonemptyRegistryAllMalformedIsIncompatible() {
+        String json = "{\"status\":\"success\",\"data\":{\"active\":["
+                + "{\"reward\":100,\"status\":\"ACTIVE\"},"
+                + "{\"name\":\"NoReward\",\"status\":\"ACTIVE\"}"
+                + "],\"count\":2}}";
+        assertThrows(BountyIncompatibleException.class, () -> BountyJsonParser.parseActiveBounties(json));
+    }
+
+    @Test
+    @DisplayName("A renamed required field (reward -> rewardCoins) in EVERY entry is INCOMPATIBLE, "
+            + "never silently surfaced as zero active bounties")
+    void renamedRequiredFieldInEveryEntryIsIncompatible() {
+        String json = "{\"status\":\"success\",\"data\":{\"active\":["
+                + "{\"name\":\"Gorgash\",\"rewardCoins\":1000,\"status\":\"ACTIVE\"},"
+                + "{\"name\":\"Bloodmaw\",\"rewardCoins\":2500,\"status\":\"ACTIVE\"}"
+                + "],\"count\":2}}";
+        assertThrows(BountyIncompatibleException.class, () -> BountyJsonParser.parseActiveBounties(json));
+    }
+
+    @Test
+    @DisplayName("A NONEMPTY active array containing only non-object elements is INCOMPATIBLE")
+    void nonemptyArrayOfOnlyNonObjectsIsIncompatible() {
+        String json = "{\"status\":\"success\",\"data\":{\"active\":["
+                + "\"not-an-object\",\"also-not-an-object\",42"
+                + "],\"count\":3}}";
+        assertThrows(BountyIncompatibleException.class, () -> BountyJsonParser.parseActiveBounties(json));
+    }
+
+    @Test
+    @DisplayName("A genuinely EMPTY active array still parses to an empty Success, never Incompatible")
+    void genuinelyEmptyArrayIsStillSuccess() throws Exception {
+        String json = "{\"status\":\"success\",\"data\":{\"active\":[],\"count\":0}}";
+        assertTrue(BountyJsonParser.parseActiveBounties(json).isEmpty());
     }
 }
