@@ -1,6 +1,7 @@
 package se.jimmyeliasson.gzcompanion;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,11 +12,17 @@ import se.jimmyeliasson.gzcompanion.gamezone.bridge.GameZoneToastHudElement;
 import se.jimmyeliasson.gzcompanion.guide.GuideScheduler;
 import se.jimmyeliasson.gzcompanion.keybind.KeybindHandler;
 
+import java.time.Duration;
+
 /**
  * Main Fabric client entrypoint for GZ Companion.
  */
 public class GZCompanionClient implements ClientModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(CompanionConstants.MOD_ID);
+
+    /** Bounded wait for CompanionSession#flushBeforeShutdown - long enough for a normal small JSON
+     * write, short enough to never make a game exit feel stuck. */
+    private static final Duration SHUTDOWN_FLUSH_TIMEOUT = Duration.ofSeconds(2);
 
     private final GuideScheduler guideScheduler = new GuideScheduler();
 
@@ -73,6 +80,12 @@ public class GZCompanionClient implements ClientModInitializer {
         LOGGER.info("GameZone-händelsemotor: {} ({} verifierade parsrar)",
                 session.getParserCatalogStatus().getDisplayName(),
                 session.getParserCatalog().activeCount());
+
+        // 7. Bounded best-effort final flush of any not-yet-persisted guide progress on normal
+        // game exit - see CompanionSession#flushBeforeShutdown and
+        // docs/PERFORMANCE-AUDIT-ALPHA4.md's "shutdown / final flush" section. Never blocks longer
+        // than SHUTDOWN_FLUSH_TIMEOUT, so a stuck/slow disk can never hang game shutdown.
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client -> session.flushBeforeShutdown(SHUTDOWN_FLUSH_TIMEOUT));
 
         LOGGER.info("{} initialized successfully.", CompanionConstants.MOD_NAME);
     }

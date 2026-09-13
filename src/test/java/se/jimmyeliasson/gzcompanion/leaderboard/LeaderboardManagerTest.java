@@ -2,6 +2,7 @@ package se.jimmyeliasson.gzcompanion.leaderboard;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import se.jimmyeliasson.gzcompanion.gamezone.net.GameZoneLiveDataRuntime;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -30,6 +31,12 @@ class LeaderboardManagerTest {
 
     private static final LeaderboardDefinition BOARD_A = GameZoneLeaderboardRegistry.byId("player_coins").orElseThrow();
     private static final LeaderboardDefinition BOARD_B = GameZoneLeaderboardRegistry.byId("settlement_treasury").orElseThrow();
+
+    /** A fresh shared runtime per test instance (JUnit 5 creates a new test class instance per
+     * test method by default) - proves nothing here depends on LeaderboardManager owning its own
+     * executor anymore, and mirrors production's "one runtime, shared by every GameZone live-data
+     * feature" design without letting tests leak scheduling state into each other. */
+    private final GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test");
 
     private static final class FakeSource implements LeaderboardSource {
         final AtomicInteger callCount = new AtomicInteger();
@@ -71,7 +78,7 @@ class LeaderboardManagerTest {
     @Test
     @DisplayName("A never-fetched board starts IDLE with no entries")
     void neverFetchedBoardIsIdle() {
-        LeaderboardManager manager = new LeaderboardManager(new FakeSource());
+        LeaderboardManager manager = new LeaderboardManager(new FakeSource(), runtime);
         LeaderboardSnapshot snapshot = manager.getSnapshot(BOARD_A);
         assertEquals(LeaderboardStatus.IDLE, snapshot.status());
         assertTrue(snapshot.entries().isEmpty());
@@ -81,7 +88,7 @@ class LeaderboardManagerTest {
     @DisplayName("First ensureFresh triggers exactly one fetch and lands on LOADED")
     void firstEnsureFreshTriggersAFetch() {
         FakeSource source = new FakeSource();
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         manager.ensureFresh(BOARD_A);
         awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
@@ -94,7 +101,7 @@ class LeaderboardManagerTest {
     @DisplayName("Repeated ensureFresh calls within the auto-refresh window never refetch")
     void repeatedRenderCallsDoNotRefetchWithinWindow() {
         FakeSource source = new FakeSource();
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         manager.ensureFresh(BOARD_A);
         awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
@@ -112,7 +119,7 @@ class LeaderboardManagerTest {
         FakeSource source = new FakeSource();
         source.behavior = def -> new LeaderboardFetchResult.Success(
                 List.of(LeaderboardEntry.of(1, "Entity-" + def.id(), "1 coins", "Coins")));
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         manager.ensureFresh(BOARD_A);
         awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
@@ -140,7 +147,7 @@ class LeaderboardManagerTest {
     void staleCacheRemainsVisibleOnNetworkFailureAndIsNeverLive() {
         FakeSource source = new FakeSource();
         AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-09-13T12:00:00Z"));
-        LeaderboardManager manager = new LeaderboardManager(source, mutableClock(now));
+        LeaderboardManager manager = new LeaderboardManager(source, runtime, mutableClock(now));
 
         manager.ensureFresh(BOARD_A);
         awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
@@ -165,7 +172,7 @@ class LeaderboardManagerTest {
     void ensureFreshRefetchesAfterIntervalElapses() {
         FakeSource source = new FakeSource();
         AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-09-13T12:00:00Z"));
-        LeaderboardManager manager = new LeaderboardManager(source, mutableClock(now));
+        LeaderboardManager manager = new LeaderboardManager(source, runtime, mutableClock(now));
 
         manager.ensureFresh(BOARD_A);
         awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
@@ -200,7 +207,7 @@ class LeaderboardManagerTest {
     void neverSucceededBoardThatFailsBecomesUnavailable() {
         FakeSource source = new FakeSource();
         source.behavior = def -> new LeaderboardFetchResult.Unavailable("offline");
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         manager.ensureFresh(BOARD_A);
         awaitStatus(manager, BOARD_A, LeaderboardStatus.UNAVAILABLE, 2000);
@@ -213,7 +220,7 @@ class LeaderboardManagerTest {
     void incompatibleResultReported() {
         FakeSource source = new FakeSource();
         source.behavior = def -> new LeaderboardFetchResult.Incompatible("structure changed");
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         manager.ensureFresh(BOARD_A);
         awaitStatus(manager, BOARD_A, LeaderboardStatus.INCOMPATIBLE, 2000);
@@ -223,7 +230,7 @@ class LeaderboardManagerTest {
     @DisplayName("manualRefresh on a never-fetched board triggers a fetch immediately")
     void manualRefreshWorksOnFreshBoard() {
         FakeSource source = new FakeSource();
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         boolean triggered = manager.manualRefresh(BOARD_A);
 
@@ -236,7 +243,7 @@ class LeaderboardManagerTest {
     @DisplayName("A second manualRefresh within the manual cooldown window is a no-op")
     void manualRefreshCooldownBlocksRapidReclicks() {
         FakeSource source = new FakeSource();
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         assertTrue(manager.manualRefresh(BOARD_A));
         awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
@@ -252,7 +259,7 @@ class LeaderboardManagerTest {
     void concurrentRefreshIsCoalesced() throws InterruptedException {
         FakeSource source = new FakeSource();
         source.blockUntil = new CountDownLatch(1);
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         boolean first = manager.manualRefresh(BOARD_A);
         // A second trigger while the first fetch is still blocked in-flight must not start another.
@@ -274,7 +281,7 @@ class LeaderboardManagerTest {
         source.behavior = def -> def.id().equals(BOARD_A.id())
                 ? new LeaderboardFetchResult.Unavailable("A is down")
                 : new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "Beta-entity", "1 coins", "Coins")));
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         manager.ensureFresh(BOARD_A);
         manager.ensureFresh(BOARD_B);
@@ -290,7 +297,7 @@ class LeaderboardManagerTest {
     @DisplayName("Diagnostics summary never includes full entry data - only counts and metadata")
     void diagnosticsSummaryIsMetadataOnly() {
         FakeSource source = new FakeSource();
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
         manager.ensureFresh(BOARD_A);
         awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
 
@@ -322,7 +329,7 @@ class LeaderboardManagerTest {
             return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "Entity-" + def.id(), "1 coins", "Coins")));
         };
         source.blockUntil = new CountDownLatch(1); // blocks whichever fetch is actually running (A's)
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         // activeFetch is assigned SYNCHRONOUSLY inside ensureFresh (before the executor thread even
         // starts running), so each of these calls deterministically sees the previous one's effect
@@ -347,7 +354,7 @@ class LeaderboardManagerTest {
     void sameBoardCoalescingStillWorksViaEnsureFresh() {
         FakeSource source = new FakeSource();
         source.blockUntil = new CountDownLatch(1);
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         manager.ensureFresh(BOARD_A);
         manager.ensureFresh(BOARD_A); // same board, still active - must coalesce, not become "pending"
@@ -369,7 +376,7 @@ class LeaderboardManagerTest {
             return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "Entity", "1", "Coins")));
         };
         source.blockUntil = new CountDownLatch(1);
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         manager.ensureFresh(BOARD_A);           // active
         manager.ensureFresh(BOARD_B);           // pending (auto)
@@ -393,7 +400,7 @@ class LeaderboardManagerTest {
             return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "Entity", "1", "Coins")));
         };
         source.blockUntil = new CountDownLatch(1);
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
 
         manager.ensureFresh(BOARD_A);            // active
         manager.manualRefresh(BOARD_E);          // pending (manual)
@@ -412,7 +419,7 @@ class LeaderboardManagerTest {
     void noUnboundedPendingJobsRegardlessOfCycleLength() {
         FakeSource source = new FakeSource();
         source.blockUntil = new CountDownLatch(1);
-        LeaderboardManager manager = new LeaderboardManager(source);
+        LeaderboardManager manager = new LeaderboardManager(source, runtime);
         List<LeaderboardDefinition> allBoards = GameZoneLeaderboardRegistry.all();
 
         manager.ensureFresh(allBoards.get(0)); // active
@@ -428,5 +435,96 @@ class LeaderboardManagerTest {
             try { Thread.sleep(5); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
         }
         assertEquals(2, source.callCount.get(), "cycling through all 27 boards while one fetch is active must still only ever produce 2 total network fetches");
+    }
+
+    // ------------------------------------------------------------------
+    // Shared GameZone live-data runtime (2026-09-13 performance-foundation follow-up): proves
+    // LeaderboardManager no longer owns its own ExecutorService, the shared runtime stays lazy
+    // until an actual fetch happens, and multiple managers can share the exact same runtime
+    // without creating extra workers or interfering with each other's scheduling.
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Constructing a LeaderboardManager does not create the shared GameZone worker thread and performs zero fetch work")
+    void constructingManagerDoesNotTriggerAnyFetch() {
+        GameZoneLiveDataRuntime freshRuntime = new GameZoneLiveDataRuntime("0.1.0-test");
+        FakeSource source = new FakeSource();
+        new LeaderboardManager(source, freshRuntime);
+
+        assertFalse(freshRuntime.isExecutorInitializedForTesting(),
+                "merely constructing a LeaderboardManager must not create the shared runtime's executor");
+        assertEquals(0, source.callCount.get(), "merely constructing a LeaderboardManager must not perform any fetch");
+    }
+
+    @Test
+    @DisplayName("The shared executor is created only once an actual fetch is requested, then reused, never recreated")
+    void sharedExecutorIsCreatedLazilyThenMemoized() {
+        GameZoneLiveDataRuntime freshRuntime = new GameZoneLiveDataRuntime("0.1.0-test");
+        FakeSource source = new FakeSource();
+        LeaderboardManager manager = new LeaderboardManager(source, freshRuntime);
+
+        assertFalse(freshRuntime.isExecutorInitializedForTesting(), "no worker before any fetch is requested");
+
+        manager.ensureFresh(BOARD_A);
+        awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
+
+        assertTrue(freshRuntime.isExecutorInitializedForTesting(), "the shared worker must exist once a fetch actually ran");
+        assertSame(freshRuntime.executor(), freshRuntime.executor(),
+                "the shared runtime must always hand back the identical executor instance, never a fresh one");
+    }
+
+    @Test
+    @DisplayName("Two independent managers sharing the same runtime both dispatch through the identical single executor thread")
+    void multipleConsumersShareTheSameExecutorThread() throws InterruptedException {
+        GameZoneLiveDataRuntime sharedRuntime = new GameZoneLiveDataRuntime("0.1.0-test");
+        List<Thread> observedThreads = Collections.synchronizedList(new ArrayList<>());
+
+        FakeSource sourceOne = new FakeSource();
+        sourceOne.behavior = def -> {
+            observedThreads.add(Thread.currentThread());
+            return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "One", "1", "Coins")));
+        };
+        FakeSource sourceTwo = new FakeSource();
+        sourceTwo.behavior = def -> {
+            observedThreads.add(Thread.currentThread());
+            return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "Two", "1", "Coins")));
+        };
+
+        // Simulates two different GameZone live-data features (e.g. Leaderboards and a future
+        // Bounty Board) each owning their own manager but sharing the ONE runtime, exactly as
+        // CompanionSession wires Leaderboards today.
+        LeaderboardManager managerOne = new LeaderboardManager(sourceOne, sharedRuntime);
+        LeaderboardManager managerTwo = new LeaderboardManager(sourceTwo, sharedRuntime);
+
+        managerOne.ensureFresh(BOARD_A);
+        awaitStatus(managerOne, BOARD_A, LeaderboardStatus.LOADED, 2000);
+        managerTwo.ensureFresh(BOARD_B);
+        awaitStatus(managerTwo, BOARD_B, LeaderboardStatus.LOADED, 2000);
+
+        assertEquals(2, observedThreads.size());
+        assertEquals("gzcompanion-gamezone-live", observedThreads.get(0).getName());
+        assertSame(observedThreads.get(0), observedThreads.get(1),
+                "both managers must dispatch through the exact same shared worker thread, never one each");
+    }
+
+    @Test
+    @DisplayName("Reopening/reconstructing a manager against the same runtime never creates a second worker")
+    void reconstructingManagerNeverCreatesAnotherWorker() {
+        GameZoneLiveDataRuntime sharedRuntime = new GameZoneLiveDataRuntime("0.1.0-test");
+        FakeSource source = new FakeSource();
+
+        LeaderboardManager firstOpen = new LeaderboardManager(source, sharedRuntime);
+        firstOpen.ensureFresh(BOARD_A);
+        awaitStatus(firstOpen, BOARD_A, LeaderboardStatus.LOADED, 2000);
+        assertTrue(sharedRuntime.isExecutorInitializedForTesting());
+
+        // Simulates the player closing and reopening the Companion UI - a fresh LeaderboardManager-
+        // like consumer object is created, but it is handed the SAME session-scoped runtime.
+        java.util.concurrent.ExecutorService executorAfterFirstOpen = sharedRuntime.executor();
+        LeaderboardManager secondOpen = new LeaderboardManager(new FakeSource(), sharedRuntime);
+        secondOpen.ensureFresh(BOARD_B);
+        awaitStatus(secondOpen, BOARD_B, LeaderboardStatus.LOADED, 2000);
+
+        assertSame(executorAfterFirstOpen, sharedRuntime.executor(), "the same executor instance must be reused, never recreated");
     }
 }

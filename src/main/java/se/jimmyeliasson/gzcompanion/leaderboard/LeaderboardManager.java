@@ -1,12 +1,12 @@
 package se.jimmyeliasson.gzcompanion.leaderboard;
 
+import se.jimmyeliasson.gzcompanion.gamezone.net.GameZoneLiveDataRuntime;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Supplier;
 
 /**
@@ -51,6 +51,15 @@ import java.util.function.Supplier;
  *       only the board that actually becomes {@link #activeFetch} is, so a superseded board (B, C
  *       above) is never left stuck showing "loading" for a fetch that never happened.</li>
  * </ul>
+ *
+ * <h2>Shared executor (2026-09-13 follow-up)</h2>
+ * This class no longer constructs its own {@code ExecutorService}. It holds a {@link
+ * GameZoneLiveDataRuntime} and only calls {@link GameZoneLiveDataRuntime#executor()} at the moment
+ * a fetch actually starts ({@link #startFetchLocked}) - never in a constructor, never eagerly.
+ * Constructing a {@code LeaderboardManager} (which happens once, at {@code CompanionSession}
+ * startup) therefore creates no thread by itself; the shared {@code gzcompanion-gamezone-live}
+ * worker thread is created only the first time ANY GameZone live-data feature (Leaderboards today,
+ * others later) actually submits work to it. See docs/PERFORMANCE-AUDIT-ALPHA4.md.
  */
 public final class LeaderboardManager {
     /** Automatic (board-opened/selector-cycled) refreshes never happen more often than this per board. */
@@ -63,10 +72,10 @@ public final class LeaderboardManager {
     public static final String ADAPTER_VERSION = "gamezonemc.se-html-v1";
 
     private final LeaderboardSource source;
+    private final GameZoneLiveDataRuntime runtime;
     private final Supplier<Instant> clock;
     private final Map<String, LeaderboardSnapshot> snapshots = new ConcurrentHashMap<>();
     private final Map<String, Instant> lastFetchAttemptAt = new ConcurrentHashMap<>();
-    private final ExecutorService executor;
 
     /** Guards {@link #activeFetch} and {@link #pendingRequest} - see class doc comment. A plain
      * monitor is sufficient: every critical section is a handful of field reads/writes plus (at
@@ -80,20 +89,16 @@ public final class LeaderboardManager {
     private volatile Instant lastSuccessfulRefreshAt;
     private volatile String lastErrorCategory;
 
-    public LeaderboardManager(LeaderboardSource source) {
-        this(source, Instant::now);
+    public LeaderboardManager(LeaderboardSource source, GameZoneLiveDataRuntime runtime) {
+        this(source, runtime, Instant::now);
     }
 
     /** Test-only seam - an injectable clock lets tests deterministically prove cooldown-EXPIRY
      * behavior (not just "still within window") without ever sleeping a real 60/12 seconds. */
-    LeaderboardManager(LeaderboardSource source, Supplier<Instant> clock) {
+    LeaderboardManager(LeaderboardSource source, GameZoneLiveDataRuntime runtime, Supplier<Instant> clock) {
         this.source = source;
+        this.runtime = runtime;
         this.clock = clock;
-        this.executor = Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "gzcompanion-leaderboards");
-            thread.setDaemon(true);
-            return thread;
-        });
     }
 
     /** Cheap, non-blocking read - never null; a never-fetched board returns {@link LeaderboardSnapshot#idle}. */
@@ -185,7 +190,7 @@ public final class LeaderboardManager {
                 previous != null ? previous.entries() : List.of(),
                 previous != null ? previous.fetchedAt() : null, null));
 
-        executor.execute(() -> runFetchThenAdvance(definition, previous));
+        runtime.executor().execute(() -> runFetchThenAdvance(definition, previous));
     }
 
     /** Runs the real fetch for {@code definition} (the current active fetch), applies its result,

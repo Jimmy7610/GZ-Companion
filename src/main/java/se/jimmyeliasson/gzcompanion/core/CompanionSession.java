@@ -9,6 +9,7 @@ import se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityService;
 import se.jimmyeliasson.gzcompanion.gamezone.RulePack;
 import se.jimmyeliasson.gzcompanion.gamezone.RulePackLoader;
 import se.jimmyeliasson.gzcompanion.gamezone.bridge.GameZoneChatObserver;
+import se.jimmyeliasson.gzcompanion.gamezone.net.GameZoneLiveDataRuntime;
 import se.jimmyeliasson.gzcompanion.gamezone.parsing.GameZoneParserCatalog;
 import se.jimmyeliasson.gzcompanion.gamezone.parsing.GameZoneParserLoader;
 import se.jimmyeliasson.gzcompanion.gamezone.settlement.GameZoneSettlementTracker;
@@ -17,6 +18,7 @@ import se.jimmyeliasson.gzcompanion.gamezone.toast.GameZoneToastManager;
 import se.jimmyeliasson.gzcompanion.guide.GuideEngine;
 import se.jimmyeliasson.gzcompanion.guide.GuideLoader;
 import se.jimmyeliasson.gzcompanion.guide.bridge.MinecraftGuideSnapshotProvider;
+import se.jimmyeliasson.gzcompanion.guide.progress.AsyncGuideProgressStore;
 import se.jimmyeliasson.gzcompanion.guide.progress.GuideContext;
 import se.jimmyeliasson.gzcompanion.guide.progress.JsonGuideProgressStore;
 import se.jimmyeliasson.gzcompanion.knowledge.commands.CommandCatalog;
@@ -45,6 +47,7 @@ import se.jimmyeliasson.gzcompanion.settings.JsonSettingsStore;
 import se.jimmyeliasson.gzcompanion.settings.SettingsManager;
 import se.jimmyeliasson.gzcompanion.settlement.SettlementPlannerManager;
 import se.jimmyeliasson.gzcompanion.settlement.storage.JsonSettlementPlannerStore;
+import se.jimmyeliasson.gzcompanion.storage.LocalPersistenceRuntime;
 import se.jimmyeliasson.gzcompanion.storage.StorageManager;
 import se.jimmyeliasson.gzcompanion.update.GitHubReleaseSource;
 import se.jimmyeliasson.gzcompanion.update.HttpUpdateByteSource;
@@ -56,6 +59,7 @@ import se.jimmyeliasson.gzcompanion.update.UpdateReleaseSource;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 
 /**
  * Runtime coordinator for GZ Companion session state.
@@ -96,8 +100,20 @@ public class CompanionSession {
     private final GameZoneSettlementTracker settlementTracker = new GameZoneSettlementTracker();
     private final GameZoneLiveStatusTracker liveStatusTracker = new GameZoneLiveStatusTracker();
     private final UpdateManager updateManager = createUpdateManager();
-    private final LeaderboardManager leaderboardManager =
-            new LeaderboardManager(new se.jimmyeliasson.gzcompanion.leaderboard.GameZoneLeaderboardSource(CompanionConstants.getModVersion()));
+
+    /** THE single shared background executor + HttpClient for every "public GameZone web data"
+     * feature (Leaderboards today, Bounty Board/Chronicles/etc. later) - see {@link
+     * GameZoneLiveDataRuntime}'s own doc comment and docs/PERFORMANCE-AUDIT-ALPHA4.md. Deliberately
+     * NOT shared with {@link #updateManager}, which keeps its own GitHub-specific transport. */
+    private final GameZoneLiveDataRuntime gameZoneLiveDataRuntime = new GameZoneLiveDataRuntime(CompanionConstants.getModVersion());
+    private final LeaderboardManager leaderboardManager = new LeaderboardManager(
+            new se.jimmyeliasson.gzcompanion.leaderboard.GameZoneLeaderboardSource(gameZoneLiveDataRuntime),
+            gameZoneLiveDataRuntime);
+
+    /** THE single shared background executor for local-disk persistence work that must not block
+     * the tick/render/main thread - see {@link LocalPersistenceRuntime}'s own doc comment. */
+    private final LocalPersistenceRuntime localPersistenceRuntime = new LocalPersistenceRuntime();
+    private final AsyncGuideProgressStore guideProgressStore;
 
     private CompanionSession() {
         this.bridge = new VanillaMinecraftBridge();
@@ -106,8 +122,9 @@ public class CompanionSession {
         this.compatibilityService = new CompatibilityService();
 
         Path configDir = Paths.get(".").resolve("config").resolve("gzcompanion");
-        JsonGuideProgressStore progressStore = new JsonGuideProgressStore(configDir.resolve("guide-progress.json"));
-        this.guideEngine = new GuideEngine(new GuideLoader(), progressStore, new MinecraftGuideSnapshotProvider());
+        JsonGuideProgressStore rawProgressStore = new JsonGuideProgressStore(configDir.resolve("guide-progress.json"));
+        this.guideProgressStore = new AsyncGuideProgressStore(rawProgressStore, localPersistenceRuntime);
+        this.guideEngine = new GuideEngine(new GuideLoader(), guideProgressStore, new MinecraftGuideSnapshotProvider());
 
         this.chestManager = new ChestManager(new JsonChestIndexStore(configDir.resolve("chest-index.json")));
         this.chestManager.setDisplayNameResolver(MinecraftChestCaptureAdapter::resolveItemDisplayName);
@@ -421,6 +438,14 @@ public class CompanionSession {
      */
     public boolean isConnectedToGameZone() {
         return bridge.isConnectedToGameZone();
+    }
+
+    /** Bounded shutdown-time durability guarantee - never blocks longer than {@code timeout}. See
+     * {@code GZCompanionClient}'s {@code ClientLifecycleEvents.CLIENT_STOPPING} registration and
+     * docs/PERFORMANCE-AUDIT-ALPHA4.md's "shutdown / final flush" section for exactly what this
+     * does and does not guarantee. */
+    public void flushBeforeShutdown(Duration timeout) {
+        guideProgressStore.flushBounded(timeout);
     }
 }
 

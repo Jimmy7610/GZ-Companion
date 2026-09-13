@@ -442,3 +442,150 @@ the next module ships.
   release artifact overwritten.** Temporary profiling artifacts (a scratch `LiveSmoke.java`, one JFR
   recording) were created only under the session scratchpad directory, outside the repository, and
   are not part of this commit.
+
+---
+
+## Follow-up (2026-09-13): performance foundation implemented before alpha.5
+
+This section is dated and appended, not a rewrite of the audit above - the original findings and
+their reasoning stand exactly as recorded. This documents what was actually built in response to
+this audit's two SHOULD-FIX findings, ahead of the Bounty Board feature (which will be the first
+new module to exercise this foundation). No feature, UI change, version bump, tag, or release
+happened in this pass - see the companion final report for that pass's exact scope confirmation.
+
+### What the audit found (recap)
+
+1. No performance blocker.
+2. **SHOULD FIX**: Guide progress persistence could synchronously write to disk from the Minecraft
+   client tick thread when a guide step completed (§3, §12, §13 above).
+3. **SHOULD FIX (architectural)**: after only two live-network features (Leaderboards, the
+   updater), three separate `HttpClient` instances and two separate custom executors already
+   existed - the exact "N modules = N threads" pattern the permanent design rule warns against
+   (§5, §12, §15 above).
+
+### What changed
+
+**New shared GameZone live-data runtime** - `se.jimmyeliasson.gzcompanion.gamezone.net.
+GameZoneLiveDataRuntime`. One `CompanionSession`-owned instance now supplies the single shared
+daemon executor (`gzcompanion-gamezone-live`) and the single shared `HttpClient` for every "public
+GameZone web data" feature. Both are created lazily - on first actual use, not at construction -
+closing the exact eager-`HttpClient`-at-startup gap this audit found in the pre-fix
+`GameZoneLeaderboardSource`. `LeaderboardManager` no longer constructs its own `ExecutorService`;
+`GameZoneLeaderboardSource` no longer constructs its own `HttpClient`. Both now hold a reference to
+the shared runtime and call `runtime.executor()`/`runtime.httpClient()` only at the point work is
+actually dispatched. The updater (`UpdateManager`/`GitHubReleaseSource`/`HttpUpdateByteSource`)
+deliberately keeps its own separate executor and `HttpClient` - different host, different
+redirect/timeout/scheduling requirements, no real benefit to merging it with GameZone traffic.
+
+**New shared local-persistence runtime** - `se.jimmyeliasson.gzcompanion.storage.
+LocalPersistenceRuntime`. A second, independent, lazily-created shared daemon executor
+(`gzcompanion-local-persistence`) for local-disk write work that must not block the tick/render/
+main thread. Deliberately a separate executor from the GameZone one - a slow disk write should
+never delay a GameZone network request, or vice versa.
+
+**Guide progress persistence moved off the tick thread** - `se.jimmyeliasson.gzcompanion.guide.
+progress.AsyncGuideProgressStore` wraps the existing `JsonGuideProgressStore` (unchanged - its own
+atomic temp-file-then-move write behavior is fully preserved) and implements the exact same
+"at most one active write + one pending write, latest state wins" coalescing scheme
+`LeaderboardManager` already proved out for network fetches. `GuideEngine` itself was **not**
+changed - it still calls `progressStore.save(data)` from the same three call sites (the automatic
+tick-triggered `evaluate()`, and the user-driven `markStepCompleted`/`undoStepCompletion`); only
+what `CompanionSession` injects as that `GuideProgressStore` changed, from the raw synchronous
+`JsonGuideProgressStore` to the async-wrapping decorator. `GuideProgressData`/`ContextProgress`
+were already fully immutable (both defensively copy into unmodifiable maps in their own compact
+constructors), so no additional snapshot-copying was needed for the background writer to be safe.
+
+`resetContext` (the whole-guide-progress reset, a rare explicit user action) stays synchronous by
+design - `GuideEngine.resetGuideProgress()` immediately reloads from disk right after calling it,
+so making the reset itself asynchronous would let that reload race ahead and read stale data. To
+stop a save that was queued *before* a reset from later silently undoing it, `resetContext` bumps
+an internal epoch counter and drops anything sitting in the not-yet-dispatched pending slot; the
+background writer re-checks its captured epoch immediately before writing and skips (logs, does
+not write) a save a reset has since superseded. This closes the realistic case. A save that is
+already physically inside the delegate's `save()` call at the exact instant a reset happens is not
+retroactively cancelled - because `JsonGuideProgressStore`'s own `resetContext` always reads
+whatever is *currently* on disk (not a stale cached value) before writing its result, the file
+still ends up correct in that narrow interleaving in the overwhelmingly common case, but a
+theoretical last-write-wins ordering edge case is not fully eliminated. This is an accepted,
+documented, best-effort limitation given how rare (`resetContext` is a deliberate reset button
+click) and inexpensive (a small JSON file) these writes are - full distributed-transaction-style
+atomicity was judged not proportionate here.
+
+**Bounded shutdown flush** - `GZCompanionClient` now registers `ClientLifecycleEvents.
+CLIENT_STOPPING` (confirmed present via `fabric-lifecycle-events-v1`, already a dependency) to call
+`CompanionSession.flushBeforeShutdown(Duration.ofSeconds(2))`, which bounded-waits on
+`AsyncGuideProgressStore.flushBounded` for any in-flight/pending guide-progress write to actually
+reach disk. This never blocks longer than 2 seconds - a stuck or slow disk cannot hang game
+shutdown - but under normal conditions (a write takes milliseconds) it means quitting the game
+right after completing a guide step no longer risks losing that step's persistence to a daemon
+thread being cut off mid-write.
+
+### Thread/HttpClient ownership: before vs. after
+
+| | Before this pass | After this pass |
+|---|---|---|
+| GameZone live-data worker | `gzcompanion-leaderboards`, owned solely by `LeaderboardManager`, one per feature if copied | `gzcompanion-gamezone-live`, owned by `GameZoneLiveDataRuntime`, shared by every current/future GameZone live-data feature |
+| GameZone HTTP transport | `GameZoneLeaderboardSource`'s own eagerly-built `HttpClient` | `GameZoneLiveDataRuntime`'s lazily-built, shared `HttpClient` |
+| Updater worker/transport | `gzcompanion-updater` + its own `HttpClient`s (unchanged) | Unchanged - deliberately still separate |
+| Local persistence worker | None (writes ran synchronously on whichever thread called `save()`, including the tick thread) | `gzcompanion-local-persistence`, owned by `LocalPersistenceRuntime`, currently used by Guide, available for future local-disk-write needs |
+
+### Regression protections added
+
+- `GameZoneLiveDataRuntimeTest` - construction is fully lazy (neither executor nor `HttpClient`
+  created), each is memoized (repeated calls return the identical instance), the two are
+  independently lazy, constructing a `LeaderboardManager` against a fresh runtime creates neither,
+  and an actual fetch creates only the executor (not the `HttpClient`, which is a different
+  module's - `GameZoneLeaderboardSource`'s - concern).
+- `LeaderboardManagerTest` additions - constructing a manager triggers zero fetch work and does not
+  create the shared executor; the executor is created lazily on first fetch then memoized; two
+  independent managers sharing one runtime dispatch through the literal same worker thread;
+  reconstructing a manager (simulating closing/reopening the Companion UI) never creates a second
+  worker. All of `LeaderboardManagerTest`'s pre-existing latest-request-wins/manual-priority/
+  rapid-cycling tests were re-verified unchanged and still pass - the scheduling logic itself was
+  not touched, only where its executor comes from.
+- `GameZoneLeaderboardSourceTest` additions - constructing a source does not create the shared
+  `HttpClient`; an actual fetch creates it, reused (not recreated) across repeated fetches; two
+  independent sources sharing one runtime reuse the identical `HttpClient`. Every pre-existing
+  security-relevant test (redirect refusal, non-allowlisted-host refusal, response-size ceiling,
+  never-follows-redirects) was re-verified unchanged and still passes against the shared transport.
+- `LocalPersistenceRuntimeTest` - construction is lazy, the executor is memoized, the worker thread
+  is a correctly-named daemon.
+- `AsyncGuideProgressStoreTest` - `save()` returns without waiting for a blocked delegate write;
+  rapid saves coalesce to the latest state (not every intermediate one, proven with an exact
+  A-then-D-style sequence assertion mirroring `LeaderboardManagerTest`'s own rapid-cycling proof);
+  no unbounded pending queue across 50 rapid state changes; a failing delegate save is caught, does
+  not crash, and a later save recovers; `flushBounded` waits for an in-flight save within its
+  bound, times out (returns false) rather than blocking forever on a stuck save, and returns
+  immediately when nothing is pending; `resetContext` is synchronous and provably drops a save that
+  was only queued (never dispatched) before it.
+- `ThreadingInfrastructureRulesTest` - a narrowly-scoped, explicit-allow-list structural test
+  (mirroring `LeaderboardFairPlayTest`'s source-scanning convention) asserting that no production
+  class outside `GameZoneLiveDataRuntime.java`, `LocalPersistenceRuntime.java`,
+  `UpdateManager.java`, `GitHubReleaseSource.java`, or `HttpUpdateByteSource.java` directly
+  constructs an `HttpClient`, an `Executors.new*` executor, or a raw `Thread`. This makes the "no
+  future GameZone module gets its own thread/client" rule self-enforcing: a future `BountyBoard
+  Source.java` that copies the pre-fix `GameZoneLeaderboardSource` pattern verbatim will fail this
+  test immediately, rather than being caught (or missed) in a future audit.
+
+### Validation performed this pass
+
+- `.\gradlew.bat clean test` - **BUILD SUCCESSFUL**, full suite, zero failures (821 tests total,
+  up from 771 before this pass - the exact new/updated counts are in this pass's final report).
+- `.\gradlew.bat build` - **BUILD SUCCESSFUL**; the resulting jar was used only for the
+  `runClient` check below, never rebuilt into a release bundle (compatibility.json/installer/
+  release artifacts were not touched).
+- `.\gradlew.bat runClient` plus a live thread dump (`jcmd Thread.print`) taken after boot with
+  Companion never opened: confirms `gzcompanion-gamezone-live` does **not** exist yet (proving the
+  shared runtime's laziness live, not just in a unit test), `gzcompanion-updater` exists as before,
+  and no `GameZoneLiveDataRuntime`/`LocalPersistenceRuntime`-owned thread appears before any
+  GameZone live-data feature or guide-progress save has actually run. See this pass's final report
+  for the exact thread-dump excerpt and counts.
+
+### Explicit human-QA note
+
+Interactive verification that Leaderboards still loads correctly end-to-end inside a live client,
+and that opening/reopening the Companion UI in a real play session does not grow the thread count,
+still requires a human at the keyboard - this environment has no tool that can drive the native
+Minecraft/LWJGL window. The static/unit-test evidence above proves the scheduling and laziness
+logic is correct in isolation; it does not substitute for a real interactive session. See this
+pass's final report for the precise, itemized list of what still needs Jimmy's own testing.

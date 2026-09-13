@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import se.jimmyeliasson.gzcompanion.gamezone.net.GameZoneLiveDataRuntime;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -39,7 +40,15 @@ class GameZoneLeaderboardSourceTest {
     }
 
     private GameZoneLeaderboardSource sourceFor(String baseUrl) {
-        return new GameZoneLeaderboardSource("0.1.0-test", baseUrl, "127.0.0.1", Duration.ofSeconds(2), 10_000);
+        return new GameZoneLeaderboardSource(testRuntime(), baseUrl, "127.0.0.1", Duration.ofSeconds(2), 10_000);
+    }
+
+    /** A fresh runtime per call - mirrors production's "one shared runtime per session" shape
+     * without letting per-test HttpClient/executor state bleed between tests. A closed port (as
+     * used by the offline test below) is refused immediately by the OS regardless of connect
+     * timeout, so the default (production) connect timeout is fine here. */
+    private static GameZoneLiveDataRuntime testRuntime() {
+        return new GameZoneLiveDataRuntime("0.1.0-test");
     }
 
     private static void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String body) throws IOException {
@@ -198,8 +207,56 @@ class GameZoneLeaderboardSourceTest {
     @DisplayName("A request to a host other than the allowlisted one is refused before any request is sent")
     void nonAllowlistedHostRefused() {
         // allowedHost is "127.0.0.1" but baseUrl points elsewhere - simulates a coding mistake in URL construction.
-        GameZoneLeaderboardSource source = new GameZoneLeaderboardSource("0.1.0-test", "http://localhost:1", "127.0.0.1", Duration.ofSeconds(1), 10_000);
+        GameZoneLeaderboardSource source = new GameZoneLeaderboardSource(testRuntime(), "http://localhost:1", "127.0.0.1", Duration.ofSeconds(1), 10_000);
         LeaderboardFetchResult result = source.fetch(GameZoneLeaderboardRegistry.byId("player_coins").orElseThrow());
         assertInstanceOf(LeaderboardFetchResult.Unavailable.class, result);
+    }
+
+    // ------------------------------------------------------------------
+    // Shared GameZone live-data runtime (2026-09-13 performance-foundation follow-up): proves the
+    // migration off GameZoneLeaderboardSource's own HttpClient onto the shared, lazy
+    // GameZoneLiveDataRuntime preserved every existing security/behavior guarantee above, and
+    // added the new laziness guarantee.
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Constructing a GameZoneLeaderboardSource does not create the shared HttpClient")
+    void constructingSourceDoesNotCreateSharedHttpClient() {
+        GameZoneLiveDataRuntime runtime = testRuntime();
+        new GameZoneLeaderboardSource(runtime);
+
+        assertFalse(runtime.isHttpClientInitializedForTesting(),
+                "constructing GameZoneLeaderboardSource (as CompanionSession does eagerly at startup) must not create the shared HttpClient");
+    }
+
+    @Test
+    @DisplayName("An actual fetch creates the shared HttpClient, reused (not recreated) across repeated fetches")
+    void actualFetchCreatesAndReusesTheSharedHttpClient() throws Exception {
+        GameZoneLiveDataRuntime runtime = testRuntime();
+        String baseUrl = startServerAndGetBaseUrl(exchange -> respond(exchange, 200, fullTableHtml("Alfa", "5 coins")));
+        GameZoneLeaderboardSource source = new GameZoneLeaderboardSource(runtime, baseUrl, "127.0.0.1", Duration.ofSeconds(2), 10_000);
+
+        assertFalse(runtime.isHttpClientInitializedForTesting());
+        source.fetch(GameZoneLeaderboardRegistry.byId("player_coins").orElseThrow());
+        assertTrue(runtime.isHttpClientInitializedForTesting(), "the first real fetch must have created the shared HttpClient");
+
+        HttpClient afterFirstFetch = runtime.httpClient();
+        source.fetch(GameZoneLeaderboardRegistry.byId("settlement_treasury").orElseThrow());
+        assertSame(afterFirstFetch, runtime.httpClient(), "a second fetch must reuse the identical HttpClient instance, never recreate it");
+    }
+
+    @Test
+    @DisplayName("Two independent GameZoneLeaderboardSource instances sharing one runtime reuse the same HttpClient")
+    void multipleSourcesShareTheSameHttpClient() throws Exception {
+        GameZoneLiveDataRuntime runtime = testRuntime();
+        String baseUrl = startServerAndGetBaseUrl(exchange -> respond(exchange, 200, fullTableHtml("Alfa", "5 coins")));
+        GameZoneLeaderboardSource sourceOne = new GameZoneLeaderboardSource(runtime, baseUrl, "127.0.0.1", Duration.ofSeconds(2), 10_000);
+        GameZoneLeaderboardSource sourceTwo = new GameZoneLeaderboardSource(runtime, baseUrl, "127.0.0.1", Duration.ofSeconds(2), 10_000);
+
+        sourceOne.fetch(GameZoneLeaderboardRegistry.byId("player_coins").orElseThrow());
+        HttpClient afterSourceOne = runtime.httpClient();
+        sourceTwo.fetch(GameZoneLeaderboardRegistry.byId("settlement_treasury").orElseThrow());
+
+        assertSame(afterSourceOne, runtime.httpClient(), "both sources must share the identical HttpClient, never one each");
     }
 }

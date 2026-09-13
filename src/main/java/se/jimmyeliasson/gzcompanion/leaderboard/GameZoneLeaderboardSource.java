@@ -1,5 +1,7 @@
 package se.jimmyeliasson.gzcompanion.leaderboard;
 
+import se.jimmyeliasson.gzcompanion.gamezone.net.GameZoneLiveDataRuntime;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -24,6 +26,12 @@ import java.util.Map;
  * running Companion or what they're doing. "DU" highlighting for the local player happens entirely
  * client-side, by comparing an already-downloaded public top-10 against the local username - see
  * {@code LeaderboardsTabComponent}.
+ *
+ * <p><b>Shared transport (2026-09-13 follow-up).</b> This class no longer constructs its own
+ * {@link HttpClient} - it holds a {@link GameZoneLiveDataRuntime} and only ever calls {@link
+ * GameZoneLiveDataRuntime#httpClient()} at the point a request is actually sent, so merely
+ * constructing this class (which happens eagerly at {@code CompanionSession} startup) creates
+ * neither an HTTP client nor its selector thread. See docs/PERFORMANCE-AUDIT-ALPHA4.md.
  */
 public final class GameZoneLeaderboardSource implements LeaderboardSource {
     private static final String REAL_ALLOWED_HOST = "www.gamezonemc.se";
@@ -36,8 +44,7 @@ public final class GameZoneLeaderboardSource implements LeaderboardSource {
      * whole group quickly - NOT a substitute for LeaderboardManager's own per-board cache window. */
     private static final Duration SERVER_PAGE_REUSE_WINDOW = Duration.ofSeconds(5);
 
-    private final HttpClient httpClient;
-    private final String userAgent;
+    private final GameZoneLiveDataRuntime runtime;
     private final String baseUrl;
     private final String allowedHost;
     private final Duration timeout;
@@ -46,19 +53,14 @@ public final class GameZoneLeaderboardSource implements LeaderboardSource {
     private record CachedServerPage(String html, Instant fetchedAt) {}
     private volatile CachedServerPage cachedServerPage;
 
-    public GameZoneLeaderboardSource(String companionVersion) {
-        this(companionVersion, REAL_BASE_URL, REAL_ALLOWED_HOST, DEFAULT_TIMEOUT, DEFAULT_MAX_RESPONSE_CHARS);
+    public GameZoneLeaderboardSource(GameZoneLiveDataRuntime runtime) {
+        this(runtime, REAL_BASE_URL, REAL_ALLOWED_HOST, DEFAULT_TIMEOUT, DEFAULT_MAX_RESPONSE_CHARS);
     }
 
     /** Test-only seam - overrides the target host/timeout/size-ceiling so tests can point this at a
      * local mock server instead of the real GameZone site. Production always uses the public constructor. */
-    GameZoneLeaderboardSource(String companionVersion, String baseUrl, String allowedHost, Duration timeout, long maxResponseChars) {
-        // NEVER follow redirects automatically - leaderboard DATA must only ever come from the one
-        // explicitly-allowlisted host. If the site ever starts redirecting this request, that is
-        // treated as a failure (Unavailable), not silently followed - see class doc comment and
-        // docs/LEADERBOARDS.md's "HTTP safety" section.
-        this.httpClient = HttpClient.newBuilder().connectTimeout(timeout).followRedirects(HttpClient.Redirect.NEVER).build();
-        this.userAgent = "GZ-Companion/" + companionVersion + " (+https://github.com/Jimmy7610/GZ-Companion)";
+    GameZoneLeaderboardSource(GameZoneLiveDataRuntime runtime, String baseUrl, String allowedHost, Duration timeout, long maxResponseChars) {
+        this.runtime = runtime;
         this.baseUrl = baseUrl;
         this.allowedHost = allowedHost;
         this.timeout = timeout;
@@ -127,7 +129,7 @@ public final class GameZoneLeaderboardSource implements LeaderboardSource {
         }
         try {
             HttpRequest request = HttpRequest.newBuilder(uri)
-                    .header("User-Agent", userAgent)
+                    .header("User-Agent", runtime.userAgent())
                     .header("Accept", "text/html")
                     .timeout(timeout)
                     .GET()
@@ -152,7 +154,7 @@ public final class GameZoneLeaderboardSource implements LeaderboardSource {
                 return HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8);
             };
 
-            HttpResponse<String> response = httpClient.send(request, sizeAwareHandler);
+            HttpResponse<String> response = runtime.httpClient().send(request, sizeAwareHandler);
             if (rejectedForDeclaredSize.get()) {
                 throw new IOException("Response's declared Content-Length exceeded the size ceiling for " + url);
             }
@@ -179,6 +181,6 @@ public final class GameZoneLeaderboardSource implements LeaderboardSource {
 
     /** Test-only introspection so a future change can never silently remove the no-redirect policy. */
     HttpClient.Redirect redirectPolicyForTesting() {
-        return httpClient.followRedirects();
+        return runtime.httpClient().followRedirects();
     }
 }
