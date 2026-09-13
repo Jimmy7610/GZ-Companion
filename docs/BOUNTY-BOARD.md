@@ -248,7 +248,11 @@ BountyLayout`, mirroring `GuideLayout`'s pattern exactly):
   timestamp; "Ingen tidsgräns" only when the source explicitly said there is no limit; "Tidsgräns
   okänd" when the source simply didn't say; or "Kan ha löpt ut - uppdatera" once cached data has
   crossed its known expiry without a fresher server response), and the command-copy button
-  (omitted entirely for an unsafe-to-quote name).
+  (omitted entirely for an unsafe-to-quote name). This content is scissored to a fixed region of
+  the pane and independently scrollable (its own `detailScrollOffset`, separate from the list's) -
+  a long name/clue/expiry line can never draw outside the pane, over the footer, or over the fixed
+  "< Lista" back button (compact) / command-copy button, both of which are pinned outside the
+  scrollable region and so can never themselves be scrolled out of reach.
 - **Footer**: freshness detail line ("Uppdaterad just nu" / "Uppdaterad 34 sek sedan" / "Cachad
   data - X sedan") plus the "Uppdatera" button, disabled during the cooldown/an active fetch -
   identical family of behavior to Leaderboards' footer.

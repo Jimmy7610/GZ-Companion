@@ -260,4 +260,221 @@ class BountiesTabComponentTest {
         BountyLayout layout = BountyLayout.calculate(new UiRect(0, 0, 600, 400));
         assertTrue(layout.listRect().right() <= layout.detailRect().x());
     }
+
+    // ------------------------------------------------------------------
+    // Detail overflow fix: detail content must never draw outside detailRect - see
+    // detailContentTop/detailContentBottom (the fixed scissor bounds) and detailScrollOffset
+    // (clamped via the same clampScroll used for the list).
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("detail scroll: never negative regardless of how far it is pushed past the top")
+    void detailScrollNeverNegative() {
+        assertEquals(0, BountiesTabComponent.clampScroll(-500, 300, 100));
+    }
+
+    @Test
+    @DisplayName("detail scroll: clamps to the exact point where content bottom meets viewport bottom - no overscroll")
+    void detailScrollMaxClamp() {
+        assertEquals(200, BountiesTabComponent.clampScroll(10_000, 300, 100));
+    }
+
+    @Test
+    @DisplayName("detail scroll: content shorter than (or equal to) the viewport produces zero scroll, "
+            + "e.g. a short name/reward/no-clue bounty that fits entirely")
+    void detailScrollShortContentIsZero() {
+        assertEquals(0, BountiesTabComponent.clampScroll(50, 80, 100));
+        assertEquals(0, BountiesTabComponent.clampScroll(50, 100, 100));
+    }
+
+    @Test
+    @DisplayName("detail scroll: content taller than the viewport (e.g. a long public clue) can genuinely scroll")
+    void detailScrollLongContentCanScroll() {
+        assertEquals(50, BountiesTabComponent.clampScroll(50, 300, 100), "an in-range offset is not clamped");
+        assertEquals(200, BountiesTabComponent.clampScroll(250, 300, 100), "clamped to the true max, not the requested overscroll");
+    }
+
+    @Test
+    @DisplayName("selectRow: selecting another bounty resets detail scroll to the top")
+    void selectRowResetsDetailScroll() {
+        BountiesTabComponent tab = new BountiesTabComponent();
+        tab.setDetailScrollOffsetForTesting(120);
+
+        tab.selectRow(2, false);
+
+        assertEquals(0, tab.getDetailScrollOffsetForTesting());
+    }
+
+    @Test
+    @DisplayName("selectRow: opening detail from the compact list also resets detail scroll to the top and shows the detail pane")
+    void selectRowFromCompactListResetsScrollAndShowsDetail() {
+        BountiesTabComponent tab = new BountiesTabComponent();
+        tab.setDetailScrollOffsetForTesting(75);
+
+        tab.selectRow(0, true);
+
+        assertEquals(0, tab.getDetailScrollOffsetForTesting());
+        assertTrue(tab.isCompactShowingDetailForTesting());
+    }
+
+    @Test
+    @DisplayName("selectRow: re-opening the SAME bounty (re-clicking its row) still resets scroll to the top")
+    void selectRowReselectingSameIndexStillResetsScroll() {
+        BountiesTabComponent tab = new BountiesTabComponent();
+        tab.setDetailScrollOffsetForTesting(40);
+
+        tab.selectRow(0, true);
+
+        assertEquals(0, tab.getDetailScrollOffsetForTesting());
+    }
+
+    @Test
+    @DisplayName("List and detail scroll offsets are independent - changing one never affects the other")
+    void listAndDetailScrollOffsetsAreIndependent() {
+        BountiesTabComponent tab = new BountiesTabComponent();
+
+        tab.setListScrollOffsetForTesting(44);
+        tab.setDetailScrollOffsetForTesting(88);
+        assertEquals(44, tab.getListScrollOffsetForTesting());
+        assertEquals(88, tab.getDetailScrollOffsetForTesting());
+
+        tab.setDetailScrollOffsetForTesting(0);
+        assertEquals(44, tab.getListScrollOffsetForTesting(), "resetting detail scroll must not touch list scroll");
+
+        tab.setListScrollOffsetForTesting(0);
+        tab.setDetailScrollOffsetForTesting(99);
+        assertEquals(0, tab.getListScrollOffsetForTesting(), "changing detail scroll must not touch list scroll");
+    }
+
+    @Test
+    @DisplayName("detailContentBottom: the scrollable region's bottom bound never belongs to the footer - it "
+            + "always stays inside detailRect, with or without a command-copy button reserved")
+    void detailContentBottomNeverBelongsToFooter() {
+        // Approximates the real QA report: a ~1360x772 client with Companion's content pane below
+        // the 300px compact breakpoint.
+        BountyLayout layout = BountyLayout.calculate(new UiRect(0, 0, 260, 190));
+        UiRect detailRect = layout.detailRect();
+
+        int bottomWithCommand = BountiesTabComponent.detailContentBottom(detailRect, true);
+        int bottomWithoutCommand = BountiesTabComponent.detailContentBottom(detailRect, false);
+
+        assertTrue(bottomWithCommand <= detailRect.bottom(), "must never extend past the pane's own bottom edge");
+        assertTrue(bottomWithoutCommand <= detailRect.bottom(), "must never extend past the pane's own bottom edge");
+        assertTrue(detailRect.bottom() <= layout.footerRect().y(),
+                "the pane itself must not overlap the footer, at this realistic reported window size");
+    }
+
+    @Test
+    @DisplayName("detailContentBottom: reserves strictly less room when there is no command-copy button, "
+            + "since nothing needs to be pinned below the content in that case")
+    void detailContentBottomReservesLessRoomWithoutCommand() {
+        UiRect detailRect = new UiRect(0, 0, 200, 150);
+        int withCommand = BountiesTabComponent.detailContentBottom(detailRect, true);
+        int withoutCommand = BountiesTabComponent.detailContentBottom(detailRect, false);
+
+        assertTrue(withCommand < withoutCommand);
+    }
+
+    @Test
+    @DisplayName("detailContentTop: reserves room for the fixed back button in compact mode, but not in wide mode")
+    void detailContentTopReservesBackButtonRoomOnlyWhenCompact() {
+        UiRect detailRect = new UiRect(0, 0, 200, 150);
+        int compactTop = BountiesTabComponent.detailContentTop(detailRect, true);
+        int wideTop = BountiesTabComponent.detailContentTop(detailRect, false);
+
+        assertTrue(compactTop > wideTop, "compact mode must reserve extra space above content for the back button");
+    }
+
+    @Test
+    @DisplayName("An arbitrarily long clue's content never logically extends past detailContentBottom - the "
+            + "render-time scissor call clips to exactly this bound, so however tall the actual wrapped clue "
+            + "text is, drawing beyond it is physically impossible regardless of scroll position")
+    void longClueContentCannotLogicallyExtendIntoFooter() {
+        UiRect detailRect = new UiRect(0, 0, 200, 150);
+        int viewportH = BountiesTabComponent.detailContentBottom(detailRect, true) - BountiesTabComponent.detailContentTop(detailRect, true);
+
+        // A very tall synthetic content height, standing in for an unusually long public clue.
+        int hugeContentHeight = 5000;
+        int clampedOffset = BountiesTabComponent.clampScroll(0, hugeContentHeight, viewportH);
+        // Regardless of the clamp outcome, the scissor itself (enableScissor(..., detailContentBottom))
+        // is what makes the guarantee absolute - this asserts the bound it is clipped to is sound.
+        assertTrue(BountiesTabComponent.detailContentBottom(detailRect, true) <= detailRect.bottom());
+        assertTrue(clampedOffset >= 0);
+    }
+
+    // ------------------------------------------------------------------
+    // Scroll input routing - which pane (list/detail/neither) a wheel event affects
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Scroll routing: wide mode, cursor over the list, affects the list only")
+    void scrollRoutingWideOverListAffectsListOnly() {
+        BountyLayout layout = BountyLayout.calculate(new UiRect(0, 0, 500, 300));
+        double x = layout.listRect().x() + 5;
+        double y = layout.listRect().y() + 5;
+
+        BountiesTabComponent.ScrollTarget target = BountiesTabComponent.resolveScrollTarget(layout, false, true, x, y);
+
+        assertEquals(BountiesTabComponent.ScrollTarget.LIST, target);
+    }
+
+    @Test
+    @DisplayName("Scroll routing: wide mode, cursor over the detail pane, affects the detail only")
+    void scrollRoutingWideOverDetailAffectsDetailOnly() {
+        BountyLayout layout = BountyLayout.calculate(new UiRect(0, 0, 500, 300));
+        double x = layout.detailRect().x() + 5;
+        double y = layout.detailRect().y() + 5;
+
+        BountiesTabComponent.ScrollTarget target = BountiesTabComponent.resolveScrollTarget(layout, false, true, x, y);
+
+        assertEquals(BountiesTabComponent.ScrollTarget.DETAIL, target);
+    }
+
+    @Test
+    @DisplayName("Scroll routing: compact mode showing the list, cursor over the (shared) body rect, affects the list")
+    void scrollRoutingCompactListAffectsListOnly() {
+        BountyLayout layout = BountyLayout.calculate(new UiRect(0, 0, 250, 300));
+        double x = layout.listRect().x() + 5;
+        double y = layout.listRect().y() + 5;
+
+        BountiesTabComponent.ScrollTarget target = BountiesTabComponent.resolveScrollTarget(layout, false, true, x, y);
+
+        assertEquals(BountiesTabComponent.ScrollTarget.LIST, target);
+    }
+
+    @Test
+    @DisplayName("Scroll routing: compact mode showing the detail pane, cursor over the (shared) body rect, "
+            + "affects the detail only - even though listRect/detailRect are the SAME rect in compact mode, "
+            + "the compactShowingDetail flag (not rect containment alone) decides which pane is actually visible")
+    void scrollRoutingCompactDetailAffectsDetailOnly() {
+        BountyLayout layout = BountyLayout.calculate(new UiRect(0, 0, 250, 300));
+        assertEquals(layout.listRect(), layout.detailRect(), "sanity check: compact mode shares one body rect");
+        double x = layout.detailRect().x() + 5;
+        double y = layout.detailRect().y() + 5;
+
+        BountiesTabComponent.ScrollTarget target = BountiesTabComponent.resolveScrollTarget(layout, true, true, x, y);
+
+        assertEquals(BountiesTabComponent.ScrollTarget.DETAIL, target);
+    }
+
+    @Test
+    @DisplayName("Scroll routing: a cursor outside both panes affects neither")
+    void scrollRoutingOutsideBothPanesAffectsNeither() {
+        BountyLayout layout = BountyLayout.calculate(new UiRect(0, 0, 500, 300));
+        BountiesTabComponent.ScrollTarget target = BountiesTabComponent.resolveScrollTarget(layout, false, true, -100, -100);
+
+        assertEquals(BountiesTabComponent.ScrollTarget.NONE, target);
+    }
+
+    @Test
+    @DisplayName("Scroll routing: with zero entries, neither pane is scrollable (the empty-state message isn't)")
+    void scrollRoutingWithNoEntriesAffectsNeither() {
+        BountyLayout layout = BountyLayout.calculate(new UiRect(0, 0, 500, 300));
+        double x = layout.listRect().x() + 5;
+        double y = layout.listRect().y() + 5;
+
+        BountiesTabComponent.ScrollTarget target = BountiesTabComponent.resolveScrollTarget(layout, false, false, x, y);
+
+        assertEquals(BountiesTabComponent.ScrollTarget.NONE, target);
+    }
 }

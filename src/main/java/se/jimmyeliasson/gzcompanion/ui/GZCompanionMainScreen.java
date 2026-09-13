@@ -316,7 +316,7 @@ public class GZCompanionMainScreen extends Screen {
                 return true;
             }
         } else if (activeTab == TabType.BOUNTIES) {
-            if (bountiesTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+            if (bountiesTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY, layout.contentRect())) {
                 return true;
             }
         } else if (activeTab == TabType.INSTALLNINGAR) {

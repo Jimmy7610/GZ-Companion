@@ -39,13 +39,33 @@ public class BountiesTabComponent {
      * constant so the two can never drift apart. */
     static final int ROW_H = 22;
 
+    private static final int DETAIL_PAD = 5;
+    /** Space the fixed "< Lista" back button (compact only) reserves above the scrollable detail
+     * content - 11px button height + 4px gap, matching the button's own drawn height exactly. */
+    private static final int DETAIL_BACK_BTN_RESERVED_H = 15;
+    private static final int DETAIL_COPY_BTN_H = 13;
+    private static final int DETAIL_COPY_BTN_GAP = 3;
+    /** {@link #renderDetailSection}'s own net height contribution (a 9px label line plus a
+     * returned {@code y + 10}) - kept as a named constant so {@link #calculateDetailContentHeight}
+     * cannot silently drift out of sync with what that method actually draws. */
+    private static final int DETAIL_SECTION_H = 19;
+
     private int selectedIndex = 0;
     private boolean compactShowingDetail = false;
     private int listScrollOffset = 0;
+    /** Independent from {@link #listScrollOffset} - the compact layout shows at most one of the
+     * list/detail panes at a time, but each still needs its own remembered scroll position (e.g.
+     * scrolling into a long clue must not move the list, and going back to the list must not have
+     * silently scrolled it). Always reset to 0 by {@link #selectRow} whenever a (possibly
+     * different) bounty is opened. */
+    private int detailScrollOffset = 0;
     private long copyFeedbackExpiryMs = 0L;
 
     private final List<Hit> hitTargets = new ArrayList<>();
     private record Hit(UiRect rect, Runnable action) {}
+
+    /** Which pane (if any) a scroll event should affect - see {@link #resolveScrollTarget}. */
+    enum ScrollTarget { LIST, DETAIL, NONE }
 
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
         hitTargets.clear();
@@ -86,10 +106,88 @@ public class BountiesTabComponent {
         return Math.max(0, Math.min(index, size - 1));
     }
 
-    /** Pure scroll-offset clamp, identical policy to {@code LeaderboardsTabComponent.clampScroll}. */
+    /** Pure scroll-offset clamp, identical policy to {@code LeaderboardsTabComponent.clampScroll} -
+     * used for BOTH {@link #listScrollOffset} and {@link #detailScrollOffset}, since the clamping
+     * rule (never negative, never past where the content actually ends) is identical for either;
+     * only the content height/viewport height passed in differ. */
     static int clampScroll(int offset, int totalContentHeight, int viewportHeight) {
         int maxScroll = Math.max(0, totalContentHeight - Math.max(1, viewportHeight));
         return Math.max(0, Math.min(offset, maxScroll));
+    }
+
+    /**
+     * Pure - the fixed Y where scrollable detail content begins: just below the fixed "< Lista"
+     * back button in compact mode (the button itself is drawn above this line, outside the
+     * scrollable/scissored region, so it can never be scrolled out of reach), or just below the
+     * pane's own top padding in wide mode (which has no back button at all).
+     */
+    static int detailContentTop(UiRect detailRect, boolean compact) {
+        return detailRect.y() + DETAIL_PAD + (compact ? DETAIL_BACK_BTN_RESERVED_H : 0);
+    }
+
+    /**
+     * Pure - the fixed Y where scrollable detail content must end, reserving room for the fixed
+     * command-copy button (if the entry has one) plus the pane's own bottom padding. This bound -
+     * not the copy button's own drawn position - is exactly what {@link #renderDetailPane} passes
+     * to {@code enableScissor}, and it is always {@code <= detailRect.bottom()} by construction, so
+     * scrollable content (an arbitrarily long name/clue/expiry line) can never draw over the copy
+     * button, the pane's own border, or - since {@code detailRect} itself never extends into it -
+     * the footer below the pane.
+     */
+    static int detailContentBottom(UiRect detailRect, boolean hasCommand) {
+        int bottomFixedH = hasCommand ? (DETAIL_COPY_BTN_H + DETAIL_COPY_BTN_GAP) : 0;
+        return detailRect.bottom() - DETAIL_PAD - bottomFixedH;
+    }
+
+    /**
+     * Font-dependent (unlike every other helper in this class) - measures the real total height
+     * the scrollable detail content (name, entity type, reward, clue, expiry) will occupy, so
+     * {@link #renderDetailPane} can clamp {@link #detailScrollOffset} correctly via {@link
+     * #clampScroll}. Deliberately mirrors, increment for increment, the exact vertical spacing
+     * {@link #renderDetailPane} itself draws with - if that method's layout changes, this must
+     * change with it. Not unit-tested directly (this project's test environment has no live {@code
+     * Font} - see this class's own test file), but the pure clamp it feeds is fully tested against
+     * synthetic content heights, and a live-client visual check remains required human QA.
+     */
+    static int calculateDetailContentHeight(Font font, int contentW, BountyEntry entry) {
+        if (font == null) return 0;
+        int h = 11; // name heading line
+        if (entry.hasEntityType()) {
+            h += 11;
+        }
+        h += 2; // gap before BELÖNING
+        h += DETAIL_SECTION_H; // BELÖNING section
+        h += 2; // gap before LEDTRÅD label
+        h += 9; // LEDTRÅD label line
+        String hintText = entry.hasHint() ? entry.hint() : "Ingen offentlig ledtråd";
+        h += TextUtil.measureWrappedHeightCapped(font, hintText, contentW, TypographyScale.SMALL.getScale(), 4, 2);
+        h += 4; // gap after clue
+        h += DETAIL_SECTION_H; // TID KVAR section
+        return h;
+    }
+
+    /**
+     * Pure, Font/session-free resolution of which pane (if any) a scroll event should affect -
+     * mirrors the exact visibility rules {@link #render}/{@link #mouseClicked} already use: in
+     * compact mode exactly one of list/detail is ever visible at a time (governed by {@code
+     * compactShowingDetail}); in wide mode both are visible simultaneously and routing is purely by
+     * which rect the cursor is over. Never routes to a pane that isn't actually visible, and never
+     * routes anywhere at all when there are no entries (the empty-state message shown in that case
+     * is not scrollable).
+     */
+    static ScrollTarget resolveScrollTarget(BountyLayout layout, boolean compactShowingDetail, boolean hasEntries, double mouseX, double mouseY) {
+        if (!hasEntries) {
+            return ScrollTarget.NONE;
+        }
+        if (layout.isCompact()) {
+            if (compactShowingDetail) {
+                return layout.detailRect().contains(mouseX, mouseY) ? ScrollTarget.DETAIL : ScrollTarget.NONE;
+            }
+            return layout.listRect().contains(mouseX, mouseY) ? ScrollTarget.LIST : ScrollTarget.NONE;
+        }
+        if (layout.detailRect().contains(mouseX, mouseY)) return ScrollTarget.DETAIL;
+        if (layout.listRect().contains(mouseX, mouseY)) return ScrollTarget.LIST;
+        return ScrollTarget.NONE;
     }
 
     /**
@@ -273,20 +371,41 @@ public class BountiesTabComponent {
                 detailRect.y() + detailRect.height() / 2 - 4, detailRect.width() - 8, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
     }
 
+    /**
+     * Renders the selected bounty's detail. Content (name, entity type, reward, clue, expiry) is
+     * ALWAYS scissored to a fixed sub-region of {@code detailRect} and scrolled via {@link
+     * #detailScrollOffset} - it can never draw outside {@code detailRect}, regardless of clue
+     * length, name length, or window size (see {@link #detailContentTop}/{@link
+     * #detailContentBottom}). The "< Lista" back button (compact only) and the command-copy button
+     * are both deliberately drawn OUTSIDE that scissored/scrollable region, at fixed positions
+     * pinned to the top and bottom of {@code detailRect} respectively - neither can ever be
+     * scrolled out of reach, and the copy button can never overlap the footer below the pane since
+     * it never leaves {@code detailRect} at all.
+     */
     private void renderDetailPane(GuiGraphicsExtractor extractor, Font font, UiRect detailRect, int mouseX, int mouseY, BountyEntry entry, boolean compact) {
         GZTheme.drawCard(extractor, detailRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
-        int pad = 5;
-        int contentX = detailRect.x() + pad;
-        int contentW = detailRect.width() - pad * 2;
-        int y = detailRect.y() + pad;
 
         if (compact) {
-            UiRect backBtn = new UiRect(contentX, y, 44, 11);
+            UiRect backBtn = new UiRect(detailRect.x() + DETAIL_PAD, detailRect.y() + DETAIL_PAD, 44, 11);
             boolean backHov = backBtn.contains(mouseX, mouseY);
             GZTheme.drawButton(extractor, font, backBtn, "< Lista", false, backHov, TypographyScale.SMALL.getScale());
             hitTargets.add(new Hit(backBtn, () -> compactShowingDetail = false));
-            y += 15;
         }
+
+        String command = BountyFormatter.bountyInfoCommand(entry.name());
+        boolean hasCommand = command != null;
+
+        int contentX = detailRect.x() + DETAIL_PAD;
+        int contentW = Math.max(10, detailRect.width() - DETAIL_PAD * 2);
+        int contentTop = detailContentTop(detailRect, compact);
+        int contentBottom = detailContentBottom(detailRect, hasCommand);
+        int viewportH = Math.max(1, contentBottom - contentTop);
+
+        int totalContentHeight = calculateDetailContentHeight(font, contentW, entry);
+        detailScrollOffset = clampScroll(detailScrollOffset, totalContentHeight, viewportH);
+
+        extractor.enableScissor(detailRect.x() + 1, contentTop, detailRect.right() - 1, contentBottom);
+        int y = contentTop - detailScrollOffset;
 
         TextUtil.drawScaledEllipsizedText(extractor, font, entry.name().toUpperCase(), contentX, y, contentW,
                 TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
@@ -310,12 +429,13 @@ public class BountiesTabComponent {
         y += 4;
 
         String remaining = BountyFormatter.formatRemainingTime(entry.expiry(), Instant.now());
-        y = renderDetailSection(extractor, font, contentX, y, contentW, "TID KVAR", remaining, GZTheme.COLOR_TEXT_PRIMARY);
+        renderDetailSection(extractor, font, contentX, y, contentW, "TID KVAR", remaining, GZTheme.COLOR_TEXT_PRIMARY);
 
-        String command = BountyFormatter.bountyInfoCommand(entry.name());
-        if (command != null) {
-            y += 3;
-            UiRect copyBtn = new UiRect(contentX, y, Math.min(contentW, 150), 13);
+        extractor.disableScissor();
+
+        if (hasCommand) {
+            UiRect copyBtn = new UiRect(contentX, detailRect.bottom() - DETAIL_PAD - DETAIL_COPY_BTN_H,
+                    Math.min(contentW, 150), DETAIL_COPY_BTN_H);
             boolean showingFeedback = System.currentTimeMillis() < copyFeedbackExpiryMs;
             boolean hov = copyBtn.contains(mouseX, mouseY);
             GZTheme.drawButton(extractor, font, copyBtn, showingFeedback ? "Kopierat!" : ("Kopiera " + command), false, hov, TypographyScale.META.getScale());
@@ -383,10 +503,7 @@ public class BountiesTabComponent {
         if (listVisible && !entries.isEmpty() && layout.listRect().contains(mouseX, mouseY)) {
             int clickedIndex = rowIndexAt(layout.listRect(), mouseY, listScrollOffset, entries.size());
             if (clickedIndex >= 0) {
-                selectedIndex = clickedIndex;
-                if (layout.isCompact()) {
-                    compactShowingDetail = true;
-                }
+                selectRow(clickedIndex, layout.isCompact());
                 return true;
             }
         }
@@ -398,6 +515,22 @@ public class BountiesTabComponent {
             }
         }
         return false;
+    }
+
+    /**
+     * Applies a row selection - always resets {@link #detailScrollOffset} to the top, since a
+     * freshly selected/opened bounty's detail must never inherit whatever scroll position a
+     * PREVIOUSLY selected bounty was left at (applies equally whether a different bounty was
+     * chosen, or the same one was re-opened from the compact list). Kept as its own small method,
+     * rather than inlined into {@link #mouseClicked}, so this specific state transition is directly
+     * unit-testable without a live {@code CompanionSession}.
+     */
+    void selectRow(int index, boolean compact) {
+        this.selectedIndex = index;
+        this.detailScrollOffset = 0;
+        if (compact) {
+            this.compactShowingDetail = true;
+        }
     }
 
     /** Pure row-index-from-click-Y resolution for the scrollable list - static and side-effect-free
@@ -412,8 +545,64 @@ public class BountiesTabComponent {
         return index;
     }
 
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        listScrollOffset = Math.max(0, listScrollOffset - (int) (scrollY * 14));
-        return true;
+    /**
+     * Routes a scroll event to whichever pane is actually visible under the cursor, per {@link
+     * #resolveScrollTarget} - list rows and detail content each keep their own independent scroll
+     * offset, and a scroll over an invisible pane (e.g. the list while compact detail is showing)
+     * is a no-op, never affecting the other pane's offset. {@code bounds} is the same tab-content
+     * rect {@link #render}/{@link #mouseClicked} already receive.
+     */
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY, UiRect bounds) {
+        BountyManager manager = CompanionSession.getInstance().getBountyManager();
+        List<BountyEntry> entries = manager.getSnapshot().entries();
+        BountyLayout layout = BountyLayout.calculate(bounds);
+
+        ScrollTarget target = resolveScrollTarget(layout, compactShowingDetail, !entries.isEmpty(), mouseX, mouseY);
+        switch (target) {
+            case LIST -> {
+                listScrollOffset = Math.max(0, listScrollOffset - (int) (scrollY * 14));
+                return true;
+            }
+            case DETAIL -> {
+                BountyEntry entry = entries.get(clampIndex(selectedIndex, entries.size()));
+                Font font = Minecraft.getInstance().font;
+                boolean hasCommand = BountyFormatter.bountyInfoCommand(entry.name()) != null;
+                int contentW = Math.max(10, layout.detailRect().width() - DETAIL_PAD * 2);
+                int viewportH = Math.max(1, detailContentBottom(layout.detailRect(), hasCommand)
+                        - detailContentTop(layout.detailRect(), layout.isCompact()));
+                int totalH = calculateDetailContentHeight(font, contentW, entry);
+                detailScrollOffset = clampScroll(detailScrollOffset - (int) (scrollY * 14), totalH, viewportH);
+                return true;
+            }
+            case NONE -> {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    // ------------------------------------------------------------------
+    // Test-only accessors - package-private, read by BountiesTabComponentTest to verify scroll
+    // state transitions without needing a live CompanionSession/Font.
+    // ------------------------------------------------------------------
+
+    int getListScrollOffsetForTesting() {
+        return listScrollOffset;
+    }
+
+    void setListScrollOffsetForTesting(int value) {
+        this.listScrollOffset = value;
+    }
+
+    int getDetailScrollOffsetForTesting() {
+        return detailScrollOffset;
+    }
+
+    void setDetailScrollOffsetForTesting(int value) {
+        this.detailScrollOffset = value;
+    }
+
+    boolean isCompactShowingDetailForTesting() {
+        return compactShowingDetail;
     }
 }
