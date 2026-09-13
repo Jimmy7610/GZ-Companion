@@ -2,6 +2,11 @@ package se.jimmyeliasson.gzcompanion.gamezone.net;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import se.jimmyeliasson.gzcompanion.bounty.BountyManager;
+import se.jimmyeliasson.gzcompanion.bounty.BountySource;
+import se.jimmyeliasson.gzcompanion.bounty.BountyStatus;
+import se.jimmyeliasson.gzcompanion.bounty.BountyFetchResult;
+import se.jimmyeliasson.gzcompanion.bounty.BountyEntry;
 import se.jimmyeliasson.gzcompanion.leaderboard.GameZoneLeaderboardRegistry;
 import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardManager;
 import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardFetchResult;
@@ -11,6 +16,8 @@ import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardStatus;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -142,6 +149,80 @@ class GameZoneLiveDataRuntimeTest {
         // its own first send() call, per GameZoneLeaderboardSourceTest.
         assertFalse(runtime.isHttpClientInitializedForTesting(),
                 "a fake source that never touches the shared HttpClient must not cause it to be created");
+    }
+
+    @Test
+    @DisplayName("Constructing a BountyManager against a fresh runtime creates neither the executor nor the HttpClient")
+    void bountyManagerConstructionStaysFullyLazy() {
+        GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test");
+        BountySource noOpSource = () -> new BountyFetchResult.Success(List.of());
+
+        new BountyManager(noOpSource, runtime);
+
+        assertFalse(runtime.isExecutorInitializedForTesting(),
+                "constructing BountyManager (as CompanionSession does eagerly at startup) must not create the shared worker");
+        assertFalse(runtime.isHttpClientInitializedForTesting(),
+                "constructing BountyManager must not create the shared HttpClient either");
+    }
+
+    @Test
+    @DisplayName("An actual fetch through BountyManager creates the executor, and only the executor")
+    void actualBountyFetchCreatesOnlyTheExecutor() {
+        GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test");
+        BountySource fakeSource = () -> new BountyFetchResult.Success(
+                List.of(new BountyEntry("Alfa", null, 100, null, "ACTIVE", null, null)));
+        BountyManager manager = new BountyManager(fakeSource, runtime);
+
+        manager.ensureFresh();
+
+        long deadline = System.currentTimeMillis() + 2000;
+        while (System.currentTimeMillis() < deadline && manager.getSnapshot().status() != BountyStatus.LOADED) {
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        assertTrue(runtime.isExecutorInitializedForTesting(), "an actual fetch must have created the shared executor");
+        assertFalse(runtime.isHttpClientInitializedForTesting(),
+                "a fake source that never touches the shared HttpClient must not cause it to be created");
+    }
+
+    @Test
+    @DisplayName("Leaderboards and Bounty Board share the exact same runtime infrastructure - a fetch by one never creates a second executor/HttpClient for the other")
+    void leaderboardsAndBountiesShareTheSameRuntimeInfrastructure() throws InterruptedException {
+        GameZoneLiveDataRuntime sharedRuntime = new GameZoneLiveDataRuntime("0.1.0-test");
+        List<Thread> observedThreads = Collections.synchronizedList(new ArrayList<>());
+
+        LeaderboardSource leaderboardSource = definition -> {
+            observedThreads.add(Thread.currentThread());
+            return new LeaderboardFetchResult.Success(List.of(LeaderboardEntry.of(1, "Alfa", "1 coins", "Coins")));
+        };
+        BountySource bountySource = () -> {
+            observedThreads.add(Thread.currentThread());
+            return new BountyFetchResult.Success(List.of(new BountyEntry("Alfa", null, 100, null, "ACTIVE", null, null)));
+        };
+
+        LeaderboardManager leaderboardManager = new LeaderboardManager(leaderboardSource, sharedRuntime);
+        BountyManager bountyManager = new BountyManager(bountySource, sharedRuntime);
+
+        leaderboardManager.ensureFresh(GameZoneLeaderboardRegistry.all().get(0));
+        long deadline = System.currentTimeMillis() + 2000;
+        while (System.currentTimeMillis() < deadline
+                && leaderboardManager.getSnapshot(GameZoneLeaderboardRegistry.all().get(0)).status() != LeaderboardStatus.LOADED) {
+            Thread.sleep(5);
+        }
+        bountyManager.ensureFresh();
+        deadline = System.currentTimeMillis() + 2000;
+        while (System.currentTimeMillis() < deadline && bountyManager.getSnapshot().status() != BountyStatus.LOADED) {
+            Thread.sleep(5);
+        }
+
+        assertEquals(2, observedThreads.size());
+        assertEquals("gzcompanion-gamezone-live", observedThreads.get(0).getName());
+        assertSame(observedThreads.get(0), observedThreads.get(1),
+                "Leaderboards and Bounty Board must dispatch through the exact same single shared worker thread - never one each");
     }
 
     @Test

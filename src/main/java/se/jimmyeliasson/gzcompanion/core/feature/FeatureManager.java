@@ -179,6 +179,10 @@ public class FeatureManager {
             // (see LeaderboardStatus) - GameZone being temporarily unreachable must never mark the
             // whole module "Kommer snart".
             case LEADERBOARDS -> ModuleStatus.AVAILABLE;
+            // Same reasoning as LEADERBOARDS immediately above - Bounty Board is self-contained
+            // client code; GameZone's bounty endpoint being temporarily unreachable is a live-data
+            // concern (see BountyStatus), never a "this module isn't implemented" concern.
+            case BOUNTIES -> ModuleStatus.AVAILABLE;
             case KOMMANDON -> getCommandCatalogStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case INSTALLNINGAR -> getSettingsStatus() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
         };

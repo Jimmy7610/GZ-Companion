@@ -13,6 +13,7 @@ public enum TabType {
     SETTLEMENT("Settlement", IconId.SETTLEMENT, "Samhälls- och stadsverktyg"),
     BYGGPLANER("Byggplaner", IconId.BUILDING, "Byggnads- och materialplanerare"),
     MARKETWATCH("MarketWatch", IconId.MARKET, "Marknads- och ekonomibevakning"),
+    BOUNTIES("Bounties", IconId.BOUNTY, "Aktiva jakter från GameZone"),
     LEADERBOARDS("Leaderboards", IconId.LEADERBOARDS, "Topplistor för spelare, settlements och företag"),
     KOMMANDON("Kommandon", IconId.COMMANDS, "Serverkommandon och snabbval"),
     INSTALLNINGAR("Inställningar", IconId.SETTINGS, "Inställningar för GZ Companion");

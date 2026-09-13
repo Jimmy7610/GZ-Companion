@@ -19,6 +19,7 @@ public enum IconId {
     PLAYER("player"),
     SERVER("server"),
     LEADERBOARDS("leaderboards"),
+    BOUNTY("bounty"),
     OBJECTIVE("objective"),
     COMPATIBILITY("compatibility");
 

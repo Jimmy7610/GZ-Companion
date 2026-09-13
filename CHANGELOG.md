@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+Implemented on `main`, not yet released - intended for a future `0.1.0-alpha.5`. `mod_version`
+remains `0.1.0-alpha.4` until this work has been code-reviewed and human-QA tested in a live client.
+
+### Added
+- **Bounty Board tab**: read-only view of GameZone's own public active-bounty registry (PvE hunts
+  for a unique named target, Coin reward, optional public clue, optional expiry) via its genuine
+  public JSON API (`/api/bounties`) - the same endpoint GameZone's own wiki page fetches for its
+  live widget. On-demand only (60s auto floor, 12s manual cooldown, one fetch at a time,
+  coalesced), built entirely on the shared `GameZoneLiveDataRuntime` (no new thread/HttpClient).
+  Never scans entities, never shows a coordinate/distance/direction, never sends a command
+  automatically - the one command-related action is a deliberate clipboard-copy button. See
+  `docs/BOUNTY-BOARD.md`.
+- `bounty` package: `BountyEntry`/`BountyStatus`/`BountySnapshot`/`BountyFetchResult`,
+  `BountyJsonParser`, `GameZoneBountySource`, `BountyManager`, `BountyFormatter`.
+- New `BOUNTY` icon (`textures/gui/icons/bounty.png`) and `TabType.BOUNTIES` nav entry, positioned
+  between MarketWatch and Leaderboards.
+
+### Fixed
+- `MainScreenLayout`'s sidebar tab-height calculation could force a taller-than-available tab
+  height once enough nav tabs existed, overflowing the sidebar at small viewports - fixed to never
+  exceed what actually fits, regardless of tab count.
+
 ## [0.1.0-alpha.4] - 2026-09-13
 
 The first real feature release distributed through GZ Companion's own in-app updater, now that the

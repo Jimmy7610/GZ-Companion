@@ -244,27 +244,42 @@ public final class AsyncGuideProgressStore implements GuideProgressStore {
         return drainBounded(timeout);
     }
 
-    /** Waits (bounded) until nothing is active or pending, giving one retry attempt to anything
-     * left dirty from a prior failure at the start. Returns {@code true} iff, when it returns,
-     * nothing remains active, pending, or dirty - i.e. the latest requested state is confirmed
-     * persisted. Used by both {@link #flushBounded} and {@link #resetContext}. */
+    /**
+     * Waits (bounded) until nothing is active or pending, giving anything left dirty from a prior
+     * failure exactly one fresh retry attempt (never a repeated hammering loop, tracked via {@code
+     * retriedOnce} below). Returns {@code true} iff, when it returns, nothing remains active,
+     * pending, or dirty - i.e. the latest requested state is confirmed persisted. Used by both
+     * {@link #flushBounded} and {@link #resetContext}.
+     *
+     * <p>The retry-if-dirty check must be re-evaluated AFTER waiting for an already-active save to
+     * finish, not just once up front - if a save was still active at the moment this was called (not
+     * yet dirty), checking only once before the wait loop would miss the dirty state that only
+     * appears once that save finishes and fails, silently skipping the promised retry. A single
+     * {@code while (true)} loop re-checks after every wakeup, gated by {@code retriedOnce} so it
+     * still only ever retries once regardless of how many times the loop iterates.
+     */
     private boolean drainBounded(Duration timeout) {
         long deadline = System.nanoTime() + timeout.toNanos();
+        boolean retriedOnce = false;
         synchronized (lock) {
             try {
-                if (activeSave == null && pendingSave == null && dirtyAfterFailure != null) {
-                    GuideProgressData retry = dirtyAfterFailure;
-                    dirtyAfterFailure = null;
-                    dispatchLocked(retry);
-                }
-                while (activeSave != null || pendingSave != null) {
+                while (true) {
+                    if (activeSave == null && pendingSave == null) {
+                        if (dirtyAfterFailure != null && !retriedOnce) {
+                            GuideProgressData retry = dirtyAfterFailure;
+                            dirtyAfterFailure = null;
+                            retriedOnce = true;
+                            dispatchLocked(retry);
+                        } else {
+                            return dirtyAfterFailure == null;
+                        }
+                    }
                     long remainingMs = (deadline - System.nanoTime()) / 1_000_000;
                     if (remainingMs <= 0) {
                         return false;
                     }
                     lock.wait(remainingMs);
                 }
-                return dirtyAfterFailure == null;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return false;

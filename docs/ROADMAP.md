@@ -45,3 +45,7 @@
 ### M10 — Hardening & Release
 - **Scope**: Comprehensive QA, performance profiling, accessibility audits, and community beta release.
 - **Definition of Done**: Zero memory leaks, sub-1ms tick overhead, full localization coverage.
+
+### M11 — Bounty Board — *Implemented on main (unreleased), pending code review and human gameplay QA*
+- **Scope**: A live Bounty Board tab (`se.jimmyeliasson.gzcompanion.bounty`) surfacing GameZone's public Bounty System 1.0 active-hunt registry - unique-target PvE bounties with Coin rewards, optional public clue, and optional expiry - fetched on demand from GameZone's own public `/api/bounties` JSON endpoint via the shared `GameZoneLiveDataRuntime` used by Leaderboards.
+- **Definition of Done**: Zero bounty network/parsing/worker activity while the tab is never opened; exactly one fetch on first open; a 60s auto-refresh floor and 12s manual-refresh cooldown; at most one fetch in flight with coalesced (not queued) concurrent refresh requests; correct IDLE/LOADING/LOADED/STALE/UNAVAILABLE/INCOMPATIBLE snapshot semantics, including a genuine zero-active-bounties result presented as a successful LOADED empty state rather than an error; a wide two-pane and compact single-pane UI matching the existing design system; a deliberate, non-automatic "Kopiera /bounty info <name>" clipboard action; no entity/world scanning, coordinate extraction, or automated hunting of any kind; no duplication of the existing Monsterjägare leaderboard. See [Bounty Board](BOUNTY-BOARD.md).

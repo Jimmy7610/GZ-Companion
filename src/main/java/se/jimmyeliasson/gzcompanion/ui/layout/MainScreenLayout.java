@@ -58,7 +58,13 @@ public record MainScreenLayout(
         UiRect[] tabRects = new UiRect[tabCount];
 
         int availTabH = Math.max(1, sidebar.height() - 6);
-        int tabH = Math.max(12, Math.min(16, availTabH / tabCount));
+        // Never force a floor (e.g. "always at least 12px") that could exceed what tabCount tabs
+        // actually fit into availTabH - that guarantees overflow past the sidebar's own bottom
+        // edge once enough tabs are added (see ResponsiveLayoutTest's containment check, which this
+        // exact bug tripped when Bounties became the 11th tab). tabH * tabCount <= availTabH always
+        // holds by construction below, so tab rects can never overflow the sidebar regardless of
+        // how many tabs exist.
+        int tabH = Math.max(1, Math.min(16, availTabH / tabCount));
         int tabSpacing = Math.max(0, (availTabH - (tabH * tabCount)) / Math.max(1, tabCount - 1));
 
         for (int i = 0; i < tabCount; i++) {

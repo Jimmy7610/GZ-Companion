@@ -1,5 +1,7 @@
 package se.jimmyeliasson.gzcompanion.core;
 
+import se.jimmyeliasson.gzcompanion.bounty.BountyManager;
+import se.jimmyeliasson.gzcompanion.bounty.GameZoneBountySource;
 import se.jimmyeliasson.gzcompanion.chest.ChestManager;
 import se.jimmyeliasson.gzcompanion.chest.bridge.MinecraftChestCaptureAdapter;
 import se.jimmyeliasson.gzcompanion.chest.storage.JsonChestIndexStore;
@@ -108,6 +110,11 @@ public class CompanionSession {
     private final GameZoneLiveDataRuntime gameZoneLiveDataRuntime = new GameZoneLiveDataRuntime(CompanionConstants.getModVersion());
     private final LeaderboardManager leaderboardManager = new LeaderboardManager(
             new se.jimmyeliasson.gzcompanion.leaderboard.GameZoneLeaderboardSource(gameZoneLiveDataRuntime),
+            gameZoneLiveDataRuntime);
+    /** Bounty Board reuses the exact same shared GameZone runtime as Leaderboards - see
+     * docs/BOUNTY-BOARD.md's "shared GameZone runtime" section. No new executor/HttpClient. */
+    private final BountyManager bountyManager = new BountyManager(
+            new GameZoneBountySource(gameZoneLiveDataRuntime),
             gameZoneLiveDataRuntime);
 
     /** THE single shared background executor for local-disk persistence work that must not block
@@ -390,6 +397,11 @@ public class CompanionSession {
     /** THE single authoritative Leaderboards cache/fetch manager - see {@link LeaderboardManager}. */
     public LeaderboardManager getLeaderboardManager() {
         return leaderboardManager;
+    }
+
+    /** THE single authoritative Bounty Board cache/fetch manager - see {@link BountyManager}. */
+    public BountyManager getBountyManager() {
+        return bountyManager;
     }
 
     public GameZoneParserCatalog getParserCatalog() {
