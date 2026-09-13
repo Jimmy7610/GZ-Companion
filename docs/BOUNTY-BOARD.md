@@ -221,13 +221,14 @@ BountyLayout`, mirroring `GuideLayout`'s pattern exactly):
   compact scrollable list on the left (name, reward, entity type, remaining time per row) and the
   selected bounty's full detail on the right - no horizontal overflow at any tested viewport.
 - **Compact** (< 300px): a single-pane Guide-style list → select → detail → "< Lista" back button.
-- **Empty state** is deliberately NOT one-size-fits-all - four distinct statuses produce four
+- **Empty state** is deliberately NOT one-size-fits-all - five distinct statuses produce five
   distinct headlines/bodies (`BountiesTabComponent.emptyStateHeadline`/`emptyStateBody`, both
   directly unit-tested), because "zero entries" means a different thing depending on WHY there are
   zero:
 
   | Status | Headline | Body | What it actually means |
   |---|---|---|---|
+  | `IDLE` | "VÄNTAR PÅ DATA" | "Bounty-registret har inte hämtats ännu." | The registry has never been successfully fetched at all - never claimed as "no active bounties," since there is simply no data yet. |
   | `LOADED` (empty) | "INGA AKTIVA BOUNTIES" | "Det finns ingen aktiv jakt just nu. Kontrollera igen senare." | The CURRENT fetch succeeded and genuinely found nothing - a real success, not a failure. |
   | `STALE` (empty) | "INGA BOUNTIES I CACHAD DATA" | "Senast hämtade data innehöll inga aktiva jakter. Uppdatera för aktuell status." | The LAST successful fetch found nothing, but a MORE RECENT refresh just failed - the current state is unknown, so this deliberately does NOT say "no active hunt right now." |
   | `UNAVAILABLE`/`ERROR` | "KUNDE INTE HÄMTA" | "Kunde inte hämta bounty-registret just nu." | A genuine network-level failure with no usable cache at all. |
@@ -236,6 +237,12 @@ BountyLayout`, mirroring `GuideLayout`'s pattern exactly):
   The header/footer freshness badge still shows "CACHAD" for `STALE` regardless of whether the
   cached data is empty or not, so a `STALE`-empty view is never visually indistinguishable from a
   genuinely live empty result.
+- **Count strip** (the small "X AKTIVA BOUNTIES" line above the list/detail panes,
+  `BountiesTabComponent.countLabel`) independently follows the same rule: `LOADED`-empty shows
+  "INGA AKTIVA BOUNTIES," but `STALE`-empty shows nothing there at all (never repeating a claim
+  about the current state) - the main empty-state panel above is the only place that fact is
+  stated. Any status without usable data shows no count. A nonzero count renders identically for
+  `LOADED` and `STALE`.
 - **Detail pane**: name, entity type, "BELÖNING" (formatted reward), "LEDTRÅD" (the clue verbatim,
   or "Ingen offentlig ledtråd"), "TID KVAR" (locally-computed remaining time from a real expiry
   timestamp; "Ingen tidsgräns" only when the source explicitly said there is no limit; "Tidsgräns

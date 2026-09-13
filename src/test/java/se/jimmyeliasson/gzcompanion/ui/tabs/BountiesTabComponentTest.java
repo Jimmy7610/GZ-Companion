@@ -116,15 +116,78 @@ class BountiesTabComponentTest {
     }
 
     @Test
-    @DisplayName("Empty state: all four distinct statuses (LOADED/STALE/UNAVAILABLE/INCOMPATIBLE) produce four distinct headlines")
+    @DisplayName("Empty state: all five distinct statuses (IDLE/LOADED/STALE/UNAVAILABLE/INCOMPATIBLE) produce five distinct headlines")
     void emptyStateHeadlinesAreAllDistinctAcrossStatuses() {
+        String idle = BountiesTabComponent.emptyStateHeadline(BountyStatus.IDLE);
         String loaded = BountiesTabComponent.emptyStateHeadline(BountyStatus.LOADED);
         String stale = BountiesTabComponent.emptyStateHeadline(BountyStatus.STALE);
         String unavailable = BountiesTabComponent.emptyStateHeadline(BountyStatus.UNAVAILABLE);
         String incompatible = BountiesTabComponent.emptyStateHeadline(BountyStatus.INCOMPATIBLE);
 
-        assertEquals(4, java.util.Set.of(loaded, stale, unavailable, incompatible).size(),
-                "each of these four states communicates a genuinely different fact and must not share wording");
+        assertEquals(5, java.util.Set.of(idle, loaded, stale, unavailable, incompatible).size(),
+                "each of these five states communicates a genuinely different fact and must not share wording");
+    }
+
+    @Test
+    @DisplayName("Empty state: IDLE (never successfully loaded) must NEVER claim there are no active bounties - "
+            + "Companion simply has no data yet, which is a different fact from a confirmed empty registry")
+    void emptyStateForIdleNeverClaimsConfirmedEmpty() {
+        String headline = BountiesTabComponent.emptyStateHeadline(BountyStatus.IDLE);
+        String body = BountiesTabComponent.emptyStateBody(BountyStatus.IDLE);
+
+        assertNotEquals("INGA AKTIVA BOUNTIES", headline, "IDLE must not reuse the genuine-current-zero headline");
+        assertFalse(body.contains("ingen aktiv jakt"),
+                "IDLE must never assert anything about whether bounties exist - it has no data at all yet");
+    }
+
+    // ------------------------------------------------------------------
+    // countLabel - the small "X AKTIVA BOUNTIES" strip, independent of the main empty-state panel
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("countLabel: LOADED with zero entries is a genuine current success - shows the friendly empty count")
+    void countLabelLoadedZero() {
+        assertEquals("INGA AKTIVA BOUNTIES", BountiesTabComponent.countLabel(BountyStatus.LOADED, 0));
+    }
+
+    @Test
+    @DisplayName("countLabel: STALE with zero entries must NOT repeat 'INGA AKTIVA BOUNTIES' - the current count is "
+            + "unknown, and the main empty-state panel already states the cached-empty fact once")
+    void countLabelStaleZeroIsBlank() {
+        assertEquals("", BountiesTabComponent.countLabel(BountyStatus.STALE, 0));
+    }
+
+    @Test
+    @DisplayName("countLabel: IDLE never shows a count at all - there is no usable data to count")
+    void countLabelIdleZeroIsBlank() {
+        assertEquals("", BountiesTabComponent.countLabel(BountyStatus.IDLE, 0));
+    }
+
+    @Test
+    @DisplayName("countLabel: LOADED with one entry uses the singular form")
+    void countLabelLoadedOne() {
+        assertEquals("1 AKTIV BOUNTY", BountiesTabComponent.countLabel(BountyStatus.LOADED, 1));
+    }
+
+    @Test
+    @DisplayName("countLabel: STALE with one cached entry still shows the count - a nonempty stale cache remains informative")
+    void countLabelStaleOne() {
+        assertEquals("1 AKTIV BOUNTY", BountiesTabComponent.countLabel(BountyStatus.STALE, 1));
+    }
+
+    @Test
+    @DisplayName("countLabel: LOADED with several entries uses the plural form")
+    void countLabelLoadedMany() {
+        assertEquals("3 AKTIVA BOUNTIES", BountiesTabComponent.countLabel(BountyStatus.LOADED, 3));
+    }
+
+    @Test
+    @DisplayName("countLabel: statuses without usable data (LOADING/UNAVAILABLE/ERROR/INCOMPATIBLE) never show a count")
+    void countLabelNoUsableDataStatusesAreBlank() {
+        assertEquals("", BountiesTabComponent.countLabel(BountyStatus.LOADING, 0));
+        assertEquals("", BountiesTabComponent.countLabel(BountyStatus.UNAVAILABLE, 0));
+        assertEquals("", BountiesTabComponent.countLabel(BountyStatus.ERROR, 0));
+        assertEquals("", BountiesTabComponent.countLabel(BountyStatus.INCOMPATIBLE, 0));
     }
 
     // ------------------------------------------------------------------

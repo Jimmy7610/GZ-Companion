@@ -94,33 +94,74 @@ public class BountiesTabComponent {
 
     /**
      * The message shown in place of a list when there are no entries to show - distinguishes a
-     * genuine "zero active bounties" SUCCESS from a real loading/failure state, per this feature's
-     * explicit "do not show Error when the real result is simply no active bounties" requirement.
+     * genuine "zero active bounties" SUCCESS from a real loading/failure/never-loaded state, per
+     * this feature's explicit "do not show Error when the real result is simply no active
+     * bounties" requirement.
      *
      * <p><b>{@code STALE} is deliberately its own case, not folded into the {@code LOADED}
      * wording.</b> A {@code STALE} empty snapshot means the LAST successful fetch found zero
      * bounties, but a MORE RECENT refresh attempt failed - GameZone may have created a bounty since
      * then, so Companion must never claim "there is no active hunt right now" here. Only a genuine
      * {@code LOADED} empty result (the current refresh itself succeeded) may say that.
+     *
+     * <p><b>{@code IDLE} is likewise its own case, not folded into {@code LOADED}.</b> {@code IDLE}
+     * means the registry has never been successfully fetched at all (this normally flips to
+     * {@code LOADING} the instant {@code ensureFresh} runs, but can persist/revert here if the
+     * shared runtime rejects the submission) - it must never claim "no active bounties," since
+     * Companion simply has no data yet, successful or otherwise.
      */
     static String emptyStateHeadline(BountyStatus status) {
         return switch (status) {
+            case IDLE -> "VÄNTAR PÅ DATA";
             case LOADING -> "HÄMTAR BOUNTIES...";
             case UNAVAILABLE, ERROR -> "KUNDE INTE HÄMTA";
             case INCOMPATIBLE -> "OTILLGÄNGLIG";
             case STALE -> "INGA BOUNTIES I CACHAD DATA";
-            default -> "INGA AKTIVA BOUNTIES"; // LOADED (genuine current zero) / IDLE
+            case LOADED -> "INGA AKTIVA BOUNTIES";
         };
     }
 
     static String emptyStateBody(BountyStatus status) {
         return switch (status) {
+            case IDLE -> "Bounty-registret har inte hämtats ännu.";
             case LOADING -> "";
             case UNAVAILABLE, ERROR -> "Kunde inte hämta bounty-registret just nu.";
             case INCOMPATIBLE -> "GameZone har ändrat gränssnittet - stöds inte just nu.";
             case STALE -> "Senast hämtade data innehöll inga aktiva jakter. Uppdatera för aktuell status.";
-            default -> "Det finns ingen aktiv jakt just nu. Kontrollera igen senare.";
+            case LOADED -> "Det finns ingen aktiv jakt just nu. Kontrollera igen senare.";
         };
+    }
+
+    /**
+     * The small "X AKTIVA BOUNTIES" count strip shown above the list/detail panes - a separate,
+     * smaller piece of text from {@link #emptyStateHeadline}/{@link #emptyStateBody}, so it must
+     * independently respect the same "never claim a confirmed current state you don't actually
+     * have" rule:
+     *
+     * <ul>
+     *     <li>{@code LOADED} with zero entries is a genuine current success &rarr; "INGA AKTIVA
+     *         BOUNTIES" is accurate here.</li>
+     *     <li>{@code STALE} with zero entries must NOT repeat that claim - the current state is
+     *         unknown (see {@link #emptyStateHeadline}'s doc comment) - so this strip is blank,
+     *         leaving the main empty-state panel's own "INGA BOUNTIES I CACHAD DATA" copy as the
+     *         only place that fact is stated.</li>
+     *     <li>Any status without usable data ({@code IDLE}, {@code LOADING}, {@code UNAVAILABLE},
+     *         {@code ERROR}, {@code INCOMPATIBLE}) shows nothing - there is no confirmed count to
+     *         report at all.</li>
+     *     <li>A nonzero count is shown identically for {@code LOADED} and {@code STALE} - a
+     *         nonempty cache's bounty count is still meaningful/informative even while stale
+     *         (the individual rows themselves are already visually marked cached via the header's
+     *         "CACHAD" badge).</li>
+     * </ul>
+     */
+    static String countLabel(BountyStatus status, int count) {
+        if (!status.hasUsableData()) {
+            return "";
+        }
+        if (count == 0) {
+            return status == BountyStatus.LOADED ? "INGA AKTIVA BOUNTIES" : "";
+        }
+        return count + (count == 1 ? " AKTIV BOUNTY" : " AKTIVA BOUNTIES");
     }
 
     // ------------------------------------------------------------------
@@ -150,9 +191,7 @@ public class BountiesTabComponent {
     }
 
     private void renderCount(GuiGraphicsExtractor extractor, Font font, UiRect bounds, BountySnapshot snapshot, int count) {
-        String text = snapshot.status().hasUsableData()
-                ? (count == 0 ? "INGA AKTIVA BOUNTIES" : count + (count == 1 ? " AKTIV BOUNTY" : " AKTIVA BOUNTIES"))
-                : "";
+        String text = countLabel(snapshot.status(), count);
         if (!text.isBlank()) {
             TextUtil.drawScaledText(extractor, font, text, bounds.x(), bounds.y(), TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
         }

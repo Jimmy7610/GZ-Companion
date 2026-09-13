@@ -38,6 +38,11 @@ remains `0.1.0-alpha.4` until this work has been code-reviewed and human-QA test
   "there is no active hunt right now," which is only true of the last successful fetch, not
   necessarily the current state - fixed with distinct `STALE`-empty wording. See
   `docs/BOUNTY-BOARD.md` §14.
+- **Bounty empty-state follow-up**: the small "X AKTIVA BOUNTIES" count strip still said "INGA
+  AKTIVA BOUNTIES" for a `STALE`-empty cache even after the panel-level fix above, restating the
+  exact claim just corrected - it is now blank for `STALE`-empty instead. `IDLE` (never
+  successfully fetched) also used to fall back to the same "no active bounties" wording as a
+  genuine empty result; it now shows its own neutral "VÄNTAR PÅ DATA" state.
 
 ## [0.1.0-alpha.4] - 2026-09-13
 
