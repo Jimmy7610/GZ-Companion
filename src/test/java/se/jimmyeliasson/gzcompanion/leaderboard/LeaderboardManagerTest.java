@@ -590,4 +590,39 @@ class LeaderboardManagerTest {
         awaitStatus(manager, BOARD_A, LeaderboardStatus.LOADED, 2000);
         assertEquals(1, source.callCount.get());
     }
+
+    @Test
+    @DisplayName("REQUIRED: manualRefresh returns false, not true, when the immediate active submission is actually rejected by the shared runtime")
+    void manualRefreshReturnsFalseWhenImmediateSubmissionIsRejected() throws InterruptedException {
+        GameZoneLiveDataRuntime sharedRuntime = new GameZoneLiveDataRuntime("0.1.0-test");
+
+        CountDownLatch blockWorker = new CountDownLatch(1);
+        CountDownLatch workerEntered = new CountDownLatch(1);
+        assertTrue(sharedRuntime.submit(() -> {
+            workerEntered.countDown();
+            try {
+                blockWorker.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        assertTrue(workerEntered.await(2, TimeUnit.SECONDS));
+        for (int i = 0; i < GameZoneLiveDataRuntime.MAX_QUEUED_JOBS; i++) {
+            assertTrue(sharedRuntime.submit(() -> {}));
+        }
+
+        FakeSource source = new FakeSource();
+        LeaderboardManager manager = new LeaderboardManager(source, sharedRuntime);
+
+        // BOARD_A has no activeFetch yet, so manualRefresh takes the IMMEDIATE-active path
+        // (requestFetch's activeFetch == null branch) - the exact path that previously always
+        // returned true regardless of whether the shared runtime actually accepted the job.
+        boolean result = manager.manualRefresh(BOARD_A);
+
+        assertFalse(result, "manualRefresh must return false when the immediate submission is genuinely rejected, honoring its own \"true means accepted\" contract");
+        assertEquals(LeaderboardStatus.IDLE, manager.getSnapshot(BOARD_A).status(), "the board must revert cleanly, never stuck LOADING");
+        assertEquals(0, source.callCount.get());
+
+        blockWorker.countDown();
+    }
 }

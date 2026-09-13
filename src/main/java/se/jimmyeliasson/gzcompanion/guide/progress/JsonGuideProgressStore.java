@@ -124,13 +124,22 @@ public class JsonGuideProgressStore implements GuideProgressStore {
         }
     }
 
+    /**
+     * @return {@code true} once the reset has been durably written. Never returns {@code false} -
+     * a failure instead propagates as {@link GuideProgressPersistenceException} from the internal
+     * {@link #save} call, exactly like a regular save failure (see that method's own doc comment).
+     * The {@code boolean} return exists for {@link GuideProgressStore}'s contract, which {@code
+     * AsyncGuideProgressStore} uses to report a reset it could not even attempt (this synchronous
+     * implementation has no such "could not attempt" case of its own - it either succeeds or throws).
+     */
     @Override
-    public synchronized void resetContext(GuideContext context) {
-        if (context == null) return;
+    public synchronized boolean resetContext(GuideContext context) {
+        if (context == null) return false;
         GuideProgressData current = load();
         Map<String, ContextProgress> updated = new HashMap<>(current.contexts());
         updated.remove(context.getStorageKey());
         save(new GuideProgressData(current.schemaVersion(), updated));
+        return true;
     }
 
     private void backupCorruptFile() {

@@ -748,3 +748,195 @@ Unchanged from the prior follow-up's note: interactive verification inside a rea
 (opening Leaderboards, repeated UI open/close, completing a guide step and confirming it survives a
 normal game exit) still requires a human at the keyboard - this environment has no tool to drive the
 native Minecraft/LWJGL window. See this pass's final report for the itemized list.
+
+---
+
+## Follow-up (2026-09-13): final persistence correctness pass
+
+This section is dated and appended, not a rewrite of the three sections above - all of it stands as
+recorded. Independent review of commit `16e13ef` (the previous follow-up's own correctness fixes)
+found that its own fix for the reset-vs-active-save race was still not safe. This section documents
+exactly what was still wrong and the final contract that closes it. No feature, UI, or version
+change happened in this pass either.
+
+### What the review found
+
+Commit `16e13ef`'s `AsyncGuideProgressStore.resetContext()` did:
+
+```java
+boolean drained = drainBounded(resetWaitBound);
+if (!drained) {
+    LOGGER.warn(...);
+}
+delegate.resetContext(context); // called UNCONDITIONALLY, even after a failed drain
+```
+
+This **invalidated the claimed full ordering guarantee**. If `drainBounded` returned `false` -
+meaning an active write, a queued write, or a dirty-from-a-prior-failure write might still exist -
+the reset was applied anyway. A pre-reset write could then land on disk *after* the reset,
+resurrecting progress the player had just explicitly removed - exactly the bug the previous pass
+claimed to have fully fixed.
+
+The review also identified a second, sharper problem: `JsonGuideProgressStore`'s `save`/`load`/
+`resetContext` all share ONE intrinsic monitor (all three methods are `synchronized` on the same
+instance). If an active save were genuinely hung while holding that monitor, `drainBounded`'s own
+5-second wait (which only ever waits on `AsyncGuideProgressStore`'s OWN lock, never the delegate's)
+would correctly time out on schedule - but the *old* code then went on to call
+`delegate.resetContext(context)` regardless, which would immediately try to enter the delegate's
+still-held monitor and simply block there, indefinitely. **The bounded wait's timeout did not
+actually bound the method's total return time** once execution continued past it into the
+delegate. The previous pass's own regression test for this scenario paused a `FakeStore`
+*before* it reached a real synchronized call, so it could not have caught this - it only proved the
+`AsyncGuideProgressStore`-level wait itself was bounded, not that nothing unsafe happened after.
+
+Finally, `AsyncGuideProgressStore`'s own comments asserted "a newer `GuideProgressData` snapshot is
+always a superset of an older one." **This was false**: `GuideEngine.undoStepCompletion` exists
+precisely to let a newer, authoritative snapshot contain *less* than an older one. The actual
+coalescing/retry code never depended on the superset property (it always just took "newest
+requested" as authoritative, unconditionally), so this was a documentation bug, not a behavioral
+one - but a reviewer reading the comment would have reasonably suspected the retry logic itself
+might resurrect removed progress under some ordering. Fixed by correcting the comment to state the
+real invariant and adding an explicit regression test proving an undo-shaped snapshot is never
+overridden by a stale retried one.
+
+### The final reset contract
+
+> **A reset either succeeds completely and is durably persisted, or it does not happen at all.**
+> There is no third outcome.
+
+`GuideProgressStore.resetContext(GuideContext)` now returns `boolean` (previously `void`):
+
+- **`true`** - the reset was actually, durably performed. Every pre-reset write is now incapable of
+  running later (see below for why). The caller may safely reload from disk.
+- **`false`** - the reset was **not** performed at all. No claim of success is made. Existing
+  in-memory/disk progress remains completely authoritative and untouched. The caller must NOT
+  perform any follow-up load.
+
+`AsyncGuideProgressStore.resetContext()`'s implementation: if `drainBounded` does not report a
+clean drain (nothing active, pending, or dirty), the method returns `false` **immediately** -
+`delegate.resetContext(...)` is never even called, so it can never block trying to enter a
+possibly-held monitor, and no possibly-stale write can ever be triggered by the reset path itself.
+Only once a clean drain is confirmed does it proceed to call the delegate, still catching a failure
+there (the reset's own write can itself fail) and reporting `false` in that case too, never
+throwing. `JsonGuideProgressStore.resetContext()` was updated to the same `boolean` signature -
+returning `true` on success, or letting a `GuideProgressPersistenceException` from its internal
+`save()` call propagate exactly as before (it has no "could not attempt" case of its own; it either
+succeeds or throws).
+
+`GuideEngine.resetGuideProgress(GuideContext)` also now returns `boolean` and only reloads from
+disk when the underlying store confirms `true`:
+
+```java
+public boolean resetGuideProgress(GuideContext context) {
+    if (loadStatus != GuideLoadStatus.LOADED || context == null) return false;
+    boolean applied = progressStore.resetContext(context);
+    if (applied) {
+        this.progressData = progressStore.load();
+        this.lastEvaluatedFingerprint = null;
+        this.lastEvaluatedContextKey = null;
+    }
+    return applied;
+}
+```
+
+All three existing call sites (`SettingsTabComponent`, `GuideTabComponent`) call this as a bare
+statement/lambda body and needed no changes - Java allows discarding a `boolean`-returning method's
+result exactly as it did the previous `void` one.
+
+### Why a clean drain is still a genuine guarantee, not best-effort
+
+Unchanged reasoning from the prior pass, now correctly acted upon: Minecraft's client/tick/render/
+input handling is single-threaded, and `resetContext` is always called from that one thread, so no
+OTHER save can be dispatched while a call to it is on the call stack. Once `drainBounded` observes
+"nothing active/pending/dirty," that state cannot change underneath it before the reset's own write
+runs - PROVIDED the method actually aborts rather than proceeding when the drain fails, which is
+the exact fix this pass makes. The wait is still bounded (5 seconds, shorter in tests via a
+package-private constructor seam) purely so a truly-hung disk cannot hang the reset button forever;
+hitting that bound now correctly means "the reset did not happen," never "proceed anyway."
+
+### Regression tests added this pass
+
+All required scenarios, each proven deterministically (`CountDownLatch` pairs, never sleep-and-hope
+timing):
+
+1. **Active-save timeout** (`activeSaveTimeoutAbortsResetWithoutCallingDelegate`) - a pre-reset save
+   is genuinely active and deliberately kept from finishing; the reset call returns promptly with
+   `false`; `delegate.resetContext` is asserted to have been called exactly zero times; the old
+   save is then released and finishes, and the reset call count remains zero (no retroactive/false
+   claim); a subsequent reset with nothing outstanding succeeds normally.
+2. **Saturated local-persistence runtime** (`saturatedRuntimeAbortsResetWithoutCallingDelegate`) -
+   the shared runtime's bounded queue is filled from outside the store entirely, so the reset's own
+   one bounded retry-of-dirty-state attempt cannot even be scheduled; reset returns `false`;
+   `delegate.resetContext` is never called.
+3. **Dirty failure then reset** (`dirtyFailureDuringResetAbortsThenLaterRecoverySucceeds`) - a save
+   fails and becomes dirty; a reset attempt's one retry ALSO fails, so the reset aborts (`false`,
+   zero delegate reset calls); persistence then recovers; a second reset attempt's retry succeeds,
+   so THAT reset is fully applied (`true`); a subsequent flush is asserted to trigger no further
+   save and not re-run the reset.
+4. **Successful active-save drain** (`successfulActiveSaveDrainThenResetSucceeds`) - an old save is
+   active; reset waits; the old save finishes within the bound; reset then succeeds (`true`); the
+   real on-disk JSON content is checked directly to contain the reset result; a subsequent flush is
+   proven not to reintroduce the old progress.
+5. **The exact deterministic race** (`resetWinsPermanentlyOverAPausedActiveSave`) - a worker is
+   accepted as current and paused (via `CountDownLatch`) immediately before its real, durable
+   `JsonGuideProgressStore`-backed write; `resetContext` is called and blocks; the worker is then
+   released; the required final result is asserted directly against real persisted JSON content -
+   no pre-reset state is visible once `resetContext()` returns, and this remains true after a
+   further flush.
+6. **Other-context preservation** (`resetPreservesOtherContextsProgress`) - unchanged scenario,
+   re-verified against the new boolean contract: resetting context X leaves context Y's already-
+   persisted progress fully intact.
+7. **GuideEngine end-to-end, in `GuideEngineTest`** (three new tests) - a controllable fake store
+   proves: a failed/aborted reset leaves `GuideEngine`'s in-memory progress completely untouched
+   AND performs zero additional `load()` calls (proving no unsafe follow-up read); a successful
+   reset reloads from disk exactly once and correctly clears the in-memory state; a reset that
+   fails once and then succeeds on a later attempt still clears progress correctly the second time.
+8. **Real synchronized-delegate blocking case** (`resetDoesNotBlockBehindADelegateHeldMonitor`) - a
+   new `MonitorSharingStore` test double declares `save`/`load`/`resetContext` all `synchronized`
+   on the same instance, precisely mirroring `JsonGuideProgressStore`'s actual monitor sharing
+   (unlike the earlier `ControllableStore`/`FakeStore`, which only coordinate via test latches, not
+   a real shared lock). A save is paused genuinely INSIDE the synchronized method, provably holding
+   the monitor; `resetContext` is then called and asserted to return `false` within its bound
+   (never blocking for the held monitor) with `delegate.resetContext` never invoked at all - proving
+   the fix aborts before ever attempting to enter the delegate, rather than merely bounding its own
+   internal wait and then blocking anyway.
+9. **Non-monotonic/undo snapshot** (`newerSnapshotThatRemovesProgressStillSupersedesDirtyOlderOne`)
+   - a save representing state A fails and becomes dirty; a newer snapshot representing an undo
+   (strictly fewer completions than A, not a superset) is then saved and succeeds; a flush confirms
+   only the undo snapshot was ever durably written - A is never retried/resurrected.
+
+### LeaderboardManager contract fix
+
+A smaller, unrelated correctness gap surfaced during this review: `LeaderboardManager.requestFetch`
+'s immediate-active path (`activeFetch == null`) called `startFetchLocked(definition)` and then
+always returned `true`, regardless of whether the shared runtime actually accepted the submission -
+conflicting with the method's own documented contract ("`true` if this request was actually
+accepted"). `startFetchLocked` now returns `boolean` (whether ITS OWN submission was accepted), and
+`requestFetch`'s immediate-active branch propagates that value directly, so `manualRefresh(...)`
+now returns `false`, not `true`, when the shared runtime rejects the immediate request. A new test,
+`manualRefreshReturnsFalseWhenImmediateSubmissionIsRejected`, saturates the shared runtime exactly
+like the prior pass's rejection test and confirms the return value. Snapshot restoration, retry
+availability, latest-pending semantics, manual priority, and cooldown behavior are all unchanged
+and re-verified by the full pre-existing `LeaderboardManagerTest` suite.
+
+### Validation performed this pass
+
+- `.\gradlew.bat clean test` - **BUILD SUCCESSFUL**, full suite, zero failures (842 tests total, up
+  from 835 before this pass).
+- `.\gradlew.bat build` - **BUILD SUCCESSFUL**; jar used only for the `runClient`/live-smoke checks
+  below, never rebuilt into a release bundle.
+- `.\gradlew.bat runClient` - clean boot, no exceptions besides the benign offline-Realms message; a
+  live thread dump before touching Leaderboards again confirms no `gzcompanion-gamezone-live` and
+  no `gzcompanion-local-persistence` thread exists yet, only `gzcompanion-updater` and its two
+  `HttpClient` selector threads.
+- A fresh live GameZone 27-board smoke test - 27/27 success, using the shared-runtime-based
+  `GameZoneLeaderboardSource` directly, confirming its `HttpClient` is created on first use while
+  the executor stays uninitialized (fetching directly, bypassing `LeaderboardManager`, never
+  touches the shared executor - only the manager does).
+
+### Human QA still required
+
+Unchanged: interactive verification inside a real running client (opening Leaderboards, repeated UI
+open/close, completing a guide step and confirming it survives a normal game exit, clicking the
+actual reset-progress button under real conditions) still requires a human at the keyboard - this
+environment has no tool to drive the native Minecraft/LWJGL window.

@@ -11,13 +11,17 @@ import se.jimmyeliasson.gzcompanion.guide.model.GuideLoadStatus;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideManifest;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideStep;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideStepState;
+import se.jimmyeliasson.gzcompanion.guide.progress.ContextProgress;
 import se.jimmyeliasson.gzcompanion.guide.progress.GuideContext;
+import se.jimmyeliasson.gzcompanion.guide.progress.GuideProgressData;
+import se.jimmyeliasson.gzcompanion.guide.progress.GuideProgressStore;
 import se.jimmyeliasson.gzcompanion.guide.progress.JsonGuideProgressStore;
 
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -373,5 +377,101 @@ class GuideEngineTest {
         assertFalse(unavailEngine.evaluate(testContext, true));
         assertFalse(unavailEngine.markStepCompleted(testContext, "movement_controls", true));
         assertFalse(java.nio.file.Files.exists(progressPath));
+    }
+
+    // ------------------------------------------------------------------
+    // Final persistence correctness pass: GuideEngine.resetGuideProgress must reload from disk
+    // ONLY after a confirmed successful reset, and must leave in-memory progress completely
+    // untouched (never perform an unsafe follow-up load) when the reset was not actually applied.
+    // ------------------------------------------------------------------
+
+    /** A minimal controllable {@link GuideProgressStore} - `resetContext`'s outcome and `load`'s
+     * call count are both directly controllable/observable, without needing the full async/
+     * threading machinery already covered by {@code AsyncGuideProgressStoreTest}. This test file's
+     * job is only to prove GuideEngine's OWN reaction to the boolean contract. */
+    private static final class ResetControllableStore implements GuideProgressStore {
+        volatile boolean nextResetSucceeds = true;
+        GuideProgressData dataOnDisk = GuideProgressData.empty();
+        final AtomicInteger loadCallCount = new AtomicInteger();
+
+        @Override
+        public GuideProgressData load() {
+            loadCallCount.incrementAndGet();
+            return dataOnDisk;
+        }
+
+        @Override
+        public void save(GuideProgressData data) {
+            dataOnDisk = data;
+        }
+
+        @Override
+        public boolean resetContext(GuideContext context) {
+            if (!nextResetSucceeds) {
+                return false;
+            }
+            Map<String, ContextProgress> updated = new HashMap<>(dataOnDisk.contexts());
+            updated.remove(context.getStorageKey());
+            dataOnDisk = new GuideProgressData(dataOnDisk.schemaVersion(), updated);
+            return true;
+        }
+    }
+
+    @Test
+    @DisplayName("resetGuideProgress: a failed/aborted reset leaves in-memory progress untouched and performs no follow-up load")
+    void resetGuideProgressLeavesInMemoryProgressUntouchedOnFailure() {
+        ResetControllableStore store = new ResetControllableStore();
+        GuideEngine engine = new GuideEngine(new GuideLoader(), store, () -> GuidePlayerSnapshot.EMPTY);
+        engine.initialize();
+
+        assertTrue(engine.markStepCompleted(testContext, "movement_controls", true));
+        assertTrue(engine.isStepCompleted(testContext, "movement_controls"));
+        int loadCountBeforeReset = store.loadCallCount.get();
+
+        store.nextResetSucceeds = false;
+        boolean result = engine.resetGuideProgress(testContext);
+
+        assertFalse(result, "resetGuideProgress must report false when the underlying store could not confirm the reset was safe to apply");
+        assertTrue(engine.isStepCompleted(testContext, "movement_controls"),
+                "in-memory progress must remain completely untouched after a failed/aborted reset");
+        assertEquals(loadCountBeforeReset, store.loadCallCount.get(),
+                "a failed/aborted reset must NOT perform any follow-up load - that would be an unsafe read of possibly-inconsistent disk state");
+    }
+
+    @Test
+    @DisplayName("resetGuideProgress: a successful reset reloads from disk and correctly clears the in-memory progress")
+    void resetGuideProgressReloadsOnlyAfterConfirmedSuccess() {
+        ResetControllableStore store = new ResetControllableStore();
+        GuideEngine engine = new GuideEngine(new GuideLoader(), store, () -> GuidePlayerSnapshot.EMPTY);
+        engine.initialize();
+
+        assertTrue(engine.markStepCompleted(testContext, "movement_controls", true));
+        assertTrue(engine.isStepCompleted(testContext, "movement_controls"));
+        int loadCountBeforeReset = store.loadCallCount.get();
+
+        store.nextResetSucceeds = true;
+        boolean result = engine.resetGuideProgress(testContext);
+
+        assertTrue(result, "resetGuideProgress must report true once the underlying store confirms the reset was actually applied");
+        assertFalse(engine.isStepCompleted(testContext, "movement_controls"), "in-memory progress must be cleared after a successful reset");
+        assertEquals(loadCountBeforeReset + 1, store.loadCallCount.get(), "a successful reset must reload from disk exactly once");
+    }
+
+    @Test
+    @DisplayName("resetGuideProgress: after a failed reset, a later successful reset still clears progress correctly")
+    void resetGuideProgressCanSucceedAfterAnEarlierFailure() {
+        ResetControllableStore store = new ResetControllableStore();
+        GuideEngine engine = new GuideEngine(new GuideLoader(), store, () -> GuidePlayerSnapshot.EMPTY);
+        engine.initialize();
+
+        assertTrue(engine.markStepCompleted(testContext, "movement_controls", true));
+
+        store.nextResetSucceeds = false;
+        assertFalse(engine.resetGuideProgress(testContext));
+        assertTrue(engine.isStepCompleted(testContext, "movement_controls"), "still completed after the failed attempt");
+
+        store.nextResetSucceeds = true;
+        assertTrue(engine.resetGuideProgress(testContext));
+        assertFalse(engine.isStepCompleted(testContext, "movement_controls"), "the later successful reset must still clear it correctly");
     }
 }

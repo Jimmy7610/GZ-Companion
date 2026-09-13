@@ -35,29 +35,45 @@ import java.time.Duration;
  * assumed that throw, but the delegate never actually did it, so a real disk failure was invisible
  * (this class believed every write succeeded). A failed write is caught here, sets {@link
  * #lastSaveFailed}, and - crucially - is retained as {@link #dirtyAfterFailure} rather than being
- * discarded, UNLESS something newer has already been requested in the meantime (a newer {@code
- * GuideProgressData} snapshot is always a superset of an older one - {@code GuideEngine} only ever
- * adds completions, never removes them outside an explicit reset - so a fresh save silently
- * "retrying" a stale failed one loses nothing). The dirty state is retried exactly once whenever
- * {@link #flushBounded} is called (a "sensible opportunity", not a hammering loop) and otherwise
- * sits inertly - no busy retry loop, no unbounded retry queue (it is a single field, not a list).
- * The atomic temp-file-then-move write itself is unchanged, so a failed/partial write still can
- * never corrupt the previously-valid file.
+ * discarded, UNLESS a newer request has arrived in the meantime. Note this is a pure "latest wins"
+ * policy, NOT a superset assumption - {@code GuideEngine} supports {@code undoStepCompletion}, so a
+ * newer snapshot can legitimately contain LESS than an older one. The newest requested snapshot is
+ * simply always treated as authoritative, whatever its relationship to the previous one; retrying a
+ * superseded failed write would silently reintroduce a state the newer request may have
+ * deliberately removed, which {@link #save} therefore never does. The dirty state is retried
+ * exactly once whenever {@link #flushBounded} (or {@link #resetContext}) runs (a "sensible
+ * opportunity", not a hammering loop) and otherwise sits inertly - no busy retry loop, no unbounded
+ * retry queue (it is a single field, not a list). The atomic temp-file-then-move write itself is
+ * unchanged, so a failed/partial write still can never corrupt the previously-valid file.
  *
- * <p><b>{@link #resetContext} (2026-09-13 correctness follow-up - full fix, no caveat).</b> The
- * original version tried to invalidate an in-flight write with an epoch counter checked
- * immediately before the delegate call - but the check and the call were not atomic, so a
- * concurrently-completing reset could still let a stale write land afterward. This version instead
- * makes {@code resetContext} synchronously DRAIN everything outstanding first (see {@link
- * #drainBounded}) - waiting for any active write to actually finish, and letting any pending write
- * actually run (never dropping it, so another context's concurrently-queued progress is never lost
- * just because a different context was reset) - and only THEN performs the reset. Since Minecraft's
- * client/tick/render/input handling is single-threaded, and this is always called from that single
- * thread, no OTHER save can possibly be dispatched while a call to this method is still on the call
- * stack; the drain-then-reset ordering is therefore a genuine guarantee, not a best-effort one,
- * under any realistic disk-I/O condition - the wait is bounded (see {@link #RESET_WAIT_BOUND}) only
- * so a truly hung/dead disk (already a far bigger problem than this specific ordering) cannot hang
- * the reset button forever; see docs/PERFORMANCE-AUDIT-ALPHA4.md for the full writeup.
+ * <p><b>{@link #resetContext} (2026-09-13 final persistence correctness pass - abort-on-incomplete-
+ * drain).</b> An earlier version of this method drained with a bounded wait but then called {@code
+ * delegate.resetContext(...)} UNCONDITIONALLY, even when the drain reported failure/timeout -
+ * meaning an outstanding pre-reset write (active, pending, or dirty-from-a-prior-failure) could
+ * still exist, and could land on disk AFTER the reset, resurrecting progress the player had just
+ * explicitly removed. It also did not account for {@code JsonGuideProgressStore}'s {@code save}/
+ * {@code load}/{@code resetContext} all sharing ONE intrinsic monitor: if the active write were
+ * genuinely hung while holding that monitor, unconditionally calling {@code
+ * delegate.resetContext(...)} afterward would simply block trying to enter it, silently defeating
+ * the whole point of a bounded wait. This version instead treats an incomplete drain as an outright
+ * abort: {@link #drainBounded} is the ONLY thing ever awaited (it only ever waits on THIS class's
+ * own {@link #lock}, never touching the delegate's monitor, so its bound is always genuinely
+ * respected regardless of the delegate's internal state) - if it does not report a clean drain
+ * (nothing active, pending, or dirty), {@code delegate.resetContext} is NEVER called, and this
+ * method returns {@code false} immediately. A reset therefore has exactly two possible outcomes:
+ * fully applied and durably persisted ({@code true}), or not performed at all ({@code false}) -
+ * never a partial/uncertain state, and {@code GuideEngine} relies on exactly this to decide whether
+ * it is safe to reload from disk (see {@code GuideEngine#resetGuideProgress}).
+ *
+ * <p>When a clean drain IS achieved, this is a genuine guarantee, not a best-effort one, in this
+ * project's actual concurrency model: Minecraft's client/tick/render/input handling is
+ * single-threaded, and this method is always called from that one thread, so no OTHER save can
+ * possibly be dispatched while a call to this method is still on the call stack - once the drain
+ * observes "nothing active/pending/dirty," that state cannot change underneath it before the
+ * reset's own write runs. The drain wait is bounded (see {@link #RESET_WAIT_BOUND}) purely so a
+ * truly hung/dead disk cannot hang the reset button forever; hitting that bound now correctly
+ * aborts the reset instead of racing ahead of it. See docs/PERFORMANCE-AUDIT-ALPHA4.md for the full
+ * writeup, including why the PRIOR "proceed anyway" version was wrong.
  *
  * <p><b>Shutdown / final flush.</b> {@link #flushBounded} performs a bounded wait for any
  * in-flight/pending save to actually reach disk, giving one retry attempt to anything left dirty
@@ -115,11 +131,11 @@ public final class AsyncGuideProgressStore implements GuideProgressStore {
     public void save(GuideProgressData data) {
         if (data == null) return;
         synchronized (lock) {
-            // A fresh request is always a newer, superset snapshot (GuideEngine only ever adds
-            // completions) - it supersedes anything previously left dirty by a failure, regardless
-            // of which branch below actually handles it. Without this, a successful dispatch here
-            // could leave a now-obsolete dirtyAfterFailure lingering, which a later flush/reset
-            // could wrongly "retry" and silently regress already-persisted newer progress.
+            // The newest request is always authoritative - NOT necessarily a superset (GuideEngine
+            // supports undoStepCompletion, so a newer snapshot can contain less than an older one).
+            // It supersedes anything previously left dirty by a failure regardless, since dirty data
+            // is by definition already retired - retrying it later instead of the newest request
+            // would silently reintroduce a state the player may have deliberately changed away from.
             dirtyAfterFailure = null;
             if (activeSave == null) {
                 dispatchLocked(data);
@@ -131,26 +147,37 @@ public final class AsyncGuideProgressStore implements GuideProgressStore {
 
     /**
      * A rare, explicit, whole-context reset. Synchronously drains any outstanding write first (see
-     * {@link #drainBounded}), THEN performs the reset - see class doc comment for why this is a
-     * full guarantee, not a best-effort one, in this project's actual (single client-thread caller)
-     * concurrency model. Never throws even if the underlying reset write itself fails - the failure
-     * is instead reflected in {@link #lastSaveFailed()}, exactly like a regular {@link #save}.
+     * {@link #drainBounded}); if - and only if - that drain fully succeeds (nothing left active,
+     * pending, or dirty) does this proceed to actually perform the reset. See class doc comment for
+     * why an incomplete drain means an outright ABORT (never "proceed anyway"), and why a clean
+     * drain is a full guarantee, not a best-effort one, in this project's concurrency model.
+     *
+     * @return {@code true} only if the reset was actually, durably performed; {@code false} if it
+     * was not performed at all - either because the pre-reset drain could not be confirmed safe
+     * within {@link #resetWaitBound}, or because the reset's own underlying write failed. Either
+     * way, {@code false} means existing in-memory/disk progress is untouched and still authoritative
+     * - never thrown as an exception, so a caller like {@code GuideEngine} can inspect it safely.
      */
     @Override
-    public void resetContext(GuideContext context) {
+    public boolean resetContext(GuideContext context) {
         boolean drained = drainBounded(resetWaitBound);
         if (!drained) {
-            LOGGER.warn("Timed out waiting for an in-flight guide-progress save to finish before "
-                    + "reset - proceeding with the reset anyway. This would only happen if the "
-                    + "underlying disk write itself is hung, which is a larger problem than this "
-                    + "reset.");
+            LOGGER.warn("Aborting guide-progress reset for context {} - could not confirm within {} "
+                    + "that all outstanding pre-reset writes had finished or been resolved. Applying "
+                    + "the reset anyway could let a pre-reset write land afterward and resurrect "
+                    + "progress the player just removed, so the reset was NOT performed. This would "
+                    + "only happen if the underlying disk I/O itself is stuck - try again once "
+                    + "persistence recovers.", context, resetWaitBound);
+            return false;
         }
         try {
             delegate.resetContext(context);
             lastSaveFailed = false;
+            return true;
         } catch (GuideProgressPersistenceException e) {
             lastSaveFailed = true;
-            LOGGER.error("Failed to persist guide progress reset for context {}", context, e);
+            LOGGER.error("Failed to persist guide progress reset for context {} - the reset was NOT applied", context, e);
+            return false;
         }
     }
 

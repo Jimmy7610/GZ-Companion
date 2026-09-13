@@ -497,12 +497,23 @@ public class GuideEngine {
         return true;
     }
 
-    public void resetGuideProgress(GuideContext context) {
-        if (loadStatus != GuideLoadStatus.LOADED || context == null) return;
-        progressStore.resetContext(context);
-        this.progressData = progressStore.load();
-        this.lastEvaluatedFingerprint = null;
-        this.lastEvaluatedContextKey = null;
+    /**
+     * @return {@code true} if the reset was actually, durably performed - only then is the
+     * in-memory {@link #progressData} reloaded from disk. {@code false} means the underlying store
+     * could not confirm the reset was safe to apply (see {@link GuideProgressStore#resetContext}) -
+     * in that case this method leaves {@link #progressData} completely untouched rather than
+     * performing an unsafe follow-up load, since a failed/aborted reset gives no guarantee about
+     * what (if anything) is actually on disk. Never throws a persistence failure into caller code.
+     */
+    public boolean resetGuideProgress(GuideContext context) {
+        if (loadStatus != GuideLoadStatus.LOADED || context == null) return false;
+        boolean applied = progressStore.resetContext(context);
+        if (applied) {
+            this.progressData = progressStore.load();
+            this.lastEvaluatedFingerprint = null;
+            this.lastEvaluatedContextKey = null;
+        }
+        return applied;
     }
 
     public record ProgressSummary(int completedCount, int totalCount, int percent, int completedOptional, int totalOptional) {

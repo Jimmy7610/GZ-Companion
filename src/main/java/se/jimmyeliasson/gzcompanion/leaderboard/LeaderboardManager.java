@@ -171,8 +171,7 @@ public final class LeaderboardManager {
                 return false; // already the one in flight right now - coalesce
             }
             if (activeFetch == null) {
-                startFetchLocked(definition);
-                return true;
+                return startFetchLocked(definition); // true only if the shared runtime actually accepted it
             }
             if (manual) {
                 pendingRequest = new PendingRequest(definition, true); // manual intent always claims the pending slot
@@ -194,8 +193,15 @@ public final class LeaderboardManager {
      * a fetch that will now never run. Crucially, {@link #lastFetchAttemptAt} is only recorded once
      * the job is actually accepted - a rejected job never touched the network at all, so it must
      * not count against the 60s auto-refresh floor and silently block a genuine retry for up to a
-     * minute; a later request for this board can therefore try again immediately. */
-    private void startFetchLocked(LeaderboardDefinition definition) {
+     * minute; a later request for this board can therefore try again immediately.
+     *
+     * @return {@code true} iff {@code definition}'s own submission was accepted by the shared
+     * runtime - callers (see {@link #requestFetch}) must propagate this rather than assuming
+     * acceptance, since {@link #manualRefresh}'s own contract promises {@code true} only when the
+     * request genuinely became active or pending. A rejection here may still recursively try to
+     * start whatever was in {@link #pendingRequest} - that attempt's own outcome is independent of,
+     * and never reported through, this return value. */
+    private boolean startFetchLocked(LeaderboardDefinition definition) {
         activeFetch = definition;
         String id = definition.id();
         LeaderboardSnapshot previous = snapshots.get(id);
@@ -215,6 +221,7 @@ public final class LeaderboardManager {
                 startFetchLocked(next);
             }
         }
+        return accepted;
     }
 
     /** Runs the real fetch for {@code definition} (the current active fetch), applies its result,
