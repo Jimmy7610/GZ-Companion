@@ -155,6 +155,38 @@ public final class TextUtil {
     }
 
     /**
+     * Draws multi-line wrapped text at a specified typography scale, rendering EVERY wrapped line
+     * - no {@code maxLines} cap, no truncation, no ellipsis. Pairs with the already-uncapped {@link
+     * #measureWrappedHeight} (both derive from the same {@link #splitLines} call and the identical
+     * height formula, so a caller that measures with one and draws with the other can never get a
+     * mismatched/incorrect height). Use this for content whose FULL text must always be shown -
+     * the caller's own scrollable/scissored viewport, not this method, is responsible for
+     * containing whatever does not fit on screen at once.
+     */
+    public static int drawScaledWrappedTextUnbounded(GuiGraphicsExtractor extractor, Font font, String text,
+                                                      int x, int y, int maxPixelWidth, float scale, int lineSpacing,
+                                                      int colorArgb, boolean dropShadow) {
+        if (text == null || text.isEmpty() || maxPixelWidth <= 0 || font == null) return 0;
+        List<FormattedCharSequence> lines = splitLines(font, text, maxPixelWidth, scale);
+        if (lines.isEmpty()) return 0;
+        int scaledLineH = (int) Math.ceil(9 * scale);
+        int currentY = y;
+        for (FormattedCharSequence line : lines) {
+            if (Math.abs(scale - 1.0f) < 0.001f) {
+                extractor.text(font, line, x, currentY, colorArgb, dropShadow);
+            } else {
+                extractor.pose().pushMatrix();
+                extractor.pose().translate(x, currentY);
+                extractor.pose().scale(scale, scale);
+                extractor.text(font, line, 0, 0, colorArgb, dropShadow);
+                extractor.pose().popMatrix();
+            }
+            currentY += scaledLineH + lineSpacing;
+        }
+        return (lines.size() * scaledLineH) + ((lines.size() - 1) * lineSpacing);
+    }
+
+    /**
      * Draws right-aligned text within bounds at 1.0 scale.
      */
     public static void drawRightAlignedText(GuiGraphicsExtractor extractor, Font font, String text,

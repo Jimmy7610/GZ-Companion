@@ -145,9 +145,13 @@ public class BountiesTabComponent {
      * {@link #renderDetailPane} can clamp {@link #detailScrollOffset} correctly via {@link
      * #clampScroll}. Deliberately mirrors, increment for increment, the exact vertical spacing
      * {@link #renderDetailPane} itself draws with - if that method's layout changes, this must
-     * change with it. Not unit-tested directly (this project's test environment has no live {@code
-     * Font} - see this class's own test file), but the pure clamp it feeds is fully tested against
-     * synthetic content heights, and a live-client visual check remains required human QA.
+     * change with it. The clue is measured with the UNCAPPED {@link TextUtil#measureWrappedHeight}
+     * (paired with {@link TextUtil#drawScaledWrappedTextUnbounded} in {@link #renderDetailPane}) -
+     * GameZone's public clue is never truncated at some arbitrary line count; the scrollable
+     * viewport, not a rendering cap, is what contains an unusually long one. Not unit-tested
+     * directly (this project's test environment has no live {@code Font} - see this class's own
+     * test file), but the pure clamp it feeds is fully tested against synthetic content heights,
+     * and a live-client visual check remains required human QA.
      */
     static int calculateDetailContentHeight(Font font, int contentW, BountyEntry entry) {
         if (font == null) return 0;
@@ -160,7 +164,7 @@ public class BountiesTabComponent {
         h += 2; // gap before LEDTRÅD label
         h += 9; // LEDTRÅD label line
         String hintText = entry.hasHint() ? entry.hint() : "Ingen offentlig ledtråd";
-        h += TextUtil.measureWrappedHeightCapped(font, hintText, contentW, TypographyScale.SMALL.getScale(), 4, 2);
+        h += TextUtil.measureWrappedHeight(font, hintText, contentW, TypographyScale.SMALL.getScale(), 2);
         h += 4; // gap after clue
         h += DETAIL_SECTION_H; // TID KVAR section
         return h;
@@ -420,12 +424,16 @@ public class BountiesTabComponent {
         y = renderDetailSection(extractor, font, contentX, y, contentW, "BELÖNING",
                 BountyFormatter.formatReward(entry.rewardCoins()) + " Coins", GZTheme.COLOR_MINT);
 
+        // The public clue is rendered in FULL, never capped at some arbitrary line count - GameZone
+        // publishes it verbatim, and this scrollable/scissored detail pane (not a rendering cap) is
+        // what contains an unusually long one. See calculateDetailContentHeight, which measures
+        // this same text with the paired uncapped TextUtil.measureWrappedHeight.
         String hintText = entry.hasHint() ? entry.hint() : "Ingen offentlig ledtråd";
         y += 2;
         TextUtil.drawScaledText(extractor, font, "LEDTRÅD", contentX, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
         y += 9;
-        y += TextUtil.drawScaledWrappedText(extractor, font, hintText, contentX, y, contentW,
-                TypographyScale.SMALL.getScale(), 4, 2, GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += TextUtil.drawScaledWrappedTextUnbounded(extractor, font, hintText, contentX, y, contentW,
+                TypographyScale.SMALL.getScale(), 2, GZTheme.COLOR_TEXT_SECONDARY, false);
         y += 4;
 
         String remaining = BountyFormatter.formatRemainingTime(entry.expiry(), Instant.now());

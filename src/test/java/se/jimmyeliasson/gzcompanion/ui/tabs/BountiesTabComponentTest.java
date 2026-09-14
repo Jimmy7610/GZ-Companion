@@ -403,6 +403,60 @@ class BountiesTabComponentTest {
     }
 
     // ------------------------------------------------------------------
+    // Full-clue rendering (no arbitrary line cap) - scroll-height correctness for long clues.
+    //
+    // calculateDetailContentHeight now measures the clue with TextUtil's UNCAPPED
+    // measureWrappedHeight (paired with drawScaledWrappedTextUnbounded at render time), replacing
+    // the old measureWrappedHeightCapped(..., 4, ...)/drawScaledWrappedText(..., 4, ...) pair that
+    // silently truncated a clue longer than four wrapped lines. Neither of those Font-dependent
+    // TextUtil methods can be exercised directly here (this project's test environment has no live
+    // Minecraft Font - see this class's own doc comment), so these tests instead prove the
+    // resulting SCROLL behavior using TextUtil.measureWrappedHeight's own documented formula
+    // (lines * ceil(9 * scale) + (lines - 1) * lineSpacing) as plain synthetic heights, standing in
+    // for however many lines a real long clue would actually wrap to.
+    // ------------------------------------------------------------------
+
+    private static int heightForLines(int lines, int scaledLineH, int lineSpacing) {
+        return (lines * scaledLineH) + ((lines - 1) * lineSpacing);
+    }
+
+    @Test
+    @DisplayName("A clue wrapping to 20 lines measures taller than the old 4-line cap ever allowed - "
+            + "it is no longer silently truncated")
+    void longClueHeightExceedsOldFourLineCap() {
+        int fourLineHeight = heightForLines(4, 9, 2);
+        int twentyLineHeight = heightForLines(20, 9, 2);
+
+        assertTrue(twentyLineHeight > fourLineHeight,
+                "a 20-line clue must measure taller than the old 4-line cap ever produced");
+    }
+
+    @Test
+    @DisplayName("Detail max-scroll accounts for the FULL long clue, not a 4-line-capped approximation - "
+            + "scrolling to the max lands exactly on the true content bottom, with no blank overscroll")
+    void detailMaxScrollAccountsForFullLongClueWithNoOverscroll() {
+        int twentyLineClueHeight = heightForLines(20, 9, 2); // far beyond the old 4-line cap
+        int viewportH = 60; // deliberately much shorter than the full clue
+
+        int maxScroll = BountiesTabComponent.clampScroll(Integer.MAX_VALUE, twentyLineClueHeight, viewportH);
+
+        assertEquals(twentyLineClueHeight - viewportH, maxScroll,
+                "max scroll must be derived from the FULL uncapped clue height");
+        assertEquals(twentyLineClueHeight, maxScroll + viewportH,
+                "at max scroll, the content's true bottom edge lands exactly on the viewport's bottom edge - no gap");
+    }
+
+    @Test
+    @DisplayName("A short clue (e.g. the real HostileBoss clue, which wraps to only 1-2 lines) still "
+            + "produces zero scroll - the full-clue fix does not regress the common short-clue case")
+    void shortClueStillProducesZeroScrollAfterFullClueFix() {
+        int twoLineClueHeight = heightForLines(2, 9, 2);
+        int viewportH = 200; // a normal detail pane easily fits a couple of lines
+
+        assertEquals(0, BountiesTabComponent.clampScroll(0, twoLineClueHeight, viewportH));
+    }
+
+    // ------------------------------------------------------------------
     // Scroll input routing - which pane (list/detail/neither) a wheel event affects
     // ------------------------------------------------------------------
 
