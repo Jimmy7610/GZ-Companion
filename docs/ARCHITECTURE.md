@@ -41,6 +41,10 @@ se.jimmyeliasson.gzcompanion
 │   ├── RulePack.java             # In-memory rule pack model
 │   ├── RulePackManifest.java     # Version & verification metadata
 │   ├── RulePackLoader.java       # Resilient JSON parser
+│   ├── GameZoneLiveContext.java, GameZoneLiveContextBuilder.java  # the ONE shared live-data
+│   │                              # refresh point Home/Online/Settlement all call - introduces
+│   │                              # no new parsing, only combines GameZoneLiveStatusTracker +
+│   │                              # GameZoneSettlementTracker (see SETTLEMENT-COMPANION.md)
 │   └── model/                    # Commands, guides, world rules
 ├── knowledge/                     # M4: GameZone command/crafting/item knowledge (see KNOWLEDGE-BASE.md)
 │   ├── common/                   # VerificationStatus/Metadata, KnowledgeModuleStatus, KnowledgeLoadResult
@@ -53,8 +57,11 @@ se.jimmyeliasson.gzcompanion
 │   ├── settlement/                # M6: SettlementCatalog, SettlementKnowledgeLoader (see SETTLEMENT-COMPANION.md)
 │   ├── building/                  # M7: BuildingKnowledgeBase, BuildingKnowledgeLoader (see BUILDING-PLANNER.md)
 │   └── economy/                   # M9: MarketWatchInfo, MarketWatchKnowledgeLoader (see MARKETWATCH.md)
-├── settlement/                    # M6: local settlement planner state (see SETTLEMENT-COMPANION.md)
+├── settlement/                    # M6 + live dashboard: local planner state (see SETTLEMENT-COMPANION.md)
 │   ├── SettlementPlannerManager.java # Runtime coordinator, mirrors ChestManager's fail-closed pattern
+│   ├── LiveLevelAlignment.java, LiveSettlementLevel.java  # raw live level vs. Rule Pack alignment
+│   ├── EffectiveCurrentLevel.java # pure live-or-manual level decision - never mutates the manual profile
+│   ├── SettlementLiveView.java   # combines GameZoneLiveContext + catalog alignment for the UI
 │   └── storage/                  # JsonSettlementPlannerStore & settlement-planner.json schema
 ├── building/                      # M7: local building plan state (see BUILDING-PLANNER.md)
 │   ├── BuildingPlanManager.java   # Runtime coordinator, mirrors SettlementPlannerManager

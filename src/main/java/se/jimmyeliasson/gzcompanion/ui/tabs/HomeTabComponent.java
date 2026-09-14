@@ -11,11 +11,13 @@ import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.core.feature.FeatureManager;
 import se.jimmyeliasson.gzcompanion.core.feature.ModuleStatus;
 import se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityResult;
+import se.jimmyeliasson.gzcompanion.gamezone.GameZoneLiveContextBuilder;
 import se.jimmyeliasson.gzcompanion.gamezone.status.GameZoneLiveStatus;
 import se.jimmyeliasson.gzcompanion.gamezone.status.GameZoneStatusFormatter;
 import se.jimmyeliasson.gzcompanion.guide.GuideEngine;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideStep;
 import se.jimmyeliasson.gzcompanion.guide.progress.GuideContext;
+import se.jimmyeliasson.gzcompanion.minecraft.OnlinePlayerSnapshot;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.HomeCopy;
@@ -84,7 +86,9 @@ public class HomeTabComponent {
         FeatureManager featureManager = session.getFeatureManager();
 
         String tabHeaderText = isGameZone ? session.getBridge().getTabHeaderText().orElse(null) : null;
-        GameZoneLiveStatus liveStatus = session.getLiveStatusTracker().update(isGameZone, tabHeaderText);
+        List<OnlinePlayerSnapshot> onlinePlayersForLiveContext = isGameZone ? session.getBridge().getOnlinePlayers() : List.of();
+        GameZoneLiveStatus liveStatus = GameZoneLiveContextBuilder.refresh(
+                session.getLiveStatusTracker(), session.getSettlementTracker(), isGameZone, tabHeaderText, onlinePlayersForLiveContext).status();
 
         // Update banner - a fixed, non-scrolling strip pinned at the very top of Home, only ever
         // present when there is something update-related to show (see docs/UPDATES.md). When

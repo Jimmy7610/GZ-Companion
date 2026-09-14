@@ -8,6 +8,9 @@ import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
+import se.jimmyeliasson.gzcompanion.gamezone.GameZoneLiveContext;
+import se.jimmyeliasson.gzcompanion.gamezone.GameZoneLiveContextBuilder;
+import se.jimmyeliasson.gzcompanion.gamezone.status.GameZoneStatusFormatter;
 import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeModuleStatus;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationMetadata;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationStatus;
@@ -17,6 +20,10 @@ import se.jimmyeliasson.gzcompanion.knowledge.settlement.LevelRangeSummary;
 import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementCatalog;
 import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementFoundation;
 import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementLevel;
+import se.jimmyeliasson.gzcompanion.minecraft.OnlinePlayerSnapshot;
+import se.jimmyeliasson.gzcompanion.settlement.EffectiveCurrentLevel;
+import se.jimmyeliasson.gzcompanion.settlement.LiveLevelAlignment;
+import se.jimmyeliasson.gzcompanion.settlement.SettlementLiveView;
 import se.jimmyeliasson.gzcompanion.settlement.SettlementPlannerManager;
 import se.jimmyeliasson.gzcompanion.settlement.storage.MemberNote;
 import se.jimmyeliasson.gzcompanion.settlement.storage.SettlementPlannerProfile;
@@ -36,11 +43,24 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Renders the Settlement tab: a local reference/planner/calculator/organizer built entirely on
- * verified GameZone Rule Pack knowledge (the current "Settlement Levels 1.0" progression) plus
- * purely local planning state. Never claims to know the player's actual, server-observed
- * settlement level, roster, or inventory - only what the player locally chose to plan around, or
- * what a "last-known" Chest Manager estimate explicitly labeled as such provides.
+ * Renders the Settlement tab: a LIVE GameZone settlement dashboard when connected and a
+ * settlement is safely recognized, backed by a local reference/planner/calculator/organizer built
+ * on verified GameZone Rule Pack knowledge (the current "Settlement Levels 1.0" progression) for
+ * everything live data can't (or doesn't yet) cover.
+ *
+ * <p><b>Live data</b> (name/role/bonus/treasury/level, and same-settlement online players) comes
+ * ONLY from {@link GameZoneLiveContextBuilder#refresh} - the exact same shared trackers/parsers
+ * Home and Online already use - never a second parser, never a new network/entity/world scan. See
+ * {@link SettlementLiveView} for how a raw live level is checked against the bundled {@link
+ * SettlementCatalog} before it is trusted to drive automatic planning (a mismatch is shown
+ * honestly but never trusted), and {@link EffectiveCurrentLevel} for how a trusted live level
+ * takes over Progression/Material planning WITHOUT ever mutating the player's own manually saved
+ * "Planerad nuvarande nivå".
+ *
+ * <p>When disconnected, or when no settlement can be safely recognized from live data, every
+ * existing local/offline planning feature continues to work exactly as before - this tab never
+ * claims to know the player's actual server-observed roster or inventory beyond what live TAB
+ * data and local planning state legitimately provide.
  */
 public class SettlementTabComponent implements TextInputHandler {
     private static final int ROW_H = 16;
@@ -122,7 +142,16 @@ public class SettlementTabComponent implements TextInputHandler {
         CompanionSession session = CompanionSession.getInstance();
         KnowledgeModuleStatus status = session.getSettlementCatalogStatus();
 
-        renderHeader(extractor, font, layout.headerRect(), status);
+        // Refreshed via the SAME shared builder Home/Online use - see GameZoneLiveContextBuilder's
+        // own doc comment for why this guarantees correct live data even if Settlement is the
+        // very first tab opened this session (requirement: "same data from any tab").
+        boolean connected = session.isConnectedToGameZone();
+        String tabHeaderText = connected ? session.getBridge().getTabHeaderText().orElse(null) : null;
+        List<OnlinePlayerSnapshot> onlinePlayers = connected ? session.getBridge().getOnlinePlayers() : List.of();
+        GameZoneLiveContext liveContext = GameZoneLiveContextBuilder.refresh(
+                session.getLiveStatusTracker(), session.getSettlementTracker(), connected, tabHeaderText, onlinePlayers);
+
+        renderHeader(extractor, font, layout.headerRect(), status, liveContext);
         renderModeButton(extractor, font, layout.modeBtnRect(), mouseX, mouseY);
 
         if (!status.isAvailable()) {
@@ -136,26 +165,42 @@ public class SettlementTabComponent implements TextInputHandler {
             return;
         }
 
+        SettlementLiveView live = SettlementLiveView.from(liveContext, catalog);
         String contextKey = session.getCurrentStorageContext();
         SettlementPlannerManager planner = session.getSettlementPlannerManager();
         SettlementPlannerProfile profile = planner.getProfile(contextKey);
+        EffectiveCurrentLevel effective = EffectiveCurrentLevel.resolve(live.liveLevel(), profile.currentLevel());
 
         switch (mode) {
-            case OVERSIKT -> renderOverview(extractor, font, layout.panelRect(), catalog, profile);
-            case PROGRESSION -> renderProgression(extractor, font, catalog, planner, profile, contextKey, mouseX, mouseY);
-            case MATERIAL -> renderMaterial(extractor, font, session, catalog, planner, profile, contextKey, mouseX, mouseY);
-            case MEDLEMMAR -> renderMembers(extractor, font, planner, profile, contextKey, mouseX, mouseY);
+            case OVERSIKT -> renderOverview(extractor, font, layout.panelRect(), catalog, profile, live, effective, session);
+            case PROGRESSION -> renderProgression(extractor, font, catalog, planner, profile, contextKey, mouseX, mouseY, effective);
+            case MATERIAL -> renderMaterial(extractor, font, session, catalog, planner, profile, contextKey, mouseX, mouseY, effective, live);
+            case MEDLEMMAR -> renderMembers(extractor, font, planner, profile, contextKey, mouseX, mouseY, live, session);
         }
     }
 
-    private void renderHeader(GuiGraphicsExtractor extractor, Font font, UiRect headerRect, KnowledgeModuleStatus status) {
+    private void renderHeader(GuiGraphicsExtractor extractor, Font font, UiRect headerRect, KnowledgeModuleStatus status, GameZoneLiveContext liveContext) {
         GZTheme.drawIcon(extractor, IconId.SETTLEMENT, headerRect.x(), headerRect.y() + 1, 10, GZTheme.COLOR_MINT);
         TextUtil.drawScaledText(extractor, font, "Settlement", headerRect.x() + 13, headerRect.y() + 1,
                 TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
 
-        String badgeLabel = status.isAvailable() ? "Laddad" : status.getDisplayName();
+        // A catalog load problem is rarer and more actionable than the normal LIVE/PLANERING
+        // state, so it keeps priority in this one badge slot; the "Laddad" catalog-loaded status
+        // itself (the common case) is shown unobtrusively inside Översikt instead - see
+        // renderOverview - rather than crowding this already-tight single-line header further.
+        String badgeLabel;
+        int dot;
+        if (!status.isAvailable()) {
+            badgeLabel = status.getDisplayName();
+            dot = GZTheme.COLOR_STATUS_RED;
+        } else if (liveContext.settlementRecognized()) {
+            badgeLabel = "LIVE";
+            dot = GZTheme.COLOR_STATUS_GREEN;
+        } else {
+            badgeLabel = "PLANERING";
+            dot = GZTheme.COLOR_STATUS_GREY;
+        }
         int badgeW = TextUtil.scaledWidth(font, badgeLabel, TypographyScale.META.getScale()) + 14;
-        int dot = status.isAvailable() ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_STATUS_RED;
         GZTheme.drawBadge(extractor, font, headerRect.right() - badgeW, headerRect.y(), badgeLabel, GZTheme.COLOR_TEXT_SECONDARY, dot);
     }
 
@@ -189,19 +234,34 @@ public class SettlementTabComponent implements TextInputHandler {
     // ÖVERSIKT
     // ------------------------------------------------------------------
 
-    private void renderOverview(GuiGraphicsExtractor extractor, Font font, UiRect area, SettlementCatalog catalog, SettlementPlannerProfile profile) {
+    private void renderOverview(GuiGraphicsExtractor extractor, Font font, UiRect area, SettlementCatalog catalog,
+                                 SettlementPlannerProfile profile, SettlementLiveView live, EffectiveCurrentLevel effective,
+                                 CompanionSession session) {
         GZTheme.drawCard(extractor, area, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         int x = area.x() + 6;
         int maxW = area.width() - 12;
         int y = area.y() + 5;
 
+        if (live.settlementRecognized()) {
+            y = renderLiveOverviewCard(extractor, font, x, y, maxW, live);
+        } else if (live.connected()) {
+            TextUtil.drawScaledWrappedText(extractor, font, "Inget settlement kunde identifieras från GameZones live-data.", x, y, maxW,
+                    TypographyScale.SMALL.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false);
+            y += 22;
+        }
+
         TextUtil.drawScaledText(extractor, font, "Progression: " + catalog.size() + " nivåer, " + (catalog.size() - 1) + " uppgraderingar",
                 x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
         y += 11;
 
-        String currentLine = profile.currentLevel() != null
-                ? "Planerad nuvarande nivå: " + profile.currentLevel()
-                : "Välj din nuvarande nivå i Progression-läget.";
+        String currentLine;
+        if (effective.known()) {
+            currentLine = effective.live()
+                    ? "Nuvarande nivå (LIVE): " + effective.level()
+                    : "Planerad nuvarande nivå: " + effective.level();
+        } else {
+            currentLine = "Välj din nuvarande nivå i Progression-läget.";
+        }
         TextUtil.drawScaledEllipsizedText(extractor, font, currentLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
         y += 10;
 
@@ -211,14 +271,7 @@ public class SettlementTabComponent implements TextInputHandler {
         TextUtil.drawScaledEllipsizedText(extractor, font, targetLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
         y += 12;
 
-        if (profile.currentLevel() != null) {
-            SettlementLevel next = catalog.byLevel(profile.currentLevel() + 1).orElse(null);
-            if (next != null) {
-                TextUtil.drawScaledEllipsizedText(extractor, font, "Nästa nivå: " + next.name() + " (" + next.coinCost() + " Coins)",
-                        x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, false);
-            }
-            y += 12;
-        }
+        y = renderNextLevelCard(extractor, font, x, y, maxW, catalog, effective, session);
 
         SettlementFoundation foundation = catalog.foundation();
         if (foundation != null) {
@@ -232,7 +285,97 @@ public class SettlementTabComponent implements TextInputHandler {
         } else {
             TextUtil.drawScaledWrappedText(extractor, font, "Grundläggande settlement-fakta kunde inte laddas i denna omgång.", x, y, maxW,
                     TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false);
+            y += 12;
         }
+
+        String catalogBadge = session.getSettlementCatalogStatus().isAvailable() ? "Rule Pack: Laddad" : "Rule Pack: " + session.getSettlementCatalogStatus().getDisplayName();
+        TextUtil.drawScaledText(extractor, font, catalogBadge, x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+    }
+
+    /**
+     * "MITT SETTLEMENT · LIVE" - name, level·level-name, role, bonus, treasury, and how many
+     * currently-online players share the local player's settlement (never a full roster - see
+     * {@link SettlementLiveView#sameSettlementOnlineUsernames()}'s own doc comment). A raw
+     * live/catalog mismatch is shown as an honest, restrained warning rather than hidden or
+     * silently "corrected" - GameZone's own reported level/name always wins visually.
+     */
+    private int renderLiveOverviewCard(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, SettlementLiveView live) {
+        int cardH = 11 + 11 + 10 + 10 + 10 + 10;
+        if (live.liveLevel().alignment() == LiveLevelAlignment.MISMATCH) cardH += 10;
+        UiRect card = new UiRect(x - 2, y - 2, maxW + 4, cardH);
+        GZTheme.drawCard(extractor, card, GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_EMERALD);
+
+        TextUtil.drawScaledText(extractor, font, "MITT SETTLEMENT", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        String liveBadge = "LIVE";
+        int liveBadgeW = TextUtil.scaledWidth(font, liveBadge, TypographyScale.META.getScale());
+        GZTheme.drawStatusDot(extractor, x + maxW - liveBadgeW - 8, y + 3, GZTheme.COLOR_STATUS_GREEN);
+        TextUtil.drawScaledText(extractor, font, liveBadge, x + maxW - liveBadgeW - 2, y, TypographyScale.META.getScale(), GZTheme.COLOR_STATUS_GREEN, false);
+        y += 11;
+
+        TextUtil.drawScaledEllipsizedText(extractor, font, live.settlementName(), x, y, maxW,
+                TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
+        y += 11;
+
+        String levelLine = live.liveLevel().level() != null
+                ? "Nivå " + live.liveLevel().level() + (live.liveLevel().levelName() != null ? " · " + live.liveLevel().levelName() : "")
+                : "Nivå okänd";
+        TextUtil.drawScaledEllipsizedText(extractor, font, levelLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += 10;
+
+        String roleLine = "Roll: " + (live.role() != null ? live.role() : "Okänd");
+        TextUtil.drawScaledEllipsizedText(extractor, font, roleLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += 10;
+
+        String bonusLine = "Settlementbonus: " + GameZoneStatusFormatter.formatBonusPercent(live.bonusPercent());
+        TextUtil.drawScaledEllipsizedText(extractor, font, bonusLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += 10;
+
+        String treasuryLine = "Stadskassa: " + GameZoneStatusFormatter.formatMoney(live.treasury()) + " Coins";
+        TextUtil.drawScaledEllipsizedText(extractor, font, treasuryLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += 10;
+
+        int online = live.sameSettlementOnlineUsernames().size();
+        String onlineLine = online + (online == 1 ? " från ditt settlement online" : " settlementmedlemmar online");
+        TextUtil.drawScaledEllipsizedText(extractor, font, onlineLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        y += 10;
+
+        if (live.liveLevel().alignment() == LiveLevelAlignment.MISMATCH) {
+            TextUtil.drawScaledWrappedText(extractor, font, "Live-data och Companion-datan skiljer sig.", x, y, maxW,
+                    TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_YELLOW, false);
+            y += 10;
+        }
+
+        return y + 4;
+    }
+
+    /**
+     * NÄSTA NIVÅ - number, name, coin cost, building requirement/unlock summary, and a material
+     * requirement COUNT (never an invented completion percentage - see class doc comment). Uses
+     * {@code effective}'s level (live-trusted or manually planned) exactly like Progression/
+     * Material do, so this card always agrees with the rest of the tab about which level is
+     * "current."
+     */
+    private int renderNextLevelCard(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW,
+                                     SettlementCatalog catalog, EffectiveCurrentLevel effective, CompanionSession session) {
+        if (!effective.known()) return y;
+        SettlementLevel next = catalog.byLevel(effective.level() + 1).orElse(null);
+        if (next == null) return y;
+
+        TextUtil.drawScaledText(extractor, font, "NÄSTA NIVÅ", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        y += 9;
+        TextUtil.drawScaledEllipsizedText(extractor, font, next.level() + " · " + next.name(), x, y, maxW,
+                TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, true);
+        y += 10;
+        TextUtil.drawScaledEllipsizedText(extractor, font, GameZoneStatusFormatter.formatMoney(next.coinCost()) + " Coins"
+                        + (next.items().isEmpty() ? "" : " · " + next.items().size() + " materialkrav"),
+                x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        y += 10;
+        if (next.requiredBuildingName() != null) {
+            TextUtil.drawScaledEllipsizedText(extractor, font, "Kräver: " + next.requiredBuildingName(), x, y, maxW,
+                    TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+            y += 9;
+        }
+        return y + 4;
     }
 
     // ------------------------------------------------------------------
@@ -241,27 +384,45 @@ public class SettlementTabComponent implements TextInputHandler {
 
     private void renderProgression(GuiGraphicsExtractor extractor, Font font, SettlementCatalog catalog,
                                     SettlementPlannerManager planner, SettlementPlannerProfile profile, String contextKey,
-                                    int mouseX, int mouseY) {
+                                    int mouseX, int mouseY, EffectiveCurrentLevel effective) {
         boolean showUnverified = CompanionSession.getInstance().getSettingsManager().getSettings().showUnverifiedKnowledge();
         List<SettlementLevel> levels = showUnverified ? catalog.levels()
                 : catalog.levels().stream().filter(l -> l.verification().status() == VerificationStatus.VERIFIED).toList();
         if (levels.isEmpty()) levels = catalog.levels();
 
         if (progressionSelectedLevel == null || catalog.byLevel(progressionSelectedLevel).isEmpty()) {
-            progressionSelectedLevel = profile.currentLevel() != null && catalog.byLevel(profile.currentLevel()).isPresent()
-                    ? profile.currentLevel() : levels.get(0).level();
+            Integer preferred = effective.known() && catalog.byLevel(effective.level()).isPresent() ? effective.level() : null;
+            progressionSelectedLevel = preferred != null ? preferred : levels.get(0).level();
         }
 
         if (layout.isCompact()) {
             if (compactShowingDetail) {
-                renderProgressionDetail(extractor, font, layout.detailRect(), catalog, planner, profile, contextKey, mouseX, mouseY, true);
+                renderProgressionDetail(extractor, font, layout.detailRect(), catalog, planner, profile, contextKey, mouseX, mouseY, true, effective);
             } else {
-                renderProgressionList(extractor, font, layout.listRect(), levels, mouseX, mouseY);
+                renderProgressionList(extractor, font, layout.listRect(), levels, mouseX, mouseY, effective, profile);
             }
         } else {
-            renderProgressionList(extractor, font, layout.listRect(), levels, mouseX, mouseY);
-            renderProgressionDetail(extractor, font, layout.detailRect(), catalog, planner, profile, contextKey, mouseX, mouseY, false);
+            renderProgressionList(extractor, font, layout.listRect(), levels, mouseX, mouseY, effective, profile);
+            renderProgressionDetail(extractor, font, layout.detailRect(), catalog, planner, profile, contextKey, mouseX, mouseY, false, effective);
         }
+    }
+
+    /** Past/current/next/target derivation for one progression row - purely a display decision,
+     * never persisted (see docs/SETTLEMENT-COMPANION.md's Progression section). A level can
+     * legitimately be BOTH the effective current/next level AND the chosen target - all flags are
+     * independent so the UI can show both badges together rather than picking only one. */
+    record ProgressionRowState(boolean past, boolean current, boolean next, boolean target) {
+        boolean any() {
+            return past || current || next || target;
+        }
+    }
+
+    static ProgressionRowState progressionRowState(int level, EffectiveCurrentLevel effective, Integer targetLevel) {
+        boolean past = effective.known() && level < effective.level();
+        boolean current = effective.known() && level == effective.level();
+        boolean next = effective.known() && level == effective.level() + 1;
+        boolean target = targetLevel != null && level == targetLevel;
+        return new ProgressionRowState(past, current, next, target);
     }
 
     private static int calculateMaxScroll(int rowH, int rowCount, int visibleH, int headerH) {
@@ -269,7 +430,18 @@ public class SettlementTabComponent implements TextInputHandler {
         return Math.max(0, totalH - Math.max(1, visibleH));
     }
 
-    private void renderProgressionList(GuiGraphicsExtractor extractor, Font font, UiRect listRect, List<SettlementLevel> levels, int mouseX, int mouseY) {
+    /** Short row-corner label for a progression row's derived state - never more than one word so
+     * it always fits the narrow row height; PAST is deliberately silent (no badge) since "already
+     * done" is the default/expected state for most rows once a current level is known. */
+    static String progressionRowBadge(ProgressionRowState state) {
+        if (state.current()) return "HÄR";
+        if (state.next()) return "NÄSTA";
+        if (state.target()) return "MÅL";
+        return "";
+    }
+
+    private void renderProgressionList(GuiGraphicsExtractor extractor, Font font, UiRect listRect, List<SettlementLevel> levels,
+                                        int mouseX, int mouseY, EffectiveCurrentLevel effective, SettlementPlannerProfile profile) {
         GZTheme.drawCard(extractor, listRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
 
         int maxScroll = calculateMaxScroll(ROW_H, levels.size(), listRect.height() - 4, 12);
@@ -285,12 +457,19 @@ public class SettlementTabComponent implements TextInputHandler {
             if (currentY + ROW_H >= listRect.y() && currentY <= listRect.bottom()) {
                 boolean isSelected = level.level() == progressionSelectedLevel;
                 boolean isHovered = rowRect.contains(mouseX, mouseY);
-                int bg = isSelected ? GZTheme.COLOR_NAV_ACTIVE : (isHovered ? GZTheme.COLOR_NAV_HOVER : 0);
-                if (bg != 0) GZTheme.drawCard(extractor, rowRect, bg, isSelected ? GZTheme.COLOR_BORDER_EMERALD : 0);
+                ProgressionRowState rowState = progressionRowState(level.level(), effective, profile.targetLevel());
+                int bg = isSelected ? GZTheme.COLOR_NAV_ACTIVE : (rowState.current() ? GZTheme.COLOR_NAV_HOVER : (isHovered ? GZTheme.COLOR_NAV_HOVER : 0));
+                if (bg != 0) GZTheme.drawCard(extractor, rowRect, bg, isSelected || rowState.current() ? GZTheme.COLOR_BORDER_EMERALD : 0);
 
                 GZTheme.drawStatusDot(extractor, rowRect.x() + 4, rowRect.y() + 6, level.verification().status().getArgbColor());
+                String badge = progressionRowBadge(rowState);
+                int badgeW = badge.isEmpty() ? 0 : TextUtil.scaledWidth(font, badge, TypographyScale.META.getScale()) + 4;
                 TextUtil.drawScaledEllipsizedText(extractor, font, level.level() + ". " + level.name(), rowRect.x() + 11, rowRect.y() + 3,
-                        rowRect.width() - 15, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, isSelected);
+                        rowRect.width() - 15 - badgeW, TypographyScale.SMALL.getScale(), rowState.past() ? GZTheme.COLOR_TEXT_MUTED : GZTheme.COLOR_TEXT_PRIMARY, isSelected);
+                if (!badge.isEmpty()) {
+                    TextUtil.drawScaledRightAlignedText(extractor, font, badge, rowRect.right() - 2, rowRect.y() + 3, badgeW,
+                            TypographyScale.META.getScale(), rowState.current() ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_MINT, true);
+                }
 
                 final int lvl = level.level();
                 hitTargets.add(new ListRowHit(rowRect, () -> {
@@ -306,8 +485,9 @@ public class SettlementTabComponent implements TextInputHandler {
 
     private static final int UNLOCK_TEXT_MAX_LINES = 3;
 
-    private int estimateLevelDetailHeight(Font font, int maxW, SettlementLevel level) {
+    private int estimateLevelDetailHeight(Font font, int maxW, SettlementLevel level, boolean hasStateBadge) {
         int h = 11 + 10; // heading + coin cost
+        if (hasStateBadge) h += 10;
         if (level.requiredBuildingName() != null) h += 10;
         if (level.unlockedBuildingName() != null) {
             h += TextUtil.measureWrappedHeightCapped(font, unlockedBuildingLine(level), maxW,
@@ -351,9 +531,21 @@ public class SettlementTabComponent implements TextInputHandler {
         return isTarget ? "✓ Mål" : "Sätt som mål";
     }
 
+    /**
+     * While a trusted LIVE level is active, "Sätt som nuvarande" must never look like it changes
+     * the player's REAL GameZone level - it still writes to the exact same manual/offline
+     * fallback field ({@code SettlementPlannerProfile.currentLevel()}), just clearly relabeled so
+     * it reads as an offline override rather than a live-state change. See {@link
+     * #currentButtonLabel} for the normal (non-live) labels, which stay exactly as before -
+     * existing tests assert those exact strings.
+     */
+    static String offlineCurrentButtonLabel(boolean isManualCurrent) {
+        return isManualCurrent ? "✓ Manuell nuvarande (offline)" : "Sätt som OFFLINE-nuvarande";
+    }
+
     private void renderProgressionDetail(GuiGraphicsExtractor extractor, Font font, UiRect detailRect, SettlementCatalog catalog,
                                           SettlementPlannerManager planner, SettlementPlannerProfile profile, String contextKey,
-                                          int mouseX, int mouseY, boolean isCompact) {
+                                          int mouseX, int mouseY, boolean isCompact, EffectiveCurrentLevel effective) {
         GZTheme.drawCard(extractor, detailRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         SettlementLevel level = catalog.byLevel(progressionSelectedLevel).orElse(null);
         if (level == null) return;
@@ -363,7 +555,8 @@ public class SettlementTabComponent implements TextInputHandler {
         int pad = 5;
         int maxW = contentArea.width() - (pad * 2);
 
-        int maxScroll = Math.max(0, estimateLevelDetailHeight(font, maxW, level) - contentArea.height());
+        ProgressionRowState rowState = progressionRowState(level.level(), effective, profile.targetLevel());
+        int maxScroll = Math.max(0, estimateLevelDetailHeight(font, maxW, level, rowState.any()) - contentArea.height());
         progressionDetailScroll = Math.max(0, Math.min(progressionDetailScroll, maxScroll));
 
         if (isCompact) {
@@ -380,6 +573,17 @@ public class SettlementTabComponent implements TextInputHandler {
         TextUtil.drawScaledEllipsizedText(extractor, font, level.level() + ". " + level.name(), x, y, maxW,
                 TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
         y += 11;
+
+        if (rowState.any()) {
+            String stateLabel = rowState.current()
+                    ? ("DU ÄR HÄR" + (effective.live() ? " · LIVE" : ""))
+                    : (rowState.next() ? "NÄSTA" : "");
+            if (!stateLabel.isEmpty() && rowState.target()) stateLabel += " · MÅL";
+            else if (stateLabel.isEmpty() && rowState.target()) stateLabel = "MÅL";
+            TextUtil.drawScaledEllipsizedText(extractor, font, stateLabel, x, y, maxW,
+                    TypographyScale.META.getScale(), rowState.current() ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_MINT, true);
+            y += 10;
+        }
 
         TextUtil.drawScaledEllipsizedText(extractor, font, "Kostnad: " + level.coinCost() + " Coins", x, y, maxW,
                 TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
@@ -416,11 +620,16 @@ public class SettlementTabComponent implements TextInputHandler {
         boolean isCurrent = isCurrentLevel(profile, level.level());
         boolean isTarget = isTargetLevel(profile, level.level());
 
+        // While a trusted LIVE level drives planning, this button is clearly relabeled as an
+        // OFFLINE/manual fallback action (see offlineCurrentButtonLabel's own doc comment) -
+        // it must never look like it changes the player's real GameZone level.
+        String currentBtnLabel = effective.live() ? offlineCurrentButtonLabel(isCurrent) : currentButtonLabel(isCurrent);
+
         int btnY = detailRect.bottom() - 14;
         int btnW = Math.max(40, (detailRect.width() - 12) / 2);
         UiRect setCurrentBtn = new UiRect(detailRect.x() + 4, btnY, btnW, 11);
         UiRect setTargetBtn = new UiRect(detailRect.x() + 8 + btnW, btnY, btnW, 11);
-        GZTheme.drawButton(extractor, font, setCurrentBtn, currentButtonLabel(isCurrent),
+        GZTheme.drawButton(extractor, font, setCurrentBtn, currentBtnLabel,
                 true, setCurrentBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
         GZTheme.drawButton(extractor, font, setTargetBtn, targetButtonLabel(isTarget),
                 isTarget, setTargetBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
@@ -436,22 +645,36 @@ public class SettlementTabComponent implements TextInputHandler {
 
     private void renderMaterial(GuiGraphicsExtractor extractor, Font font, CompanionSession session, SettlementCatalog catalog,
                                  SettlementPlannerManager planner, SettlementPlannerProfile profile, String contextKey,
-                                 int mouseX, int mouseY) {
+                                 int mouseX, int mouseY, EffectiveCurrentLevel effective, SettlementLiveView live) {
         UiRect area = layout.panelRect();
         GZTheme.drawCard(extractor, area, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
 
-        if (profile.currentLevel() == null || profile.targetLevel() == null || profile.targetLevel() <= profile.currentLevel()) {
-            renderMessage(extractor, font, area, "Välj en nuvarande nivå och en högre mål-nivå i Progression-läget för att se materiallistan.");
+        if (!effective.known()) {
+            renderMessage(extractor, font, area, "Välj en nuvarande nivå i Progression-läget, eller anslut till GameZone, för att se materiallistan.");
+            return;
+        }
+        if (profile.targetLevel() == null) {
+            renderMessage(extractor, font, area, "Välj en mål-nivå i Progression-läget för att se materiallistan.");
+            return;
+        }
+        if (!effective.isValidTarget(profile.targetLevel())) {
+            renderMessage(extractor, font, area, "Målnivån måste vara högre än nuvarande nivå.");
             return;
         }
 
-        LevelRangeSummary summary = catalog.levelRange(profile.currentLevel(), profile.targetLevel());
+        LevelRangeSummary summary = catalog.levelRange(effective.level(), profile.targetLevel());
         int x = area.x() + 4;
         int maxW = area.width() - 8;
         int y = area.y() + 4;
 
+        String startLine = effective.live()
+                ? "Startnivå: " + effective.level() + (live.liveLevel().levelName() != null ? " · " + live.liveLevel().levelName() : "") + " (LIVE)"
+                : "Startnivå: " + effective.level() + " (lokal planering)";
+        TextUtil.drawScaledEllipsizedText(extractor, font, startLine, x, y, maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        y += 9;
+
         TextUtil.drawScaledEllipsizedText(extractor, font,
-                "Nivå " + profile.currentLevel() + " -> " + profile.targetLevel() + ": " + summary.upgradeCount() + " uppgraderingar, " + summary.totalCoinCost() + " Coins",
+                "Nivå " + effective.level() + " -> " + profile.targetLevel() + ": " + summary.upgradeCount() + " uppgraderingar, " + summary.totalCoinCost() + " Coins",
                 x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
         y += 12;
 
@@ -594,13 +817,18 @@ public class SettlementTabComponent implements TextInputHandler {
     // ------------------------------------------------------------------
 
     private void renderMembers(GuiGraphicsExtractor extractor, Font font, SettlementPlannerManager planner,
-                                SettlementPlannerProfile profile, String contextKey, int mouseX, int mouseY) {
+                                SettlementPlannerProfile profile, String contextKey, int mouseX, int mouseY,
+                                SettlementLiveView live, CompanionSession session) {
         UiRect area = layout.panelRect();
         GZTheme.drawCard(extractor, area, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
 
         int x = area.x() + 4;
         int maxW = area.width() - 8;
         int y = area.y() + 4;
+
+        if (live.settlementRecognized()) {
+            y = renderLiveOnlineSection(extractor, font, x, y, maxW, live, profile, session.getBridge().getPlayerName(), mouseX, mouseY);
+        }
 
         TextUtil.drawScaledEllipsizedText(extractor, font, "Lokala anteckningar - inte serverns riktiga medlemslista.", x, y, maxW,
                 TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
@@ -617,6 +845,84 @@ public class SettlementTabComponent implements TextInputHandler {
 
         UiRect listArea = new UiRect(area.x(), y, area.width(), area.bottom() - y);
         renderMembersList(extractor, font, listArea, planner, profile, contextKey, mouseX, mouseY);
+    }
+
+    private static final int MAX_LIVE_ONLINE_ROWS_SHOWN = 6;
+
+    /**
+     * "ONLINE FRÅN DITT SETTLEMENT · N" - ONLY same-settlement players currently visible in the
+     * live TAB/player-list data (never a full roster, never an offline inference - see {@link
+     * SettlementLiveView#sameSettlementOnlineUsernames()}'s own doc comment). Capped rather than
+     * scrolled (mirrors the existing container-picker's own convention) so a large live settlement
+     * can never visually overflow this fixed, non-scrolling block. Clicking a row opens the
+     * existing local-note edit form pre-filled with that player's name - a pure UX convenience
+     * that creates no persisted record until the player explicitly clicks "Spara".
+     */
+    private int renderLiveOnlineSection(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW,
+                                         SettlementLiveView live, SettlementPlannerProfile profile, String localPlayerName,
+                                         int mouseX, int mouseY) {
+        List<String> online = sortedOnlineSettlementMembers(live.sameSettlementOnlineUsernames());
+        TextUtil.drawScaledText(extractor, font, "ONLINE FRÅN DITT SETTLEMENT · " + online.size(), x, y,
+                TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        y += 10;
+
+        int shown = Math.min(online.size(), MAX_LIVE_ONLINE_ROWS_SHOWN);
+        for (int i = 0; i < shown; i++) {
+            String username = online.get(i);
+            boolean isSelf = isLocalPlayer(username, localPlayerName);
+            MemberNote matchingNote = findMatchingLocalNote(profile, username);
+
+            UiRect rowRect = new UiRect(x, y, maxW, matchingNote != null ? 18 : 9);
+            if (rowRect.contains(mouseX, mouseY)) GZTheme.drawCard(extractor, rowRect, GZTheme.COLOR_NAV_HOVER, 0);
+
+            String line = username + (isSelf ? "  DU" : "");
+            TextUtil.drawScaledEllipsizedText(extractor, font, line, x + 2, y, maxW - 4,
+                    TypographyScale.SMALL.getScale(), isSelf ? GZTheme.COLOR_MINT : GZTheme.COLOR_TEXT_PRIMARY, isSelf);
+            y += 9;
+            if (matchingNote != null) {
+                TextUtil.drawScaledEllipsizedText(extractor, font, matchingNote.note(), x + 6, y, maxW - 8,
+                        TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+                y += 9;
+            }
+
+            final String uname = username;
+            final MemberNote noteForClick = matchingNote;
+            hitTargets.add(new ListRowHit(rowRect, () -> {
+                if (!editingMember) {
+                    editingMember = true;
+                    editingMemberId = noteForClick != null ? noteForClick.id() : null;
+                    editName = uname;
+                    editNote = noteForClick != null ? noteForClick.note() : "";
+                    focusedField = EditField.NOTE;
+                }
+            }));
+        }
+        if (online.size() > shown) {
+            TextUtil.drawScaledText(extractor, font, "+" + (online.size() - shown) + " fler online", x, y,
+                    TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+            y += 9;
+        }
+        return y + 5;
+    }
+
+    /** Pure, deterministic sort for the live-online list - alphabetical, case-insensitive, so the
+     * same set of names always renders in the same order regardless of TAB-list iteration order. */
+    static List<String> sortedOnlineSettlementMembers(List<String> usernames) {
+        return usernames.stream().sorted(String.CASE_INSENSITIVE_ORDER).toList();
+    }
+
+    static boolean isLocalPlayer(String candidateUsername, String localPlayerName) {
+        return candidateUsername != null && localPlayerName != null && candidateUsername.equalsIgnoreCase(localPlayerName);
+    }
+
+    /** Case-insensitive name match only - never a fuzzy guess. Returns the first match; local
+     * notes are player-authored free text, so an exact duplicate name is the player's own concern. */
+    private static MemberNote findMatchingLocalNote(SettlementPlannerProfile profile, String username) {
+        if (username == null) return null;
+        for (MemberNote note : profile.members()) {
+            if (note.playerName().equalsIgnoreCase(username)) return note;
+        }
+        return null;
     }
 
     private void beginAddMember() {

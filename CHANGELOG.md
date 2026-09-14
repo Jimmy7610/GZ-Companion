@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+Implemented on `main`, not yet released - intended for a future `0.1.0-alpha.6`. `mod_version`
+remains `0.1.0-alpha.5` until this work has been code-reviewed and human-QA tested in a live client.
+
+### Added
+- **Live Settlement dashboard**: the Settlement tab now shows a real **LIVE** GameZone settlement
+  state (name, level, level name, role, bonus, treasury, and currently-online same-settlement
+  players) when connected and a settlement is safely recognized - reusing the exact same shared
+  `GameZoneLiveStatusTracker`/`GameZoneSettlementTracker` Home/Online already use, never a new
+  parser or network source. A raw live level is only trusted for automatic Progression/Material
+  planning once confirmed aligned with the bundled Rule Pack (`LiveSettlementLevel`); a mismatch
+  is still shown honestly, never hidden, and planning fails closed to the manual planner. See
+  `docs/SETTLEMENT-COMPANION.md`.
+- `gamezone.GameZoneLiveContext`/`GameZoneLiveContextBuilder`: the one shared entry point Home,
+  Online, and Settlement all now call to refresh live data, so opening any one of them first is
+  never required to "prime" another's live data.
+- `settlement.LiveLevelAlignment`/`LiveSettlementLevel`/`EffectiveCurrentLevel`/`SettlementLiveView`:
+  small, pure, Minecraft-API-free view types combining live GameZone facts with Rule Pack
+  alignment - `EffectiveCurrentLevel` is a pure read-time decision with no access to
+  `SettlementPlannerManager`, so it can never mutate the player's manually saved current level.
+- Progression now derives PAST/DU ÄR HÄR/NÄSTA/MÅL state per level from the effective current
+  level (never persisted); Material automatically starts its range at the effective current level
+  and shows its source ("... (LIVE)" or "... (lokal planering)"); Medlemmar shows an "ONLINE FRÅN
+  DITT SETTLEMENT" section listing only currently-visible same-settlement players, never a full
+  roster or an inferred offline state.
+- `SettlementFairPlayTest`: structural source-scanning (mirroring `BountyFairPlayTest`) proving
+  the live Settlement dashboard never references entity/world/chunk-scanning or coordinate APIs,
+  never sends a command/chat message automatically, and never constructs a new network client or
+  thread.
+
+### Changed
+- `HomeTabComponent`/`OnlineTabComponent` now refresh their live trackers via the same shared
+  `GameZoneLiveContextBuilder.refresh(...)` Settlement uses, instead of each calling
+  `tracker.update(...)` independently - purely an internal refactor, no behavior change for either
+  tab.
+
 ## [0.1.0-alpha.5] - 2026-09-14
 
 Adds live Bounty Board support, and a shared-runtime/async-persistence hardening pass built ahead

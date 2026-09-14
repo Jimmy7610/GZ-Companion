@@ -7,8 +7,9 @@ import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import org.lwjgl.glfw.GLFW;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
+import se.jimmyeliasson.gzcompanion.gamezone.GameZoneLiveContext;
+import se.jimmyeliasson.gzcompanion.gamezone.GameZoneLiveContextBuilder;
 import se.jimmyeliasson.gzcompanion.gamezone.settlement.GameZoneSettlementIdentity;
-import se.jimmyeliasson.gzcompanion.gamezone.settlement.GameZoneSettlementTracker;
 import se.jimmyeliasson.gzcompanion.minecraft.OnlinePlayerSnapshot;
 import se.jimmyeliasson.gzcompanion.online.OnlinePlayerRow;
 import se.jimmyeliasson.gzcompanion.online.OnlinePlayersGrouping;
@@ -76,10 +77,11 @@ public class OnlineTabComponent implements TextInputHandler {
         List<OnlinePlayerSnapshot> onlinePlayers = connected ? session.getBridge().getOnlinePlayers() : List.of();
         List<String> favorites = settingsManager.getSettings().favoritePlayers();
 
-        GameZoneSettlementTracker settlementTracker = session.getSettlementTracker();
         String tabHeaderText = connected ? session.getBridge().getTabHeaderText().orElse(null) : null;
-        GameZoneSettlementIdentity settlementIdentity = settlementTracker.update(connected, tabHeaderText, onlinePlayers);
-        List<String> settlementMembers = List.copyOf(settlementTracker.sameSettlementOnlineUsernames(onlinePlayers));
+        GameZoneLiveContext liveContext = GameZoneLiveContextBuilder.refresh(
+                session.getLiveStatusTracker(), session.getSettlementTracker(), connected, tabHeaderText, onlinePlayers);
+        GameZoneSettlementIdentity settlementIdentity = liveContext.identity();
+        List<String> settlementMembers = liveContext.sameSettlementOnlineUsernames();
 
         OnlinePlayersView view = OnlinePlayersGrouping.build(onlinePlayers, connected, favorites, settlementMembers, searchText);
 
