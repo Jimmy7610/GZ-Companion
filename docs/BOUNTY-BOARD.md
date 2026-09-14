@@ -1,8 +1,7 @@
 # Bounty Board
 
-**Status: implemented on `main`, unreleased.** This feature is intended for `0.1.0-alpha.5`, but
-that version has not been cut yet - `mod_version` remains `0.1.0-alpha.4` until code review and
-human Minecraft QA are complete (see the "Version" section at the end of this document).
+**Status: released in `v0.1.0-alpha.5`.** Code review and human Minecraft QA are both complete -
+see the "Version" section at the end of this document.
 
 ## 1. Purpose
 
@@ -325,9 +324,8 @@ needed a new static fact beyond what §2 already documents inline.
 
 ## 13. Version
 
-This document describes work implemented on `main` at commit-time. `mod_version` remains
-`0.1.0-alpha.4` - this feature is intended for `0.1.0-alpha.5`, which has not been prepared,
-tagged, or released. No installer/release artifact was touched by this feature's implementation.
+`mod_version` is `0.1.0-alpha.5` as of this release - see `CHANGELOG.md`'s `[0.1.0-alpha.5]` entry
+and `distribution/RELEASING.md` for the release-preparation process this went through.
 
 ## 14. Correctness hardening follow-up (2026-09-13)
 

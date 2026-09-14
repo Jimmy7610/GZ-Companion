@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.1.0-alpha.5] - 2026-09-14
 
-Implemented on `main`, not yet released - intended for a future `0.1.0-alpha.5`. `mod_version`
-remains `0.1.0-alpha.4` until this work has been code-reviewed and human-QA tested in a live client.
+Adds live Bounty Board support, and a shared-runtime/async-persistence hardening pass built ahead
+of it - the first release after `0.1.0-alpha.4` distributed through GZ Companion's own in-app
+updater.
 
 ### Added
 - **Bounty Board tab**: read-only view of GameZone's own public active-bounty registry (PvE hunts
@@ -18,13 +19,26 @@ remains `0.1.0-alpha.4` until this work has been code-reviewed and human-QA test
   public JSON API (`/api/bounties`) - the same endpoint GameZone's own wiki page fetches for its
   live widget. On-demand only (60s auto floor, 12s manual cooldown, one fetch at a time,
   coalesced), built entirely on the shared `GameZoneLiveDataRuntime` (no new thread/HttpClient).
-  Never scans entities, never shows a coordinate/distance/direction, never sends a command
-  automatically - the one command-related action is a deliberate clipboard-copy button. See
-  `docs/BOUNTY-BOARD.md`.
+  The full public clue is always shown, never truncated at a line limit, and the detail pane
+  scrolls (with its own scroll offset, separate from the list's) to safely contain long
+  names/clues/expiry text without ever overflowing its own footer. Never scans entities, never
+  shows a coordinate/distance/direction, never sends a command automatically - the one
+  command-related action is a deliberate clipboard-copy button. See `docs/BOUNTY-BOARD.md`.
 - `bounty` package: `BountyEntry`/`BountyStatus`/`BountySnapshot`/`BountyFetchResult`,
   `BountyJsonParser`, `GameZoneBountySource`, `BountyManager`, `BountyFormatter`, `BountyExpiry`.
 - New `BOUNTY` icon (`textures/gui/icons/bounty.png`) and `TabType.BOUNTIES` nav entry, positioned
   between MarketWatch and Leaderboards.
+- **Shared GameZone live-data runtime** (`GameZoneLiveDataRuntime`): one shared, lazily-created
+  daemon executor (`gzcompanion-gamezone-live`) and `HttpClient` for every public GameZone
+  web-data feature - Leaderboards and now Bounty Board both reuse it, so a new feature never grows
+  its own thread/HttpClient. `LeaderboardManager` no longer owns its own executor;
+  `GameZoneLeaderboardSource` no longer eagerly builds its own `HttpClient` at startup.
+- **Async Guide persistence** (`LocalPersistenceRuntime` + `AsyncGuideProgressStore`): Guide's
+  automatic per-step progress save no longer writes to disk synchronously on the Minecraft tick
+  thread - reuses the same active/pending "latest state wins" coalescing scheme already proven by
+  `LeaderboardManager`, with a bounded shutdown flush on client exit.
+- `ThreadingInfrastructureRulesTest`: a structural, allow-listed regression guard so a future
+  GameZone module can't quietly grow its own thread/HttpClient again.
 
 ### Fixed
 - `MainScreenLayout`'s sidebar tab-height calculation could force a taller-than-available tab
@@ -43,6 +57,34 @@ remains `0.1.0-alpha.4` until this work has been code-reviewed and human-QA test
   exact claim just corrected - it is now blank for `STALE`-empty instead. `IDLE` (never
   successfully fetched) also used to fall back to the same "no active bounties" wording as a
   genuine empty result; it now shows its own neutral "VÄNTAR PÅ DATA" state.
+- **Bounty detail overflow, fixed by human Minecraft QA**: the compact/wide Bounty detail pane
+  could draw content (including the command-copy button) past its own bounds and over the footer
+  once real content was long enough - fixed with a scissored, independently-scrollable detail
+  region; the "< Lista" back button and the command-copy button are now both pinned outside the
+  scrollable area so neither can ever be scrolled out of reach or drawn over the footer.
+- **Async persistence correctness** (independent review of the shared-runtime foundation above): a
+  real disk write failure was previously invisible to `AsyncGuideProgressStore` (the delegate never
+  actually threw on failure) - now surfaced and given exactly one retry per flush;
+  `resetContext()` could let a pre-reset write land AFTER a reset and resurrect progress the player
+  had just removed - now fully atomic (a reset either fully applies and persists, or does not
+  happen at all, never a partial/uncertain state); a rejected shared-runtime submission no longer
+  blocks a later retry for up to 60 seconds; `LeaderboardManager.manualRefresh()` now correctly
+  reports `false` on a genuine runtime rejection instead of always `true`.
+- `GameZoneLiveDataRuntime`/`LocalPersistenceRuntime` no longer expose a raw `ExecutorService` with
+  an unbounded queue - only a bounded `submit(Runnable)` with an explicit rejection policy, handled
+  explicitly by every caller (never left stuck, never silently dropped).
+
+### Changed
+- Canonical product version is now `0.1.0-alpha.5`. Minecraft (26.1.2), Fabric Loader (0.19.5), and
+  Fabric API (0.155.3+26.1.2) are unchanged, so the in-app updater takes the safe fast path from
+  alpha.4.
+
+### Fair play
+Bounty Board shows only information GameZone itself already publishes publicly, via its official
+`/api/bounties` endpoint - the same data any visitor to the GameZone wiki already sees. No entity
+or world scanning, no radar, no coordinate extraction, no pathfinding, no automatic hunting, and no
+automatic command sending are used anywhere in this feature; the one command-related action is a
+deliberate, user-clicked clipboard-copy button. See `docs/BOUNTY-BOARD.md` §4.
 
 ## [0.1.0-alpha.4] - 2026-09-13
 

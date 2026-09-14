@@ -98,6 +98,12 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Redacted Diagnostics**: A copy-only technical summary (versions, module statuses) that never includes chat text, coordinates, or personal notes.
 - **Dynamic Keybind Display**: Shows the Companion's actual current key binding, not a hardcoded "G".
 
+### Milestone 11 — Bounty Board *(Completed — released in v0.1.0-alpha.5)*
+- **Live GameZone Bounties**: See GameZone's own public active-bounty registry (unique-target PvE hunts, Coin reward, optional public clue, optional expiry) directly inside Companion, fetched on demand from the official `/api/bounties` endpoint — the exact same data GameZone's own wiki page shows. See [Bounty Board](docs/BOUNTY-BOARD.md).
+- **Full Public Clue, Scrollable Detail**: The entire public clue GameZone publishes is always shown, never truncated at a line limit — a scrollable, independently-scissored detail pane safely contains long clues, names, or expiry text without ever drawing over its own footer.
+- **Clipboard-Only Command**: An optional "Kopiera /bounty info \<namn>" button copies the documented command to the clipboard — never sent automatically.
+- **Shared Live-Data Runtime**: Reuses the exact same lazily-created executor/`HttpClient` as Leaderboards — Bounty Board adds zero new threads or network clients.
+
 ---
 
 ## 🚀 Building from Source
@@ -119,7 +125,7 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 ```
 
 The compiled mod JAR will be located at:
-`build/libs/gzcompanion-0.1.0-alpha.2.jar` (the exact file name always matches `gradle.properties`'
+`build/libs/gzcompanion-0.1.0-alpha.5.jar` (the exact file name always matches `gradle.properties`'
 `mod_version` - the single canonical product version, see `distribution/RELEASING.md`)
 
 ---
@@ -131,7 +137,7 @@ The compiled mod JAR will be located at:
 - [Chest Manager](docs/CHEST-MANAGER.md): Fair-play boundary, capture lifecycle, and persistence for the Kistor module.
 - [Design System](docs/design/DESIGN-SYSTEM.md): Authoritative UI palette, components, and styling.
 - [GameZone Rule Pack](docs/GAMEZONE-RULE-PACK.md): Data schema, versioning, and verification specification.
-- [Roadmap](docs/ROADMAP.md): Milestones M1 through M10 with Definitions of Done.
+- [Roadmap](docs/ROADMAP.md): Milestones M1 through M11 with Definitions of Done.
 - [Changelog](CHANGELOG.md): Version history and release notes.
 
 ---
