@@ -410,8 +410,7 @@ class AsyncGuideProgressStoreTest {
         AsyncGuideProgressStore store = new AsyncGuideProgressStore(delegate, new LocalPersistenceRuntime());
 
         store.save(dataFor("A")); // fails, becomes dirty
-        awaitCallCount(delegate.saveCallCount, 1, 2000);
-        assertTrue(store.lastSaveFailed());
+        awaitFlagTrue(store, 2000);
 
         delegate.failWith = data -> null; // the undo (fewer completions than A) will succeed
         store.save(dataWithNoCompletions("undone"));
@@ -502,8 +501,7 @@ class AsyncGuideProgressStoreTest {
         AsyncGuideProgressStore store = new AsyncGuideProgressStore(delegate, new LocalPersistenceRuntime());
 
         store.save(dataFor("A"));
-        awaitCallCount(delegate.saveCallCount, 1, 2000);
-        assertTrue(store.lastSaveFailed());
+        awaitFlagTrue(store, 2000);
 
         GuideContext ctx = new GuideContext("uuid", "singleplayer:test");
         boolean firstAttempt = store.resetContext(ctx); // drainBounded gives A one retry - it fails again
