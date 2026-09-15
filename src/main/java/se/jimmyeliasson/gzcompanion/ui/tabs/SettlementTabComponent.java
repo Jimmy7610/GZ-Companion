@@ -89,6 +89,12 @@ public class SettlementTabComponent implements TextInputHandler {
     private Mode mode = Mode.OVERSIKT;
     private SettlementLayout layout;
 
+    // --- Översikt state ---
+    /** Independent from every other mode's scroll offset - the LIVE settlement work added enough
+     * content (live card, NÄSTA NIVÅ card, foundation info, verification trail) that Översikt can
+     * now genuinely overflow its panel on a normal-sized window, which it never did before. */
+    private int overviewScroll = 0;
+
     // --- Progression state ---
     private Integer progressionSelectedLevel = null;
     private int progressionListScroll = 0;
@@ -234,20 +240,45 @@ public class SettlementTabComponent implements TextInputHandler {
     // ÖVERSIKT
     // ------------------------------------------------------------------
 
+    private static final String NO_SETTLEMENT_MESSAGE = "Inget settlement kunde identifieras från GameZones live-data.";
+    private static final String FOUNDATION_UNAVAILABLE_MESSAGE = "Grundläggande settlement-fakta kunde inte laddas i denna omgång.";
+    /** Height of the final "Rule Pack: ..." status line (a single, never-wrapped META-scale line)
+     * plus a small trailing margin - see {@link #estimateOverviewContentHeight}. */
+    private static final int OVERVIEW_TRAILING_LINE_H = 9 + 4;
+
+    /**
+     * Översikt's content (LIVE card / no-settlement message, progression summary, effective
+     * current/target level, NÄSTA NIVÅ card, foundation info + verification trail, Rule Pack
+     * status) can genuinely exceed the panel's height, so this is scissored and scrolled exactly
+     * like Progression/Material/Medlemmar already are - see {@link #overviewScroll} and {@link
+     * #estimateOverviewContentHeight}, which MUST mirror {@link #renderOverviewContent}'s own
+     * increments so the computed max scroll always matches what is actually drawn.
+     */
     private void renderOverview(GuiGraphicsExtractor extractor, Font font, UiRect area, SettlementCatalog catalog,
                                  SettlementPlannerProfile profile, SettlementLiveView live, EffectiveCurrentLevel effective,
                                  CompanionSession session) {
         GZTheme.drawCard(extractor, area, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
-        int x = area.x() + 6;
         int maxW = area.width() - 12;
-        int y = area.y() + 5;
+        int contentTop = area.y() + 5;
+        int viewportBottom = area.bottom() - 2;
+        int visibleHeight = Math.max(1, viewportBottom - contentTop);
 
+        int contentHeight = estimateOverviewContentHeight(font, maxW, catalog, profile, live, effective, session);
+        overviewScroll = clampScroll(overviewScroll, contentHeight, visibleHeight);
+
+        extractor.enableScissor(area.x() + 1, contentTop, area.right() - 1, viewportBottom);
+        renderOverviewContent(extractor, font, area.x() + 6, contentTop - overviewScroll, maxW, catalog, profile, live, effective, session);
+        extractor.disableScissor();
+    }
+
+    private void renderOverviewContent(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, SettlementCatalog catalog,
+                                        SettlementPlannerProfile profile, SettlementLiveView live, EffectiveCurrentLevel effective,
+                                        CompanionSession session) {
         if (live.settlementRecognized()) {
             y = renderLiveOverviewCard(extractor, font, x, y, maxW, live);
         } else if (live.connected()) {
-            TextUtil.drawScaledWrappedText(extractor, font, "Inget settlement kunde identifieras från GameZones live-data.", x, y, maxW,
+            y += TextUtil.drawScaledWrappedText(extractor, font, NO_SETTLEMENT_MESSAGE, x, y, maxW,
                     TypographyScale.SMALL.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false);
-            y += 22;
         }
 
         TextUtil.drawScaledText(extractor, font, "Progression: " + catalog.size() + " nivåer, " + (catalog.size() - 1) + " uppgraderingar",
@@ -283,13 +314,47 @@ public class SettlementTabComponent implements TextInputHandler {
             y += 2;
             y += renderVerificationTrail(extractor, font, x, y, maxW, foundation.verification());
         } else {
-            TextUtil.drawScaledWrappedText(extractor, font, "Grundläggande settlement-fakta kunde inte laddas i denna omgång.", x, y, maxW,
+            y += TextUtil.drawScaledWrappedText(extractor, font, FOUNDATION_UNAVAILABLE_MESSAGE, x, y, maxW,
                     TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_TEXT_MUTED, false);
-            y += 12;
         }
 
         String catalogBadge = session.getSettlementCatalogStatus().isAvailable() ? "Rule Pack: Laddad" : "Rule Pack: " + session.getSettlementCatalogStatus().getDisplayName();
         TextUtil.drawScaledText(extractor, font, catalogBadge, x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+    }
+
+    /**
+     * Pure content-height estimate for Översikt - MUST mirror {@link #renderOverviewContent}'s own
+     * increments exactly (increment for increment), so the computed max scroll always matches
+     * what is actually drawn. Only the two genuinely-wrapped messages need {@code font} at all
+     * (via {@link TextUtil#measureWrappedHeightCapped}, the same capped-measurement/actual-drawn
+     * pairing this project already uses for Bounty's/Progression's own scrollable detail panes);
+     * every other line is a fixed-height single ellipsized/plain line.
+     */
+    private int estimateOverviewContentHeight(Font font, int maxW, SettlementCatalog catalog, SettlementPlannerProfile profile,
+                                                SettlementLiveView live, EffectiveCurrentLevel effective, CompanionSession session) {
+        int h = 0;
+        if (live.settlementRecognized()) {
+            h += liveOverviewCardHeight(live);
+        } else if (live.connected()) {
+            h += TextUtil.measureWrappedHeightCapped(font, NO_SETTLEMENT_MESSAGE, maxW, TypographyScale.SMALL.getScale(), 2, 1);
+        }
+
+        h += 11; // progression summary line
+        h += 10; // current-level line
+        h += 12; // target-level line
+
+        h += nextLevelCardHeight(catalog, effective);
+
+        SettlementFoundation foundation = catalog.foundation();
+        if (foundation != null) {
+            if (foundation.creationCommand() != null) h += 10;
+            h += 2;
+            h += estimateVerificationTrailHeight(foundation.verification());
+        } else {
+            h += TextUtil.measureWrappedHeightCapped(font, FOUNDATION_UNAVAILABLE_MESSAGE, maxW, TypographyScale.META.getScale(), 2, 1);
+        }
+
+        return h + OVERVIEW_TRAILING_LINE_H;
     }
 
     /**
@@ -299,9 +364,17 @@ public class SettlementTabComponent implements TextInputHandler {
      * live/catalog mismatch is shown as an honest, restrained warning rather than hidden or
      * silently "corrected" - GameZone's own reported level/name always wins visually.
      */
-    private int renderLiveOverviewCard(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, SettlementLiveView live) {
+    /** Net vertical space {@link #renderLiveOverviewCard} occupies (its background card height
+     * plus the bottom margin it returns) - extracted so {@link #estimateOverviewContentHeight}
+     * can never drift out of sync with what is actually drawn. */
+    static int liveOverviewCardHeight(SettlementLiveView live) {
         int cardH = 11 + 11 + 10 + 10 + 10 + 10;
         if (live.liveLevel().alignment() == LiveLevelAlignment.MISMATCH) cardH += 10;
+        return cardH + 4;
+    }
+
+    private int renderLiveOverviewCard(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, SettlementLiveView live) {
+        int cardH = liveOverviewCardHeight(live) - 4; // the background card itself excludes the trailing bottom margin
         UiRect card = new UiRect(x - 2, y - 2, maxW + 4, cardH);
         GZTheme.drawCard(extractor, card, GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_EMERALD);
 
@@ -355,6 +428,19 @@ public class SettlementTabComponent implements TextInputHandler {
      * Material do, so this card always agrees with the rest of the tab about which level is
      * "current."
      */
+    /** Net vertical space {@link #renderNextLevelCard} occupies, given the same catalog/effective
+     * inputs - extracted so {@link #estimateOverviewContentHeight} can never drift out of sync
+     * with what is actually drawn. Font-independent: every line here is a fixed-height single
+     * ellipsized/plain line, never wrapped. */
+    static int nextLevelCardHeight(SettlementCatalog catalog, EffectiveCurrentLevel effective) {
+        if (!effective.known()) return 0;
+        SettlementLevel next = catalog.byLevel(effective.level() + 1).orElse(null);
+        if (next == null) return 0;
+        int h = 9 + 10 + 10; // "NÄSTA NIVÅ" label + name line + cost line
+        if (next.requiredBuildingName() != null) h += 9;
+        return h + 4;
+    }
+
     private int renderNextLevelCard(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW,
                                      SettlementCatalog catalog, EffectiveCurrentLevel effective, CompanionSession session) {
         if (!effective.known()) return y;
@@ -428,6 +514,17 @@ public class SettlementTabComponent implements TextInputHandler {
     private static int calculateMaxScroll(int rowH, int rowCount, int visibleH, int headerH) {
         int totalH = headerH + (rowCount * rowH);
         return Math.max(0, totalH - Math.max(1, visibleH));
+    }
+
+    /**
+     * Pure scroll-offset clamp for free-flowing (non-row-based) content, used by Översikt: never
+     * negative, never past the point where the actual content ends. If {@code contentHeight} is
+     * shorter than (or equal to) {@code viewportHeight}, the max is 0 - everything fits, so no
+     * scroll is ever needed or permitted.
+     */
+    static int clampScroll(int offset, int contentHeight, int viewportHeight) {
+        int maxScroll = Math.max(0, contentHeight - Math.max(1, viewportHeight));
+        return Math.max(0, Math.min(offset, maxScroll));
     }
 
     /** Short row-corner label for a progression row's derived state - never more than one word so
@@ -1110,7 +1207,10 @@ public class SettlementTabComponent implements TextInputHandler {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (layout == null) return false;
 
-        if (mode == Mode.PROGRESSION) {
+        if (mode == Mode.OVERSIKT && layout.panelRect().contains(mouseX, mouseY)) {
+            overviewScroll = Math.max(0, overviewScroll - (int) (scrollY * 14));
+            return true;
+        } else if (mode == Mode.PROGRESSION) {
             if (layout.listRect().contains(mouseX, mouseY)) {
                 progressionListScroll = Math.max(0, progressionListScroll - (int) (scrollY * 14));
                 return true;
@@ -1168,5 +1268,34 @@ public class SettlementTabComponent implements TextInputHandler {
             return true;
         }
         return false;
+    }
+
+    // ------------------------------------------------------------------
+    // Test-only accessors - package-private, read by SettlementTabComponentTest to verify scroll
+    // state transitions/independence without needing a live CompanionSession/Font.
+    // ------------------------------------------------------------------
+
+    void setModeForTesting(Mode m) {
+        this.mode = m;
+    }
+
+    Mode getModeForTesting() {
+        return mode;
+    }
+
+    int getOverviewScrollForTesting() {
+        return overviewScroll;
+    }
+
+    void setOverviewScrollForTesting(int value) {
+        this.overviewScroll = value;
+    }
+
+    int getMaterialScrollForTesting() {
+        return materialScroll;
+    }
+
+    void setMaterialScrollForTesting(int value) {
+        this.materialScroll = value;
     }
 }

@@ -2,9 +2,14 @@ package se.jimmyeliasson.gzcompanion.ui.tabs;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementCatalog;
 import se.jimmyeliasson.gzcompanion.knowledge.settlement.SettlementLevel;
 import se.jimmyeliasson.gzcompanion.settlement.EffectiveCurrentLevel;
+import se.jimmyeliasson.gzcompanion.settlement.LiveLevelAlignment;
+import se.jimmyeliasson.gzcompanion.settlement.LiveSettlementLevel;
+import se.jimmyeliasson.gzcompanion.settlement.SettlementLiveView;
 import se.jimmyeliasson.gzcompanion.settlement.storage.SettlementPlannerProfile;
+import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 
 import java.util.List;
 import java.util.Map;
@@ -160,5 +165,137 @@ class SettlementTabComponentTest {
         assertFalse(SettlementTabComponent.isLocalPlayer("Olivre", "jbl76"));
         assertFalse(SettlementTabComponent.isLocalPlayer(null, "jbl76"));
         assertFalse(SettlementTabComponent.isLocalPlayer("jbl76", null));
+    }
+
+    // ------------------------------------------------------------------
+    // Bugfix: Översikt must be scrollable when its content exceeds the panel - human QA found
+    // NÄSTA NIVÅ and everything after it disappearing behind/below the footer with no way to
+    // scroll to it. See SettlementTabComponent.renderOverview/estimateOverviewContentHeight.
+    // ------------------------------------------------------------------
+
+    private static SettlementLiveView liveViewWith(LiveLevelAlignment alignment) {
+        LiveSettlementLevel level = new LiveSettlementLevel(10, "Småstad", alignment);
+        return new SettlementLiveView(true, true, "Trälskärsbukten", "MEMBER", 44.3, 100L, level, List.of("jbl76"));
+    }
+
+    private static SettlementCatalog catalogWith(SettlementLevel... levels) {
+        return new SettlementCatalog(List.of(levels), null, List.of(), null, List.of());
+    }
+
+    @Test
+    @DisplayName("1: content shorter than the viewport -> max scroll is 0")
+    void overviewMaxScrollIsZeroWhenContentFitsViewport() {
+        assertEquals(0, SettlementTabComponent.clampScroll(0, 100, 200));
+    }
+
+    @Test
+    @DisplayName("2: content taller than the viewport -> max scroll is greater than 0, and reaching it is possible")
+    void overviewMaxScrollIsPositiveWhenContentExceedsViewport() {
+        int clamped = SettlementTabComponent.clampScroll(10_000, 500, 100);
+        assertEquals(400, clamped, "clamped to the true max (contentHeight - viewportHeight), not the requested overscroll");
+        assertTrue(clamped > 0);
+    }
+
+    @Test
+    @DisplayName("4: cannot scroll below 0 regardless of how far negative is requested")
+    void overviewScrollNeverNegative() {
+        assertEquals(0, SettlementTabComponent.clampScroll(-500, 500, 100));
+    }
+
+    @Test
+    @DisplayName("5: cannot scroll past the true max regardless of how far past it is requested")
+    void overviewScrollNeverPastMax() {
+        assertEquals(400, SettlementTabComponent.clampScroll(999_999, 500, 100));
+    }
+
+    @Test
+    @DisplayName("6: resizing to a taller viewport re-clamps an old excessive scroll position down to the new (smaller) max")
+    void resizingToTallerViewportClampsOldExcessiveScroll() {
+        // Was valid for a 100px-tall viewport against 500px of content (max scroll 400).
+        int oldScroll = 400;
+        // The window grows, so the SAME content now has a 450px-tall viewport - max scroll shrinks to 50.
+        int reclamped = SettlementTabComponent.clampScroll(oldScroll, 500, 450);
+        assertEquals(50, reclamped);
+    }
+
+    @Test
+    @DisplayName("liveOverviewCardHeight/nextLevelCardHeight: ALIGNED (no mismatch warning) is shorter than MISMATCH (with warning)")
+    void liveCardHeightAccountsForMismatchWarningLine() {
+        int aligned = SettlementTabComponent.liveOverviewCardHeight(liveViewWith(LiveLevelAlignment.ALIGNED));
+        int mismatch = SettlementTabComponent.liveOverviewCardHeight(liveViewWith(LiveLevelAlignment.MISMATCH));
+        assertTrue(mismatch > aligned, "the extra mismatch-warning line must be accounted for in the estimated height");
+    }
+
+    @Test
+    @DisplayName("nextLevelCardHeight: zero when no effective level is known, and accounts for an optional required-building line")
+    void nextLevelCardHeightHandlesUnknownAndOptionalLine() {
+        SettlementCatalog catalog = catalogWith(
+                new SettlementLevel(10, "Småstad", 1000, List.of(), null, null, null, null),
+                new SettlementLevel(11, "Stad", 2000, List.of(), "Stadshus", null, null, null)
+        );
+
+        assertEquals(0, SettlementTabComponent.nextLevelCardHeight(catalog, EffectiveCurrentLevel.NONE));
+
+        int withBuildingReq = SettlementTabComponent.nextLevelCardHeight(catalog, new EffectiveCurrentLevel(10, true));
+        assertTrue(withBuildingReq > 0);
+
+        SettlementCatalog catalogNoReq = catalogWith(
+                new SettlementLevel(10, "Småstad", 1000, List.of(), null, null, null, null),
+                new SettlementLevel(11, "Stad", 2000, List.of(), null, null, null, null)
+        );
+        int withoutBuildingReq = SettlementTabComponent.nextLevelCardHeight(catalogNoReq, new EffectiveCurrentLevel(10, true));
+        assertTrue(withBuildingReq > withoutBuildingReq, "the optional 'Kräver: ...' line must add to the estimated height");
+    }
+
+    @Test
+    @DisplayName("3/8: mouse wheel over the Overview panel changes overviewScroll and is consumed; outside it, nothing changes and it is not consumed")
+    void overviewMouseWheelOnlyConsumedInsidePanel() {
+        SettlementTabComponent tab = new SettlementTabComponent();
+        UiRect bounds = new UiRect(0, 0, 500, 300); // wide/NORMAL layout - panelRect spans the whole body
+        // A miss-click purely to establish `layout` (mirrors how render() always runs before any
+        // input event in practice) - hits nothing, so it is side-effect-free otherwise.
+        tab.mouseClicked(-1000, -1000, 0, bounds, null);
+        tab.setModeForTesting(SettlementTabComponent.Mode.OVERSIKT);
+        tab.setOverviewScrollForTesting(50);
+
+        boolean consumedOutside = tab.mouseScrolled(-500, -500, 0, -1);
+        assertFalse(consumedOutside, "a scroll far outside the tab bounds must not be consumed");
+        assertEquals(50, tab.getOverviewScrollForTesting(), "scrolling outside the panel must not change overviewScroll");
+
+        boolean consumedInside = tab.mouseScrolled(bounds.width() / 2.0, bounds.height() / 2.0, 0, -1);
+        assertTrue(consumedInside, "a scroll inside the Overview panel must be consumed");
+        assertTrue(tab.getOverviewScrollForTesting() > 50, "scrolling down (negative scrollY) must increase overviewScroll");
+    }
+
+    @Test
+    @DisplayName("7: switching mode away from and back to Overview does not corrupt Overview's or another mode's scroll state")
+    void switchingModesDoesNotCorruptScrollState() {
+        SettlementTabComponent tab = new SettlementTabComponent();
+        tab.setOverviewScrollForTesting(77);
+        tab.setMaterialScrollForTesting(33);
+
+        tab.setModeForTesting(SettlementTabComponent.Mode.MATERIAL);
+        assertEquals(77, tab.getOverviewScrollForTesting(), "leaving Overview must not reset or corrupt its own scroll state");
+        assertEquals(33, tab.getMaterialScrollForTesting());
+
+        tab.setModeForTesting(SettlementTabComponent.Mode.OVERSIKT);
+        assertEquals(77, tab.getOverviewScrollForTesting(), "returning to Overview must not have lost its prior scroll position");
+        assertEquals(33, tab.getMaterialScrollForTesting(), "an unrelated mode's scroll state must remain untouched throughout");
+    }
+
+    @Test
+    @DisplayName("9: mouse wheel while in MATERIAL/MEDLEMMAR mode still only affects that mode's own scroll, unaffected by the Overview fix")
+    void otherModesScrollBehaviorUnchangedByOverviewFix() {
+        SettlementTabComponent tab = new SettlementTabComponent();
+        UiRect bounds = new UiRect(0, 0, 500, 300);
+        tab.mouseClicked(-1000, -1000, 0, bounds, null);
+
+        tab.setModeForTesting(SettlementTabComponent.Mode.MATERIAL);
+        tab.setOverviewScrollForTesting(0);
+        boolean consumed = tab.mouseScrolled(bounds.width() / 2.0, bounds.height() / 2.0, 0, -1);
+
+        assertTrue(consumed);
+        assertEquals(0, tab.getOverviewScrollForTesting(), "scrolling in MATERIAL mode must never touch overviewScroll");
+        assertTrue(tab.getMaterialScrollForTesting() > 0, "MATERIAL's own scroll must still respond exactly as before");
     }
 }
