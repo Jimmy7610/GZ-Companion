@@ -218,12 +218,57 @@ class SettlementTabComponentTest {
         assertEquals(50, reclamped);
     }
 
+    /**
+     * REGRESSION (QA bug #2): liveOverviewCardHeight previously hardcoded {@code 11+11+10+10+10+10}
+     * (6 rows) - it silently OMITTED the "X settlementmedlemmar online" row entirely, so the real
+     * 7-row card (header, name, level, role, bonus, treasury, online count) plus the 4px trailing
+     * margin was underestimated by exactly 10px, clipping the bottom of Översikt by that much.
+     * These two tests assert the EXACT expected total (not just "some height" or "taller than X")
+     * precisely so a future silent omission of any one row is caught immediately, not just an
+     * omission that happens to still leave mismatch > aligned true.
+     */
     @Test
-    @DisplayName("liveOverviewCardHeight/nextLevelCardHeight: ALIGNED (no mismatch warning) is shorter than MISMATCH (with warning)")
+    @DisplayName("REGRESSION: a normal ALIGNED LIVE card's height includes ALL SEVEN rows (header, name, level, "
+            + "role, bonus, treasury, ONLINE COUNT) plus the trailing margin - exactly 76px, never 66px")
+    void liveOverviewCardHeightIncludesEveryRowForAlignedState() {
+        int height = SettlementTabComponent.liveOverviewCardHeight(liveViewWith(LiveLevelAlignment.ALIGNED));
+
+        // header(11) + name(11) + level(10) + role(10) + bonus(10) + treasury(10) + online(10) + margin(4)
+        assertEquals(76, height, "must include the online-members row - a card missing it comes out to 66px, the exact bug this test guards against");
+    }
+
+    @Test
+    @DisplayName("REGRESSION: a MISMATCH LIVE card additionally includes the warning row - exactly 86px (76 + the warning row)")
+    void liveOverviewCardHeightIncludesMismatchWarningRowOnTopOfEveryOtherRow() {
+        int height = SettlementTabComponent.liveOverviewCardHeight(liveViewWith(LiveLevelAlignment.MISMATCH));
+
+        assertEquals(86, height, "must be exactly the 76px ALIGNED total plus one more 10px warning row");
+    }
+
+    @Test
+    @DisplayName("liveOverviewCardHeight: ALIGNED (no mismatch warning) is shorter than MISMATCH (with warning)")
     void liveCardHeightAccountsForMismatchWarningLine() {
         int aligned = SettlementTabComponent.liveOverviewCardHeight(liveViewWith(LiveLevelAlignment.ALIGNED));
         int mismatch = SettlementTabComponent.liveOverviewCardHeight(liveViewWith(LiveLevelAlignment.MISMATCH));
         assertTrue(mismatch > aligned, "the extra mismatch-warning line must be accounted for in the estimated height");
+    }
+
+    @Test
+    @DisplayName("REGRESSION: the corrected (76px) LIVE card height yields 10px MORE max-scroll than the old, buggy "
+            + "(66px) height would have - proving the fix actually lets the final content scroll 10px further into view")
+    void correctedLiveCardHeightYieldsMoreScrollRoomThanOldBuggyHeight() {
+        int correctedCardHeight = SettlementTabComponent.liveOverviewCardHeight(liveViewWith(LiveLevelAlignment.ALIGNED));
+        int oldBuggyCardHeight = 66; // the exact value QA reported before this fix (11+11+10+10+10+10 + 4)
+        int otherFixedContent = 11 + 10 + 12; // progression summary + current-level + target-level lines
+        int viewportHeight = 50; // an arbitrary panel viewport shorter than either total (109px / 99px), so both actually overflow
+
+        // clampScroll(HUGE_REQUEST, contentHeight, viewportHeight) lands exactly on the true max -
+        // the same technique used to prove "reaching the max" elsewhere in this file.
+        int correctedMaxScroll = SettlementTabComponent.clampScroll(Integer.MAX_VALUE, correctedCardHeight + otherFixedContent, viewportHeight);
+        int oldBuggyMaxScroll = SettlementTabComponent.clampScroll(Integer.MAX_VALUE, oldBuggyCardHeight + otherFixedContent, viewportHeight);
+
+        assertEquals(10, correctedMaxScroll - oldBuggyMaxScroll,
+                "the corrected content height must allow exactly 10px MORE scrolling than the old buggy height did");
     }
 
     @Test

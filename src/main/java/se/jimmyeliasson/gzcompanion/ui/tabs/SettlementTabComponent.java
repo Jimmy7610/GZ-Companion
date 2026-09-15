@@ -364,17 +364,37 @@ public class SettlementTabComponent implements TextInputHandler {
      * live/catalog mismatch is shown as an honest, restrained warning rather than hidden or
      * silently "corrected" - GameZone's own reported level/name always wins visually.
      */
+    // Named row heights for the LIVE overview card, shared verbatim between renderLiveOverviewCard
+    // (which draws each row using these exact constants) and liveOverviewCardHeight (which sums
+    // the exact same constants). A prior version hardcoded these as bare literals in TWO places
+    // that were supposed to agree but didn't - liveOverviewCardHeight silently omitted the online-
+    // members row entirely, underestimating the card by 10px and clipping the bottom of Översikt.
+    // Using ONE named constant per row for both the draw call's own increment AND the height sum
+    // makes that specific class of drift a compile-time-visible single source of truth instead of
+    // two coincidentally-matching numbers.
+    private static final int LIVE_CARD_HEADER_ROW_H = 11;
+    private static final int LIVE_CARD_NAME_ROW_H = 11;
+    private static final int LIVE_CARD_LEVEL_ROW_H = 10;
+    private static final int LIVE_CARD_ROLE_ROW_H = 10;
+    private static final int LIVE_CARD_BONUS_ROW_H = 10;
+    private static final int LIVE_CARD_TREASURY_ROW_H = 10;
+    private static final int LIVE_CARD_ONLINE_ROW_H = 10;
+    private static final int LIVE_CARD_MISMATCH_ROW_H = 10;
+    private static final int LIVE_CARD_BOTTOM_MARGIN = 4;
+
     /** Net vertical space {@link #renderLiveOverviewCard} occupies (its background card height
-     * plus the bottom margin it returns) - extracted so {@link #estimateOverviewContentHeight}
-     * can never drift out of sync with what is actually drawn. */
+     * plus the bottom margin it returns) - sums the SAME named row constants {@link
+     * #renderLiveOverviewCard} draws with, so the two can no longer silently diverge (see the
+     * constants' own doc comment above for exactly how they drifted before). */
     static int liveOverviewCardHeight(SettlementLiveView live) {
-        int cardH = 11 + 11 + 10 + 10 + 10 + 10;
-        if (live.liveLevel().alignment() == LiveLevelAlignment.MISMATCH) cardH += 10;
-        return cardH + 4;
+        int h = LIVE_CARD_HEADER_ROW_H + LIVE_CARD_NAME_ROW_H + LIVE_CARD_LEVEL_ROW_H + LIVE_CARD_ROLE_ROW_H
+                + LIVE_CARD_BONUS_ROW_H + LIVE_CARD_TREASURY_ROW_H + LIVE_CARD_ONLINE_ROW_H;
+        if (live.liveLevel().alignment() == LiveLevelAlignment.MISMATCH) h += LIVE_CARD_MISMATCH_ROW_H;
+        return h + LIVE_CARD_BOTTOM_MARGIN;
     }
 
     private int renderLiveOverviewCard(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, SettlementLiveView live) {
-        int cardH = liveOverviewCardHeight(live) - 4; // the background card itself excludes the trailing bottom margin
+        int cardH = liveOverviewCardHeight(live) - LIVE_CARD_BOTTOM_MARGIN; // the background card itself excludes the trailing bottom margin
         UiRect card = new UiRect(x - 2, y - 2, maxW + 4, cardH);
         GZTheme.drawCard(extractor, card, GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_EMERALD);
 
@@ -383,42 +403,42 @@ public class SettlementTabComponent implements TextInputHandler {
         int liveBadgeW = TextUtil.scaledWidth(font, liveBadge, TypographyScale.META.getScale());
         GZTheme.drawStatusDot(extractor, x + maxW - liveBadgeW - 8, y + 3, GZTheme.COLOR_STATUS_GREEN);
         TextUtil.drawScaledText(extractor, font, liveBadge, x + maxW - liveBadgeW - 2, y, TypographyScale.META.getScale(), GZTheme.COLOR_STATUS_GREEN, false);
-        y += 11;
+        y += LIVE_CARD_HEADER_ROW_H;
 
         TextUtil.drawScaledEllipsizedText(extractor, font, live.settlementName(), x, y, maxW,
                 TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
-        y += 11;
+        y += LIVE_CARD_NAME_ROW_H;
 
         String levelLine = live.liveLevel().level() != null
                 ? "Nivå " + live.liveLevel().level() + (live.liveLevel().levelName() != null ? " · " + live.liveLevel().levelName() : "")
                 : "Nivå okänd";
         TextUtil.drawScaledEllipsizedText(extractor, font, levelLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-        y += 10;
+        y += LIVE_CARD_LEVEL_ROW_H;
 
         String roleLine = "Roll: " + (live.role() != null ? live.role() : "Okänd");
         TextUtil.drawScaledEllipsizedText(extractor, font, roleLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-        y += 10;
+        y += LIVE_CARD_ROLE_ROW_H;
 
         String bonusLine = "Settlementbonus: " + GameZoneStatusFormatter.formatBonusPercent(live.bonusPercent());
         TextUtil.drawScaledEllipsizedText(extractor, font, bonusLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-        y += 10;
+        y += LIVE_CARD_BONUS_ROW_H;
 
         String treasuryLine = "Stadskassa: " + GameZoneStatusFormatter.formatMoney(live.treasury()) + " Coins";
         TextUtil.drawScaledEllipsizedText(extractor, font, treasuryLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-        y += 10;
+        y += LIVE_CARD_TREASURY_ROW_H;
 
         int online = live.sameSettlementOnlineUsernames().size();
         String onlineLine = online + (online == 1 ? " från ditt settlement online" : " settlementmedlemmar online");
         TextUtil.drawScaledEllipsizedText(extractor, font, onlineLine, x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-        y += 10;
+        y += LIVE_CARD_ONLINE_ROW_H;
 
         if (live.liveLevel().alignment() == LiveLevelAlignment.MISMATCH) {
             TextUtil.drawScaledWrappedText(extractor, font, "Live-data och Companion-datan skiljer sig.", x, y, maxW,
                     TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_YELLOW, false);
-            y += 10;
+            y += LIVE_CARD_MISMATCH_ROW_H;
         }
 
-        return y + 4;
+        return y + LIVE_CARD_BOTTOM_MARGIN;
     }
 
     /**
