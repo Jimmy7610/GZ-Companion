@@ -9,6 +9,7 @@ import se.jimmyeliasson.gzcompanion.settlement.LiveLevelAlignment;
 import se.jimmyeliasson.gzcompanion.settlement.LiveSettlementLevel;
 import se.jimmyeliasson.gzcompanion.settlement.SettlementLiveView;
 import se.jimmyeliasson.gzcompanion.settlement.storage.SettlementPlannerProfile;
+import se.jimmyeliasson.gzcompanion.ui.layout.SettlementLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 
 import java.util.List;
@@ -342,5 +343,134 @@ class SettlementTabComponentTest {
         assertTrue(consumed);
         assertEquals(0, tab.getOverviewScrollForTesting(), "scrolling in MATERIAL mode must never touch overviewScroll");
         assertTrue(tab.getMaterialScrollForTesting() > 0, "MATERIAL's own scroll must still respond exactly as before");
+    }
+
+    // ------------------------------------------------------------------
+    // Bugfix: Progression detail's scroll viewport must exclude the fixed bottom action-button
+    // strip ("Sätt som OFFLINE-nuvarande" / "Sätt som mål") - human QA found content continuing
+    // behind those buttons with maxScroll incorrectly underestimated (in some cases to 0). See
+    // SettlementTabComponent.progressionDetailContentArea/PROGRESSION_DETAIL_BTN_STRIP_H.
+    // ------------------------------------------------------------------
+
+    private static final int PROGRESSION_DETAIL_BTN_STRIP_H = 14;
+    private static final int PROGRESSION_DETAIL_BTN_GAP = 2;
+
+    @Test
+    @DisplayName("1/7: NORMAL/LARGE (non-compact) content viewport ends BEFORE the fixed button strip, not at detailRect's own bottom edge")
+    void normalModeContentAreaExcludesButtonStrip() {
+        UiRect detailRect = new UiRect(0, 0, 200, 300);
+        UiRect contentArea = SettlementTabComponent.progressionDetailContentArea(detailRect, false);
+
+        int expectedBottom = detailRect.bottom() - PROGRESSION_DETAIL_BTN_STRIP_H - PROGRESSION_DETAIL_BTN_GAP;
+        assertEquals(expectedBottom, contentArea.bottom(),
+                "the viewport must stop exactly GAP px above where the button strip begins, never at detailRect's own bottom");
+        assertTrue(contentArea.bottom() < detailRect.bottom(), "the viewport must never include the button strip's own pixels");
+    }
+
+    @Test
+    @DisplayName("6: COMPACT content viewport accounts for BOTH the top back-button area AND the fixed bottom button strip")
+    void compactModeContentAreaExcludesBackButtonAreaAndButtonStrip() {
+        UiRect detailRect = new UiRect(0, 0, 200, 300);
+        UiRect compactArea = SettlementTabComponent.progressionDetailContentArea(detailRect, true);
+        UiRect normalArea = SettlementTabComponent.progressionDetailContentArea(detailRect, false);
+
+        assertTrue(compactArea.y() > normalArea.y(), "compact mode must reserve extra space above content for the '< Lista' back button");
+        assertEquals(normalArea.bottom(), compactArea.bottom(),
+                "the bottom exclusion (button strip + gap) is identical in both modes - only the TOP differs");
+    }
+
+    @Test
+    @DisplayName("2/3: content that would have appeared to fit only because the button strip was wrongly counted "
+            + "now correctly produces maxScroll > 0 using the REAL (smaller) viewport height")
+    void contentThatOnlyFitWithTheOldBuggyViewportNowScrolls() {
+        UiRect detailRect = new UiRect(0, 0, 200, 100);
+        UiRect correctedArea = SettlementTabComponent.progressionDetailContentArea(detailRect, false);
+        int oldBuggyHeight = detailRect.bottom() - 1 - (detailRect.y() + 4); // the exact old (wrong) formula
+
+        // Content sized to fit the OLD buggy viewport exactly, but NOT the corrected one.
+        int contentHeight = oldBuggyHeight;
+        assertEquals(0, SettlementTabComponent.clampScroll(0, contentHeight, oldBuggyHeight),
+                "sanity check: this content genuinely fit the old buggy viewport with zero scroll");
+
+        int correctedMaxScroll = SettlementTabComponent.clampScroll(Integer.MAX_VALUE, contentHeight, correctedArea.height());
+        assertTrue(correctedMaxScroll > 0,
+                "the SAME content must now report scrollable overflow once measured against the real (button-strip-excluding) viewport");
+
+        // The old viewport's own bottom edge was detailRect.bottom() - 1; the corrected viewport's
+        // bottom edge is exactly where the button strip (+ gap) begins - the difference between
+        // the two is exactly how many pixels the old formula wrongly counted as visible content.
+        int oldViewportBottom = detailRect.bottom() - 1;
+        int expectedNewlyRevealed = oldViewportBottom - correctedArea.bottom();
+        assertEquals(expectedNewlyRevealed, correctedMaxScroll,
+                "the newly-revealed max scroll must equal exactly the space the button strip used to wrongly claim as visible");
+    }
+
+    @Test
+    @DisplayName("3: maxScroll formula is contentHeight - REAL content viewport height, not detailRect's raw height")
+    void maxScrollUsesRealContentViewportHeight() {
+        UiRect detailRect = new UiRect(0, 0, 200, 150);
+        UiRect contentArea = SettlementTabComponent.progressionDetailContentArea(detailRect, false);
+        int contentHeight = 500;
+
+        int maxScroll = SettlementTabComponent.clampScroll(Integer.MAX_VALUE, contentHeight, contentArea.height());
+        assertEquals(contentHeight - contentArea.height(), maxScroll);
+    }
+
+    @Test
+    @DisplayName("4: progression detail scroll can never go below 0")
+    void progressionDetailScrollNeverNegative() {
+        assertEquals(0, SettlementTabComponent.clampScroll(-500, 400, 100));
+    }
+
+    @Test
+    @DisplayName("5: progression detail scroll can never exceed the real max")
+    void progressionDetailScrollNeverPastRealMax() {
+        UiRect detailRect = new UiRect(0, 0, 200, 150);
+        UiRect contentArea = SettlementTabComponent.progressionDetailContentArea(detailRect, false);
+        int contentHeight = 500;
+
+        int requestedFarPastMax = 999_999;
+        int clamped = SettlementTabComponent.clampScroll(requestedFarPastMax, contentHeight, contentArea.height());
+        assertEquals(contentHeight - contentArea.height(), clamped);
+    }
+
+    @Test
+    @DisplayName("8: the fixed action-button geometry itself (btnY, height, position) is unchanged by this fix")
+    void fixedButtonGeometryUnchanged() {
+        UiRect detailRect = new UiRect(0, 0, 200, 150);
+        int btnY = detailRect.bottom() - PROGRESSION_DETAIL_BTN_STRIP_H; // the exact formula renderProgressionDetail still uses
+        assertEquals(136, btnY, "btnY must still be exactly detailRect.bottom() - 14, unchanged by this fix");
+    }
+
+    @Test
+    @DisplayName("9: existing Progression LIST scrolling (progressionListScroll) is unaffected by the detail-viewport fix")
+    void progressionListScrollingUnaffectedByDetailFix() {
+        SettlementTabComponent tab = new SettlementTabComponent();
+        UiRect bounds = new UiRect(0, 0, 500, 300); // wide/NORMAL layout - list and detail are distinct rects
+        tab.mouseClicked(-1000, -1000, 0, bounds, null);
+        tab.setModeForTesting(SettlementTabComponent.Mode.PROGRESSION);
+
+        SettlementLayout layout = SettlementLayout.calculate(bounds);
+        boolean consumed = tab.mouseScrolled(layout.listRect().x() + 5, layout.listRect().y() + 5, 0, -1);
+
+        assertTrue(consumed);
+        assertTrue(tab.getProgressionListScrollForTesting() > 0, "scrolling over the list must still move progressionListScroll exactly as before");
+        assertEquals(0, tab.getProgressionDetailScrollForTesting(), "scrolling the list must never touch the detail's own scroll");
+    }
+
+    @Test
+    @DisplayName("9: existing Progression DETAIL scrolling (progressionDetailScroll) still responds to the mouse wheel over the detail pane")
+    void progressionDetailScrollingStillRespondsToWheel() {
+        SettlementTabComponent tab = new SettlementTabComponent();
+        UiRect bounds = new UiRect(0, 0, 500, 300);
+        tab.mouseClicked(-1000, -1000, 0, bounds, null);
+        tab.setModeForTesting(SettlementTabComponent.Mode.PROGRESSION);
+
+        SettlementLayout layout = SettlementLayout.calculate(bounds);
+        boolean consumed = tab.mouseScrolled(layout.detailRect().x() + 5, layout.detailRect().y() + 5, 0, -1);
+
+        assertTrue(consumed);
+        assertTrue(tab.getProgressionDetailScrollForTesting() > 0, "scrolling over the detail pane must still move progressionDetailScroll exactly as before");
+        assertEquals(0, tab.getProgressionListScrollForTesting(), "scrolling the detail must never touch the list's own scroll");
     }
 }

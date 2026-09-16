@@ -660,6 +660,36 @@ public class SettlementTabComponent implements TextInputHandler {
         return isManualCurrent ? "✓ Manuell nuvarande (offline)" : "Sätt som OFFLINE-nuvarande";
     }
 
+    private static final int PROGRESSION_DETAIL_TOP_PAD_COMPACT = 16;
+    private static final int PROGRESSION_DETAIL_TOP_PAD_NORMAL = 4;
+    /** Height of the fixed bottom action-button strip ("Sätt som OFFLINE-nuvarande" / "Sätt som
+     * mål") - matches the button rects' own {@code btnY = detailRect.bottom() - PROGRESSION_DETAIL_BTN_STRIP_H}
+     * in {@link #renderProgressionDetail} exactly, so the content viewport this excludes and the
+     * buttons' own drawn position can never silently disagree again (see this class' Översikt
+     * fix's own "named constants, not two coincidentally-matching literals" reasoning). */
+    private static final int PROGRESSION_DETAIL_BTN_STRIP_H = 14;
+    /** Small breathing-room gap between the last scrollable content pixel and the button strip. */
+    private static final int PROGRESSION_DETAIL_BTN_GAP = 2;
+
+    /**
+     * REGRESSION (QA bug #3): the scrollable/scissored content viewport for Progression's detail
+     * pane. Previously spanned all the way to {@code detailRect.bottom() - 1}, which INCLUDED the
+     * space the fixed bottom action-button strip actually occupies - the max-scroll calculation
+     * believed those pixels were visible content, when the buttons were drawn on top of them the
+     * whole time. This is the ONE place that decides where the viewport ends; {@link
+     * #renderProgressionDetail} uses this SAME {@link UiRect} for the scissor AND the max-scroll
+     * calculation, and the fixed button strip's own {@code btnY} is derived from the identical
+     * {@link #PROGRESSION_DETAIL_BTN_STRIP_H} constant this excludes - there is no second,
+     * independently-computed viewport that could silently disagree with this one.
+     */
+    static UiRect progressionDetailContentArea(UiRect detailRect, boolean isCompact) {
+        int contentTop = detailRect.y() + (isCompact ? PROGRESSION_DETAIL_TOP_PAD_COMPACT : PROGRESSION_DETAIL_TOP_PAD_NORMAL);
+        int btnY = detailRect.bottom() - PROGRESSION_DETAIL_BTN_STRIP_H;
+        int contentBottom = btnY - PROGRESSION_DETAIL_BTN_GAP;
+        int height = Math.max(1, contentBottom - contentTop);
+        return new UiRect(detailRect.x() + 1, contentTop, detailRect.width() - 2, height);
+    }
+
     private void renderProgressionDetail(GuiGraphicsExtractor extractor, Font font, UiRect detailRect, SettlementCatalog catalog,
                                           SettlementPlannerManager planner, SettlementPlannerProfile profile, String contextKey,
                                           int mouseX, int mouseY, boolean isCompact, EffectiveCurrentLevel effective) {
@@ -667,8 +697,7 @@ public class SettlementTabComponent implements TextInputHandler {
         SettlementLevel level = catalog.byLevel(progressionSelectedLevel).orElse(null);
         if (level == null) return;
 
-        int contentTop = detailRect.y() + (isCompact ? 16 : 4);
-        UiRect contentArea = new UiRect(detailRect.x() + 1, contentTop, detailRect.width() - 2, detailRect.bottom() - contentTop - 1);
+        UiRect contentArea = progressionDetailContentArea(detailRect, isCompact);
         int pad = 5;
         int maxW = contentArea.width() - (pad * 2);
 
@@ -742,7 +771,7 @@ public class SettlementTabComponent implements TextInputHandler {
         // it must never look like it changes the player's real GameZone level.
         String currentBtnLabel = effective.live() ? offlineCurrentButtonLabel(isCurrent) : currentButtonLabel(isCurrent);
 
-        int btnY = detailRect.bottom() - 14;
+        int btnY = detailRect.bottom() - PROGRESSION_DETAIL_BTN_STRIP_H;
         int btnW = Math.max(40, (detailRect.width() - 12) / 2);
         UiRect setCurrentBtn = new UiRect(detailRect.x() + 4, btnY, btnW, 11);
         UiRect setTargetBtn = new UiRect(detailRect.x() + 8 + btnW, btnY, btnW, 11);
@@ -1317,5 +1346,17 @@ public class SettlementTabComponent implements TextInputHandler {
 
     void setMaterialScrollForTesting(int value) {
         this.materialScroll = value;
+    }
+
+    int getProgressionListScrollForTesting() {
+        return progressionListScroll;
+    }
+
+    int getProgressionDetailScrollForTesting() {
+        return progressionDetailScroll;
+    }
+
+    void setProgressionDetailScrollForTesting(int value) {
+        this.progressionDetailScroll = value;
     }
 }
