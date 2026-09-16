@@ -1260,6 +1260,17 @@ public class SettlementTabComponent implements TextInputHandler {
             overviewScroll = Math.max(0, overviewScroll - (int) (scrollY * 14));
             return true;
         } else if (mode == Mode.PROGRESSION) {
+            if (layout.isCompact()) {
+                if (!layout.panelRect().contains(mouseX, mouseY)) {
+                    return false;
+                }
+                if (compactShowingDetail) {
+                    progressionDetailScroll = Math.max(0, progressionDetailScroll - (int) (scrollY * 14));
+                } else {
+                    progressionListScroll = Math.max(0, progressionListScroll - (int) (scrollY * 14));
+                }
+                return true;
+            }
             if (layout.listRect().contains(mouseX, mouseY)) {
                 progressionListScroll = Math.max(0, progressionListScroll - (int) (scrollY * 14));
                 return true;
@@ -1358,5 +1369,13 @@ public class SettlementTabComponent implements TextInputHandler {
 
     void setProgressionDetailScrollForTesting(int value) {
         this.progressionDetailScroll = value;
+    }
+
+    void setCompactShowingDetailForTesting(boolean value) {
+        this.compactShowingDetail = value;
+    }
+
+    boolean getCompactShowingDetailForTesting() {
+        return compactShowingDetail;
     }
 }

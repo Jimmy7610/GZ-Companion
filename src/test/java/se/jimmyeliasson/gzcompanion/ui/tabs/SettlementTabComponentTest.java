@@ -473,4 +473,116 @@ class SettlementTabComponentTest {
         assertTrue(tab.getProgressionDetailScrollForTesting() > 0, "scrolling over the detail pane must still move progressionDetailScroll exactly as before");
         assertEquals(0, tab.getProgressionListScrollForTesting(), "scrolling the detail must never touch the list's own scroll");
     }
+
+    // ------------------------------------------------------------------
+    // Bugfix: in COMPACT Progression mode, listRect and detailRect overlap 100% (only one pane
+    // renders at a time), so the old spatial "listRect first, then detailRect" routing always hit
+    // the list branch and never let the wheel reach a visible detail pane. Routing must instead
+    // follow compactShowingDetail - the same flag rendering already uses to pick which pane to draw.
+    // See SettlementTabComponent.mouseScrolled / SettlementLayout.calculate's compact branch.
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("1: sanity check - COMPACT layout's listRect and detailRect geometrically overlap, matching production")
+    void compactLayoutListAndDetailRectsOverlapByDesign() {
+        UiRect bounds = new UiRect(0, 0, 200, 300); // width < 300 -> compact
+        SettlementLayout layout = SettlementLayout.calculate(bounds);
+
+        assertTrue(layout.isCompact(), "this bounds width must produce compact mode for the regression setup to be valid");
+        assertEquals(layout.listRect(), layout.detailRect(),
+                "compact listRect and detailRect must be identical - this is the exact overlap that broke naive spatial routing");
+    }
+
+    @Test
+    @DisplayName("2: COMPACT + compactShowingDetail=false - wheel inside panel moves progressionListScroll, never progressionDetailScroll")
+    void compactProgressionWheelRoutesToListWhenShowingList() {
+        SettlementTabComponent tab = new SettlementTabComponent();
+        UiRect bounds = new UiRect(0, 0, 200, 300);
+        tab.mouseClicked(-1000, -1000, 0, bounds, null);
+        tab.setModeForTesting(SettlementTabComponent.Mode.PROGRESSION);
+        tab.setCompactShowingDetailForTesting(false);
+
+        boolean consumed = tab.mouseScrolled(bounds.width() / 2.0, bounds.height() / 2.0, 0, -1);
+
+        assertTrue(consumed);
+        assertTrue(tab.getProgressionListScrollForTesting() > 0, "showing the LIST pane must route the wheel to progressionListScroll");
+        assertEquals(0, tab.getProgressionDetailScrollForTesting(), "the hidden detail pane's scroll must never move");
+    }
+
+    @Test
+    @DisplayName("3 (CRITICAL): COMPACT + compactShowingDetail=true - the SAME coordinates now move progressionDetailScroll, never progressionListScroll")
+    void compactProgressionWheelRoutesToDetailWhenShowingDetail() {
+        SettlementTabComponent tab = new SettlementTabComponent();
+        UiRect bounds = new UiRect(0, 0, 200, 300);
+        tab.mouseClicked(-1000, -1000, 0, bounds, null);
+        tab.setModeForTesting(SettlementTabComponent.Mode.PROGRESSION);
+        tab.setCompactShowingDetailForTesting(true);
+
+        boolean consumed = tab.mouseScrolled(bounds.width() / 2.0, bounds.height() / 2.0, 0, -1);
+
+        assertTrue(consumed);
+        assertTrue(tab.getProgressionDetailScrollForTesting() > 0,
+                "showing the DETAIL pane must route the wheel to progressionDetailScroll even though listRect geometrically contains the same point");
+        assertEquals(0, tab.getProgressionListScrollForTesting(), "the hidden list pane's scroll must never move");
+    }
+
+    @Test
+    @DisplayName("4: COMPACT Progression - wheel outside the panel is not consumed and neither scroll changes")
+    void compactProgressionWheelOutsidePanelNotConsumed() {
+        SettlementTabComponent tab = new SettlementTabComponent();
+        UiRect bounds = new UiRect(0, 0, 200, 300);
+        tab.mouseClicked(-1000, -1000, 0, bounds, null);
+        tab.setModeForTesting(SettlementTabComponent.Mode.PROGRESSION);
+        tab.setCompactShowingDetailForTesting(true);
+
+        boolean consumed = tab.mouseScrolled(-500, -500, 0, -1);
+
+        assertFalse(consumed, "a scroll far outside the compact panel must not be consumed");
+        assertEquals(0, tab.getProgressionDetailScrollForTesting());
+        assertEquals(0, tab.getProgressionListScrollForTesting());
+    }
+
+    @Test
+    @DisplayName("7: switching compact Progression from list to detail (compactShowingDetail=false -> true) changes wheel routing immediately, without a new layout calculation")
+    void compactProgressionSwitchingListToDetailChangesRoutingImmediately() {
+        SettlementTabComponent tab = new SettlementTabComponent();
+        UiRect bounds = new UiRect(0, 0, 200, 300);
+        tab.mouseClicked(-1000, -1000, 0, bounds, null);
+        tab.setModeForTesting(SettlementTabComponent.Mode.PROGRESSION);
+        tab.setCompactShowingDetailForTesting(false);
+
+        tab.mouseScrolled(bounds.width() / 2.0, bounds.height() / 2.0, 0, -1);
+        int listAfterFirstScroll = tab.getProgressionListScrollForTesting();
+        assertTrue(listAfterFirstScroll > 0);
+
+        // Simulates selecting a level row, which flips this same flag without recomputing layout.
+        tab.setCompactShowingDetailForTesting(true);
+        tab.mouseScrolled(bounds.width() / 2.0, bounds.height() / 2.0, 0, -1);
+
+        assertEquals(listAfterFirstScroll, tab.getProgressionListScrollForTesting(),
+                "once showing detail, further scrolling at the same point must stop moving progressionListScroll");
+        assertTrue(tab.getProgressionDetailScrollForTesting() > 0, "and must immediately start moving progressionDetailScroll instead");
+    }
+
+    @Test
+    @DisplayName("8: switching compact Progression from detail back to list (compactShowingDetail=true -> false, as '< Lista' does) restores list routing immediately")
+    void compactProgressionSwitchingDetailToListRestoresListRoutingImmediately() {
+        SettlementTabComponent tab = new SettlementTabComponent();
+        UiRect bounds = new UiRect(0, 0, 200, 300);
+        tab.mouseClicked(-1000, -1000, 0, bounds, null);
+        tab.setModeForTesting(SettlementTabComponent.Mode.PROGRESSION);
+        tab.setCompactShowingDetailForTesting(true);
+
+        tab.mouseScrolled(bounds.width() / 2.0, bounds.height() / 2.0, 0, -1);
+        int detailAfterFirstScroll = tab.getProgressionDetailScrollForTesting();
+        assertTrue(detailAfterFirstScroll > 0);
+
+        // Simulates pressing "< Lista", which sets compactShowingDetail = false.
+        tab.setCompactShowingDetailForTesting(false);
+        tab.mouseScrolled(bounds.width() / 2.0, bounds.height() / 2.0, 0, -1);
+
+        assertEquals(detailAfterFirstScroll, tab.getProgressionDetailScrollForTesting(),
+                "once back on the list, further scrolling at the same point must stop moving progressionDetailScroll");
+        assertTrue(tab.getProgressionListScrollForTesting() > 0, "and must immediately start moving progressionListScroll again");
+    }
 }
