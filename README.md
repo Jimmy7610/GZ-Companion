@@ -70,7 +70,7 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Verified-Only Parser Activation**: A parser can only ever activate when it is both `enabled` AND carries a fully verified source — "better inactive than false-positive." No GameZone chat pattern is guessed; the bundled Rule Pack ships with zero active parsers today, honestly reported as "engine ready, pattern awaiting live verification."
 - **Local Toast Notifications**: A small, dedupe-windowed, settings-gated toast queue for future verified events (settlement invites, system messages) — no sound spam, no persistent chat history, never logs raw message text.
 
-### Milestone 6 — Settlement Companion *(Implemented, pending human gameplay QA)*
+### Milestone 6 — Settlement Companion *(Implemented, human gameplay QA complete — prepared for v0.1.0-alpha.6)*
 - **Live Settlement Dashboard**: When connected to GameZoneMC and a settlement is safely recognized from the same vanilla-visible TAB data Home/Online already read, Settlement shows a real **LIVE** dashboard — settlement name, level, role, bonus, treasury, and who from your settlement is currently online — reusing the exact same shared trackers, never a new parser or network source. A raw live level is only ever trusted for automatic planning once it's confirmed aligned with the bundled Rule Pack; a mismatch is still shown honestly, never hidden. See [Settlement Companion](docs/SETTLEMENT-COMPANION.md).
 - **Full Current Progression**: All 50 levels / 49 upgrades of the current "Settlement Levels 1.0" engine, sourced from the official GameZone Wiki — the obsolete 15-level model is never used.
 - **Local Level Planner, With a Trusted Live Override**: Choose a current and target level locally ("Planerad nuvarande nivå"); when a trusted live level is available it automatically becomes the *effective* current level for Progression/Material planning — without ever overwriting your manually saved value — and see the aggregated Coins, materials, and building prerequisites between them.
@@ -126,7 +126,7 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 ```
 
 The compiled mod JAR will be located at:
-`build/libs/gzcompanion-0.1.0-alpha.5.jar` (the exact file name always matches `gradle.properties`'
+`build/libs/gzcompanion-0.1.0-alpha.6.jar` (the exact file name always matches `gradle.properties`'
 `mod_version` - the single canonical product version, see `distribution/RELEASING.md`)
 
 ---

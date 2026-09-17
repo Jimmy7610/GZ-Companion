@@ -1,6 +1,26 @@
 # Settlement Companion (Milestone 6 + Live Settlement Dashboard)
 
-Status: **Implemented, pending human gameplay QA.**
+Status: **Implementation + human gameplay QA: COMPLETE.** Prepared for release
+`v0.1.0-alpha.6` (release preparation done by this pass; GitHub publication is a
+separate, not-yet-done step).
+
+### Human QA
+
+Manually tested in the real Minecraft Launcher against a live GameZone server. Verified:
+
+- Settlement opens directly (cold) without first opening Home or Online.
+- LIVE settlement identity, level + level name, role, bonus, and Stadskassa all display
+  correctly and match vanilla TAB.
+- A live level change during play is picked up and reflected correctly.
+- Översikt scrolls fully to its actual bottom with no clipped content.
+- Progression's derived state and its detail view (including scrolling, with the fixed
+  action buttons staying pinned and never hiding content) work correctly, in both
+  normal/large and compact layouts.
+- Material mode starts at the live level and its own scrolling and +/- owned-amount
+  controls work.
+- Medlemmar's online-same-settlement section displays correctly, and local member notes
+  stay independent of live online data.
+- No clipping/overflow issues remain from this QA pass.
 
 ## What this is
 

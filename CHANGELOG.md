@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.1.0-alpha.6] - 2026-09-17
 
-Implemented on `main`, not yet released - intended for a future `0.1.0-alpha.6`. `mod_version`
-remains `0.1.0-alpha.5` until this work has been code-reviewed and human-QA tested in a live client.
+Turns the Settlement tab from an offline-only planner into a real **LIVE** GameZone settlement
+dashboard, verified end-to-end in a real Minecraft Launcher session against a live GameZone
+server, plus the scroll/layout fixes that human QA found along the way.
 
 ### Added
 - **Live Settlement dashboard**: the Settlement tab now shows a real **LIVE** GameZone settlement
@@ -43,6 +44,41 @@ remains `0.1.0-alpha.5` until this work has been code-reviewed and human-QA test
   `GameZoneLiveContextBuilder.refresh(...)` Settlement uses, instead of each calling
   `tracker.update(...)` independently - purely an internal refactor, no behavior change for either
   tab.
+- A trusted live settlement level now becomes the effective current level for Progression/Material
+  planning without ever overwriting the player's manually saved offline current level.
+- Canonical product version is now `0.1.0-alpha.6`. Minecraft/Fabric versions are unchanged from
+  `0.1.0-alpha.5` (Minecraft 26.1.2, Fabric Loader 0.19.5, Fabric API 0.155.3+26.1.2), so the
+  in-app updater uses the same safe fast path it used for `0.1.0-alpha.5`.
+
+### Fixed
+Found and fixed during real human gameplay QA against a live GameZone server:
+- **Settlement Overview overflow/scrolling**: Översikt had no scroll offset at all, so content
+  longer than the panel was clipped behind the footer with no way to reach it. It now scrolls
+  fully to the actual bottom.
+- **Overview content-height correctness**: the live-card height estimate silently omitted the
+  online-members row, undercounting the real content height and leaving up to 10px of content
+  unreachable even after scrolling was added. The estimate and the renderer now share one set of
+  named row-height constants so they can't drift apart again.
+- **Progression detail viewport**: the scroll viewport used to compute max-scroll included the
+  space occupied by the fixed "Sätt som OFFLINE-nuvarande"/"Sätt som mål" button strip, so content
+  could hide behind those buttons with no way to scroll further. The viewport and the button strip
+  now share one geometry helper.
+- **Compact Progression scrolling**: in compact (narrow) layout, the list and detail panes occupy
+  the same screen rect (only one renders at a time), and the mouse wheel was always routed to the
+  list pane regardless of which one was actually visible. It now follows the same
+  `compactShowingDetail` flag the renderer uses, so the wheel always scrolls whichever pane is on
+  screen.
+
+### Fair play
+- Live settlement facts (name, level, level name, role, bonus, treasury, online same-settlement
+  players) come only from data already visible to the client via existing TAB-header/status
+  parsing - no new network source, no scraped endpoint.
+- No entity/world/chunk scanning, no coordinate/distance/direction display.
+- No inference of hidden or offline players - only currently-visible same-settlement players are
+  ever shown as online.
+- No automatic command or chat message, no server inventory/economy claim beyond what GameZone's
+  own client-visible state already shows.
+- No new thread, executor, or `HttpClient` - reuses the existing shared live-data infrastructure.
 
 ## [0.1.0-alpha.5] - 2026-09-14
 
