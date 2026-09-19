@@ -1,7 +1,7 @@
 package se.jimmyeliasson.gzcompanion.ui;
 
 /**
- * The 10 navigation sections defined for GZ Companion.
+ * The 12 navigation sections defined for GZ Companion.
  * Uses bundled high-definition pixel icons and authentic Swedish localization.
  */
 public enum TabType {
