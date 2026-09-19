@@ -85,7 +85,7 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 ### Milestone 8 — Contextual Advisor *(Implemented, pending human gameplay QA)*
 - **"Vad ska jag göra?" Becomes Real**: Home's existing button now opens a ranked, explainable overlay generated from your actual Guide/Settlement/Building state — never a hardcoded fake tip. See [Advisor](docs/ADVISOR.md).
 - **Deterministic, Explainable Suggestions**: Each suggestion shows Vad/Varför/Nästa steg, with an optional copy-only clipboard button for an already-verified command.
-- **No New Tab**: The Advisor is reached from Home, keeping the 9-tab navigation exactly as designed.
+- **No New Tab**: The Advisor is reached from Home without adding another top-level navigation tab.
 
 ### Milestone 9 — MarketWatch *(Implemented, pending human gameplay QA)*
 - **The Real GameZone Concept**: MarketWatch represents resource demand for settlement upgrades, compared against registered settlement inventory — never an auction price list. See [MarketWatch](docs/MARKETWATCH.md).
@@ -98,6 +98,11 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Local Data Management**: Per-category reset actions (Guide, Kistor, Settlement, Byggplaner, MarketWatch, Settings itself), each requiring confirmation — with a stronger, two-click confirmation for "Rensa ALLT".
 - **Redacted Diagnostics**: A copy-only technical summary (versions, module statuses) that never includes chat text, coordinates, or personal notes.
 - **Dynamic Keybind Display**: Shows the Companion's actual current key binding, not a hardcoded "G".
+
+
+### Leaderboards
+- **GameZone Topplistor**: Se topplistor för spelare, settlements och företag direkt i Companion när den publika GameZone-datan är tillgänglig.
+- **Read-Only Live Data**: Leaderboards är en informationsvy och utför inga automatiska spelåtgärder, kommandon eller ändringar på servern.
 
 ### Milestone 11 — Bounty Board *(Completed — released in v0.1.0-alpha.5)*
 - **Live GameZone Bounties**: See GameZone's own public active-bounty registry (unique-target PvE hunts, Coin reward, optional public clue, optional expiry) directly inside Companion, fetched on demand from the official `/api/bounties` endpoint — the exact same data GameZone's own wiki page shows. See [Bounty Board](docs/BOUNTY-BOARD.md).
