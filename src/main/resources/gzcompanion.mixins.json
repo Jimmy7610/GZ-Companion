@@ -4,7 +4,8 @@
   "compatibilityLevel": "JAVA_25",
   "client": [
     "PlayerTabOverlayAccessor",
-    "BossHealthOverlayAccessor"
+    "BossHealthOverlayAccessor",
+    "ToastManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Update panel ("UPPDATERA GZ COMPANION")**: the action buttons now sit in a fixed row directly
+  under the title - [Ladda ner] [Senare], [Stäng och uppdatera] [Senare] or [Försök igen]
+  [Senare] - with a thin separator, and only the information below it (versions, size, release
+  notes, error text) scrolls. Long release notes can no longer push the buttons out of view, and
+  release notes are no longer cut to two lines each. While the panel is open, only its own
+  buttons are clickable (previously a click could also reach Home content drawn underneath).
+
+### Added
+- Optional setting **"Dölj varningen om overifierad chatt"** (Inställningar, default AV): hides
+  only Minecraft's vanilla "Chat messages can't be verified" toast, identified by its exact
+  `SystemToastId.UNSECURE_SERVER_WARNING`. Visual only - chat content, signing, reporting,
+  commands and networking are untouched, and every other toast still shows. See
+  `docs/SETTINGS.md`.
+
 ## [0.1.0-alpha.7] - 2026-09-24
 
 ### Added

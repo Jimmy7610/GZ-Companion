@@ -122,4 +122,29 @@ class JsonSettingsStoreTest {
         assertFalse(result.settings().showTechnicalIds());
         assertTrue(result.settings().companionNotificationsEnabled(), "Missing fields must fall back to the conservative default.");
     }
+
+    @Test
+    @DisplayName("hideUnverifiedChatWarning defaults to OFF, and an older settings.json without the key loads as OFF")
+    void hideUnverifiedChatWarningDefaultsOff() throws Exception {
+        assertFalse(CompanionSettings.defaults().hideUnverifiedChatWarning());
+        Path file = storeFile();
+        Files.writeString(file, "{\"schemaVersion\": 1, \"showTechnicalIds\": false, \"favoritePlayers\": [\"Kalle92\"]}");
+        SettingsLoadResult result = new JsonSettingsStore(file).load();
+        assertEquals(SettingsLoadResult.Outcome.LOADED, result.outcome());
+        assertFalse(result.settings().hideUnverifiedChatWarning());
+        assertEquals(List.of("Kalle92"), result.settings().favoritePlayers());
+    }
+
+    @Test
+    @DisplayName("hideUnverifiedChatWarning=true round-trips through save/load; a malformed value falls back to OFF")
+    void hideUnverifiedChatWarningPersists() throws Exception {
+        JsonSettingsStore store = new JsonSettingsStore(storeFile());
+        CompanionSettings on = CompanionSettings.defaults().withHideUnverifiedChatWarning(true);
+        store.save(on);
+        assertTrue(Files.readString(storeFile()).contains("\"hideUnverifiedChatWarning\": true"));
+        assertEquals(on, store.load().settings());
+
+        Files.writeString(storeFile(), "{\"schemaVersion\": 1, \"hideUnverifiedChatWarning\": {\"nope\": 1}}");
+        assertFalse(new JsonSettingsStore(storeFile()).load().settings().hideUnverifiedChatWarning());
+    }
 }

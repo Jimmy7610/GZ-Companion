@@ -150,4 +150,35 @@ class SettingsManagerTest {
 
         assertEquals(List.of("Kalle92", "AnnaCraft"), second.getSettings().favoritePlayers());
     }
+
+    @Test
+    @DisplayName("setHideUnverifiedChatWarning persists, and no OTHER setting mutation ever silently resets it")
+    void hideUnverifiedChatWarningSurvivesOtherMutations() {
+        InMemoryStore store = new InMemoryStore();
+        SettingsManager manager = new SettingsManager(store);
+        manager.initialize();
+        assertFalse(manager.getSettings().hideUnverifiedChatWarning(), "Default is OFF");
+
+        assertTrue(manager.setHideUnverifiedChatWarning(true));
+        manager.setCompanionNotificationsEnabled(false);
+        manager.setGameZoneToastsEnabled(false);
+        manager.setShowTechnicalIds(false);
+        manager.setShowUnverifiedKnowledge(false);
+        manager.setUseLastKnownChestDataInPlanners(false);
+        manager.addFavoritePlayer("Kalle92");
+        manager.removeFavoritePlayer("Kalle92");
+        assertTrue(manager.getSettings().hideUnverifiedChatWarning());
+        assertTrue(store.settings.hideUnverifiedChatWarning(), "Persisted through the store");
+
+        SettingsManager reloaded = new SettingsManager(store);
+        reloaded.initialize();
+        assertTrue(reloaded.getSettings().hideUnverifiedChatWarning());
+
+        assertTrue(reloaded.setHideUnverifiedChatWarning(false));
+        assertFalse(reloaded.getSettings().hideUnverifiedChatWarning());
+
+        reloaded.setHideUnverifiedChatWarning(true);
+        reloaded.resetToDefaults();
+        assertFalse(reloaded.getSettings().hideUnverifiedChatWarning(), "Reset returns it to the default OFF");
+    }
 }

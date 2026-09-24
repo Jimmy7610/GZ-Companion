@@ -75,7 +75,8 @@ public class JsonSettingsStore implements SettingsStore {
                     getBool(root, "showTechnicalIds", defaults.showTechnicalIds()),
                     getBool(root, "showUnverifiedKnowledge", defaults.showUnverifiedKnowledge()),
                     getBool(root, "useLastKnownChestDataInPlanners", defaults.useLastKnownChestDataInPlanners()),
-                    getStringList(root, "favoritePlayers")
+                    getStringList(root, "favoritePlayers"),
+                    getBool(root, "hideUnverifiedChatWarning", defaults.hideUnverifiedChatWarning())
             );
             return SettingsLoadResult.loaded(settings);
         } catch (Exception e) {
@@ -130,6 +131,7 @@ public class JsonSettingsStore implements SettingsStore {
                 favoritesArray.add(name);
             }
             root.add("favoritePlayers", favoritesArray);
+            root.addProperty("hideUnverifiedChatWarning", settings.hideUnverifiedChatWarning());
 
             Path tmpFile = filePath.resolveSibling(filePath.getFileName().toString() + ".tmp");
             try (FileWriter writer = new FileWriter(tmpFile.toFile())) {
