@@ -40,7 +40,7 @@ public final class KistorNavigationText {
         return "DU ÄR FRAMME";
     }
 
-    /** One-line summary for the Kistor "NAVIGERAR" banner. */
+    /** Detail line for the two-line Kistor "NAVIGERAR" banner. */
     public static String bannerSummary(ChestNavigationReading reading) {
         if (reading == null) return "";
         return switch (reading.status()) {
@@ -48,7 +48,7 @@ public final class KistorNavigationText {
             case ARRIVED -> "Du är framme";
             case NEAR, DIRECTIONAL -> {
                 String v = verticalLong(reading);
-                yield distance(reading) + (v != null ? " · " + v : "");
+                yield distance(reading) + (v != null ? " • " + v : "");
             }
         };
     }

@@ -45,6 +45,8 @@ public final class KistorNavigationHudElement implements HudElement {
     /** How often the (comparatively costly) world/server context key is re-checked while active. */
     private static final long CONTEXT_CHECK_INTERVAL_MS = 1000L;
     private static final int MAX_BOSS_BARS_CONSIDERED = 6;
+    /** Same dark navy as the main panel, but ~45% alpha so gameplay remains visible behind it. */
+    static final int NAVIGATION_CARD_BG = 0x730D141C;
 
     private final KistorRuntime kistor;
     private final GameZoneToastManager toastManager;
@@ -127,7 +129,7 @@ public final class KistorNavigationHudElement implements HudElement {
         KistorNavigationHudLayout layout = KistorNavigationHudLayout.compute(screenW, screenH, bossBarCount(client), avoid, showArrow, lineCount);
 
         boolean emphasized = status == ChestNavigationStatus.NEAR || status == ChestNavigationStatus.ARRIVED;
-        GZTheme.drawCard(graphics, layout.card(), GZTheme.COLOR_PANEL_BG, emphasized ? GZTheme.COLOR_EMERALD : GZTheme.COLOR_BORDER_EMERALD);
+        GZTheme.drawCard(graphics, layout.card(), NAVIGATION_CARD_BG, emphasized ? GZTheme.COLOR_EMERALD : GZTheme.COLOR_BORDER_EMERALD);
 
         if (showArrow) {
             int arrowColor = status == ChestNavigationStatus.NEAR ? GZTheme.COLOR_EMERALD : GZTheme.COLOR_MINT;
@@ -139,10 +141,10 @@ public final class KistorNavigationHudElement implements HudElement {
         TextUtil.drawScaledCenteredText(graphics, font, target.displayTitle().toUpperCase(Locale.ROOT), cx, layout.line1Y(), maxW,
                 TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, true);
         TextUtil.drawScaledCenteredText(graphics, font, line2, cx, layout.line2Y(), maxW,
-                TypographyScale.META.getScale(), line2Color, false);
+                TypographyScale.META.getScale(), line2Color, true);
         if (line3 != null) {
             TextUtil.drawScaledCenteredText(graphics, font, line3, cx, layout.line3Y(), maxW,
-                    TypographyScale.META.getScale(), line3Color, false);
+                    TypographyScale.META.getScale(), line3Color, true);
         }
     }
 

@@ -406,7 +406,8 @@ No new global keybind was added for Kistor 2.0.
 
 ```
 Kistor  12 sparade                     [SAKER][FÖRVARING][MATERIAL*]
-[ NAVIGERAR: Materiallager · 284 block fågelvägen · 12 block lägre ][Stoppa]   (only while navigating)
+[ NAVIGERAR: Materiallager                                  [ Stoppa ] ]   (only while navigating)
+[ 284 block fågelvägen • 12 block lägre                               ]
 [ Vad letar du efter? ...                                           ][x]
 [ Typ: Alla ] [ Sortering: ... ] [ Grupp: Alla ]
 +-------------- list --------------+ +------------- detail -------------+
@@ -429,6 +430,10 @@ tab was added. `KistorLayout` is pure geometry:
 - Scroll ranges are recorded from the content height actually drawn each frame
   (`ScrollState`), and routing in compact mode follows the visible pane.
 - Rows never overlap icons/counts: counts are right-aligned and names ellipsize before them.
+- While navigating, the banner is deliberately two lines: line 1 is **NAVIGERAR: <namn>** with
+  **Stoppa** on the right; line 2 gets the full banner width for **<avstånd> block fågelvägen •
+  <höjdskillnad>**. The 23 px banner reserves its own vertical space so search/filters/content
+  never overlap it.
 
 ## 15. SAKER — aggregated items (default mode)
 
@@ -533,9 +538,10 @@ the local index can be a target (`ChestNavigationManager.start` refuses anything
 
 **State.** `ChestNavigationManager` (inside the session-only `KistorRuntime`) holds at most one
 target by its stable `StoredContainerId`. It is memory-only and never persisted, so it cannot
-survive a restart. Starting navigation shows "Navigering startad · stäng Companion med G för att
-se pilen" and a **NAVIGERAR: Materiallager** banner with **Stoppa** at the top of Kistor
-(clicking the banner opens the target's detail).
+survive a restart. Starting navigation shows "Navigering startad • stäng med G för att se pilen". At the top of
+Kistor, the active target uses a two-line banner: **NAVIGERAR: Materiallager** with **Stoppa** on
+line 1, then distance + height difference across the full width on line 2 (clicking the banner
+outside Stoppa opens the target's detail).
 
 **HUD** (`KistorNavigationHudElement`, registered with `HudElementRegistry` exactly like
 `GameZoneToastHudElement`):
@@ -543,7 +549,9 @@ se pilen" and a **NAVIGERAR: Materiallager** banner with **Stoppa** at the top o
 - Inactive: one boolean check, draws nothing.
 - Top-center card, placed below any boss bars the client is already drawing (counted via the
   read-only `BossHealthOverlayAccessor` mixin, capped at a third of the screen height) and pushed
-  below the Companion toast card if they would overlap on a narrow screen.
+  below the Companion toast card if they would overlap on a narrow screen. Its dark-navy fill is
+  intentionally semi-transparent (~45% alpha, `0x730D141C`) so the world remains visible behind
+  navigation; the border stays clear and the HUD text uses shadows for readability.
 - Hidden while a screen (Companion, a storage menu, inventory) is open — except chat.
 - **A real, smoothly rotating arrow**: an up-pointing arrow drawn from fills in a half-pixel local
   grid under the extractor's 2D pose rotated by the relative bearing, using the interpolated
@@ -682,11 +690,13 @@ Run with `.\gradlew.bat runClient` (singleplayer first, then GameZone):
 14. Reopen Materiallager and change its contents; verify the "Materiallager uppdaterad" toast.
 15. Verify "SEDAN FÖRRA ÖPPNINGEN" shows only the real +/− differences. Reopen without changes:
     no toast, and "Inga ändringar sedan förra öppningen."
-16. Start HITTA navigation from the storage detail; see "Navigering startad" and the NAVIGERAR
-    banner with Stoppa.
+16. Start HITTA navigation from the storage detail; see "Navigering startad" and the two-line
+    NAVIGERAR banner: target name + Stoppa on line 1, full distance/height text on line 2 with no
+    truncation.
 17. Close Companion with G.
 18. Verify the navigation HUD card is top-center, below any boss bar, not covering the crosshair
-    or hotbar.
+    or hotbar, and that the semi-transparent background lets the world show through while all text
+    remains easy to read.
 19. Stand still and turn the camera left/right.
 20. Verify the arrow rotates smoothly, and arrow UP means the target is straight ahead (target on
     your right → arrow points right; behind → down).

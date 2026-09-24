@@ -50,7 +50,13 @@ class Kistor2LayoutTest {
                     if (nav) {
                         assertTrue(bounds.contains(l.navBannerRect()), c);
                         assertTrue(bounds.contains(l.navStopBtnRect()), c);
-                        assertFalse(l.navBannerRect().intersects(l.navStopBtnRect()), c);
+                        assertEquals(bounds.width(), l.navBannerRect().width(), "Banner spans full width " + c);
+                        assertTrue(l.navBannerRect().contains(l.navStopBtnRect()), "Stoppa sits inside line 1 " + c);
+                        assertTrue(l.navBannerRect().contains(l.navTitleTextRect()), c);
+                        assertTrue(l.navBannerRect().contains(l.navDetailTextRect()), c);
+                        assertFalse(l.navTitleTextRect().intersects(l.navStopBtnRect()), "Title leaves room for Stoppa " + c);
+                        assertFalse(l.navTitleTextRect().intersects(l.navDetailTextRect()), "Line 2 sits below line 1 " + c);
+                        assertEquals(l.navBannerRect().width() - 8, l.navDetailTextRect().width(), "Line 2 gets full banner width " + c);
                         assertFalse(l.navBannerRect().intersects(l.searchRect()), c);
                     } else {
                         assertEquals(0, l.navBannerRect().width(), c);
@@ -105,6 +111,8 @@ class Kistor2LayoutTest {
         UiRect wide = new UiRect(0, 0, 400, 240);
         KistorLayout without = KistorLayout.calculate(wide, KistorLayout.Mode.SAKER, false, false, true);
         KistorLayout with = KistorLayout.calculate(wide, KistorLayout.Mode.SAKER, true, false, true);
+        assertEquals(23, with.navBannerRect().height());
+        assertEquals(wide.width(), with.navBannerRect().width());
         assertTrue(with.searchRect().y() > without.searchRect().y());
         assertTrue(with.listRect().y() > without.listRect().y());
     }

@@ -44,7 +44,7 @@ public record KistorLayout(
 
     public static final int COMPACT_WIDTH_THRESHOLD = 300;
     static final int HEADER_H = 13;
-    static final int BANNER_H = 13;
+    static final int BANNER_H = 23;
     static final int SEARCH_H = 13;
     static final int CONTROLS_H = 11;
     static final int ACTION_BTN_H = 11;
@@ -94,8 +94,10 @@ public record KistorLayout(
         UiRect banner = NONE;
         UiRect stopBtn = NONE;
         if (navigating) {
-            stopBtn = new UiRect(x + width - STOP_BTN_W, rowY, STOP_BTN_W, BANNER_H);
-            banner = new UiRect(x, rowY, Math.max(10, width - STOP_BTN_W - 2), BANNER_H);
+            // The banner spans the full width. Stoppa only occupies line 1, leaving line 2
+            // completely free for distance + height information.
+            banner = new UiRect(x, rowY, width, BANNER_H);
+            stopBtn = new UiRect(x + width - STOP_BTN_W - 1, rowY + 1, STOP_BTN_W, 11);
             rowY = banner.bottom() + 2;
         }
 
@@ -174,6 +176,21 @@ public record KistorLayout(
         return new KistorLayout(bounds, compact, safeMode, header, segSaker, segForvaring, segMaterial, banner, stopBtn,
                 search, clearBtn, filterBtn, sortBtn, groupBtn, list, detail,
                 primary, rename, favorite, copy, note, groupAssign, forget, back);
+    }
+
+    /** Text area for line 1 of the active-navigation banner, excluding the Stoppa button. */
+    public UiRect navTitleTextRect() {
+        if (navBannerRect.width() <= 0) return NONE;
+        int left = navBannerRect.x() + 4;
+        int right = Math.max(left + 1, navStopBtnRect.x() - 3);
+        return new UiRect(left, navBannerRect.y() + 1, Math.max(1, right - left), 10);
+    }
+
+    /** Full-width text area for line 2 of the active-navigation banner. */
+    public UiRect navDetailTextRect() {
+        if (navBannerRect.width() <= 0) return NONE;
+        return new UiRect(navBannerRect.x() + 4, navBannerRect.y() + 12,
+                Math.max(1, navBannerRect.width() - 8), 10);
     }
 
     /** The scrollable content area of the detail pane (below the compact back strip, if any). */

@@ -14,7 +14,7 @@ public final class KistorActions {
     public static void startNavigation(KistorRenderContext ctx, StoredContainerId id) {
         boolean started = ctx.runtime().navigation().start(ctx.manager(), ctx.contextKey(), id, ctx.nowMs());
         ctx.state().flashBanner(started
-                ? "Navigering startad · stäng Companion med G för att se pilen"
+                ? "Navigering startad • stäng med G för att se pilen"
                 : "Kunde inte starta navigering - förvaringen finns inte i indexet", ctx.nowMs(), BANNER_FLASH_MS);
     }
 

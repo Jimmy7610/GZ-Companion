@@ -187,16 +187,24 @@ public class KistorTabComponent implements TextInputHandler {
             ChestNavigationReading reading = ctx.playerPose().map(p -> ChestNavigationMath.evaluate(p, target)).orElse(null);
             detail = reading != null ? KistorNavigationText.bannerSummary(reading) : "";
         }
-        String text = "NAVIGERAR: " + target.displayTitle() + (detail.isEmpty() ? "" : " · " + detail);
-        TextUtil.drawScaledEllipsizedText(g, font, text, banner.x() + 4, banner.y() + 3, banner.width() - 8,
+        UiRect titleRect = layout.navTitleTextRect();
+        UiRect detailRect = layout.navDetailTextRect();
+        String title = "NAVIGERAR: " + target.displayTitle();
+        TextUtil.drawScaledEllipsizedText(g, font, title, titleRect.x(), titleRect.y() + 2, titleRect.width(),
                 TypographyScale.META.getScale(), GZTheme.COLOR_MINT, false);
-        StoredContainerId id = target.id();
-        UiRect openRect = new UiRect(banner.x(), banner.y(), banner.width(), banner.height());
-        ctx.addHit(openRect, () -> state.openStorage(id));
+        if (!detail.isEmpty()) {
+            TextUtil.drawScaledEllipsizedText(g, font, detail, detailRect.x(), detailRect.y() + 1, detailRect.width(),
+                    TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+        }
 
         UiRect stop = layout.navStopBtnRect();
         KistorUi.drawButton(g, font, stop, "Stoppa", false, ctx.hovered(stop), true);
+        // Stoppa is inside the full-width banner, so it MUST be registered before the banner hit.
         ctx.addHit(stop, () -> KistorActions.stopNavigation(ctx));
+
+        StoredContainerId id = target.id();
+        UiRect openRect = new UiRect(banner.x(), banner.y(), banner.width(), banner.height());
+        ctx.addHit(openRect, () -> state.openStorage(id));
     }
 
     private void renderSearch(KistorRenderContext ctx) {
