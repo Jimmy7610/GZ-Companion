@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] - 2026-09-24
+
 ### Added
 - **Kistor 2.0** - the Kistor tab is rebuilt around "where are my things?", still built only on
   storage the player has legitimately opened (the M3 capture system is unchanged). See
