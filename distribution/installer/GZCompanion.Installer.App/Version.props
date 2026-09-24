@@ -7,8 +7,8 @@
     version. See distribution/RELEASING.md.
   -->
   <PropertyGroup>
-    <Version>0.1.0.7</Version>
-    <FileVersion>0.1.0.7</FileVersion>
-    <InformationalVersion>0.1.0-alpha.7</InformationalVersion>
+    <Version>0.1.0.8</Version>
+    <FileVersion>0.1.0.8</FileVersion>
+    <InformationalVersion>0.1.0-alpha.8</InformationalVersion>
   </PropertyGroup>
 </Project>
