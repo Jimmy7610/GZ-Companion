@@ -9,6 +9,8 @@ import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestSlotEntry;
+import se.jimmyeliasson.gzcompanion.chest.model.PreviousSnapshot;
+import se.jimmyeliasson.gzcompanion.chest.model.StorageMetadata;
 import se.jimmyeliasson.gzcompanion.chest.model.StorageKind;
 import se.jimmyeliasson.gzcompanion.chest.model.StoragePosition;
 import se.jimmyeliasson.gzcompanion.chest.model.StorageShape;
@@ -91,7 +93,15 @@ public class JsonChestIndexStore implements ChestIndexStore {
                 }
             }
 
-            return ChestIndexLoadResult.loaded(new ChestIndexData(schemaVersion, contexts));
+            // Older schemas (v1) are migrated IN MEMORY ONLY: every field they have is kept exactly,
+            // every Kistor 2.0 field gets its safe default (see parseContainer), and the data is
+            // tagged with the current schema so the NEXT legitimate save writes v2. Merely loading a
+            // v1 file never rewrites it on disk.
+            if (schemaVersion < ChestIndexData.CURRENT_SCHEMA) {
+                LOGGER.info("Migrating chest index from schema v{} to v{} in memory (file is rewritten only on the next save).",
+                        schemaVersion, ChestIndexData.CURRENT_SCHEMA);
+            }
+            return ChestIndexLoadResult.loaded(new ChestIndexData(ChestIndexData.CURRENT_SCHEMA, contexts));
         } catch (Exception e) {
             LOGGER.error("Failed to parse chest index file {}. Preserving corrupt file.", filePath, e);
             backupCorruptFile();
@@ -141,23 +151,71 @@ public class JsonChestIndexStore implements ChestIndexStore {
         String label = obj.has("label") && !obj.get("label").isJsonNull() ? obj.get("label").getAsString() : null;
         long lastOpenedAtMs = obj.has("lastOpenedAtMs") ? obj.get("lastOpenedAtMs").getAsLong() : 0L;
 
-        List<ChestSlotEntry> slots = new ArrayList<>();
-        if (obj.has("slots") && obj.get("slots").isJsonArray()) {
-            JsonArray slotsArr = obj.getAsJsonArray("slots");
-            for (JsonElement slotEl : slotsArr) {
-                if (!slotEl.isJsonObject()) continue;
-                JsonObject slotObj = slotEl.getAsJsonObject();
-                int slotIndex = slotObj.has("slot") ? slotObj.get("slot").getAsInt() : -1;
-                String itemId = slotObj.has("itemId") && !slotObj.get("itemId").isJsonNull() ? slotObj.get("itemId").getAsString() : null;
-                int count = slotObj.has("count") ? slotObj.get("count").getAsInt() : 0;
-                if (slotIndex >= 0 && itemId != null && count > 0) {
-                    slots.add(new ChestSlotEntry(slotIndex, itemId, count));
-                }
-            }
-        }
+        List<ChestSlotEntry> slots = obj.has("slots") && obj.get("slots").isJsonArray()
+                ? parseSlots(obj.getAsJsonArray("slots")) : new ArrayList<>();
+
+        StorageMetadata metadata = parseMetadata(obj);
+        PreviousSnapshot previous = parsePrevious(obj);
 
         StoredContainerId id = new StoredContainerId(contextKey, dimensionKey, anchor, kind);
-        return new StoredContainer(id, label, partner, shape, lastOpenedAtMs, slots);
+        return new StoredContainer(id, label, partner, shape, lastOpenedAtMs, slots, metadata, previous);
+    }
+
+    private List<ChestSlotEntry> parseSlots(JsonArray slotsArr) {
+        List<ChestSlotEntry> slots = new ArrayList<>();
+        for (JsonElement slotEl : slotsArr) {
+            if (!slotEl.isJsonObject()) continue;
+            JsonObject slotObj = slotEl.getAsJsonObject();
+            int slotIndex = slotObj.has("slot") ? slotObj.get("slot").getAsInt() : -1;
+            String itemId = slotObj.has("itemId") && !slotObj.get("itemId").isJsonNull() ? slotObj.get("itemId").getAsString() : null;
+            int count = slotObj.has("count") ? slotObj.get("count").getAsInt() : 0;
+            if (slotIndex >= 0 && itemId != null && count > 0) {
+                slots.add(new ChestSlotEntry(slotIndex, itemId, count));
+            }
+        }
+        return slots;
+    }
+
+    /**
+     * Kistor 2.0 local metadata. Every field is optional: a v1 record (or any record missing a
+     * field) gets the safe default - not a favorite, no group, no note. A present-but-malformed
+     * value (e.g. a number where a string was expected) also falls back to the default instead of
+     * discarding the whole storage entry.
+     */
+    private StorageMetadata parseMetadata(JsonObject obj) {
+        boolean favorite = false;
+        String group = null;
+        String note = null;
+        try {
+            if (obj.has("favorite") && obj.get("favorite").isJsonPrimitive()) favorite = obj.get("favorite").getAsBoolean();
+        } catch (Exception ignored) {
+            favorite = false;
+        }
+        try {
+            if (obj.has("group") && obj.get("group").isJsonPrimitive()) group = obj.get("group").getAsString();
+        } catch (Exception ignored) {
+            group = null;
+        }
+        try {
+            if (obj.has("locationNote") && obj.get("locationNote").isJsonPrimitive()) note = obj.get("locationNote").getAsString();
+        } catch (Exception ignored) {
+            note = null;
+        }
+        return new StorageMetadata(favorite, group, note);
+    }
+
+    /** The single retained previous snapshot, if any. Malformed -> treated as absent. */
+    private PreviousSnapshot parsePrevious(JsonObject obj) {
+        try {
+            if (!obj.has("previous") || !obj.get("previous").isJsonObject()) return null;
+            JsonObject prev = obj.getAsJsonObject("previous");
+            long openedAt = prev.has("lastOpenedAtMs") ? prev.get("lastOpenedAtMs").getAsLong() : 0L;
+            List<ChestSlotEntry> slots = prev.has("slots") && prev.get("slots").isJsonArray()
+                    ? parseSlots(prev.getAsJsonArray("slots")) : List.of();
+            return new PreviousSnapshot(openedAt, slots);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     /**
@@ -230,7 +288,9 @@ public class JsonChestIndexStore implements ChestIndexStore {
 
     private JsonObject serializeIndex(ChestIndexData data) {
         JsonObject root = new JsonObject();
-        root.addProperty("schemaVersion", data.schemaVersion());
+        // Always the current schema: this serializer writes the current (v2) container shape, and
+        // any older data was already migrated in memory on load.
+        root.addProperty("schemaVersion", ChestIndexData.CURRENT_SCHEMA);
 
         JsonObject contextsObj = new JsonObject();
         for (Map.Entry<String, ContextContainers> ctxEntry : data.contexts().entrySet()) {
@@ -260,16 +320,37 @@ public class JsonChestIndexStore implements ChestIndexStore {
         obj.addProperty("shape", container.shape().name());
         obj.addProperty("lastOpenedAtMs", container.lastOpenedAtMs());
 
+        obj.add("slots", serializeSlots(container.slots()));
+
+        StorageMetadata metadata = container.metadata();
+        if (metadata.favorite()) {
+            obj.addProperty("favorite", true);
+        }
+        if (metadata.group() != null) {
+            obj.addProperty("group", metadata.group());
+        }
+        if (metadata.locationNote() != null) {
+            obj.addProperty("locationNote", metadata.locationNote());
+        }
+        if (container.previousSnapshot() != null) {
+            JsonObject prev = new JsonObject();
+            prev.addProperty("lastOpenedAtMs", container.previousSnapshot().openedAtMs());
+            prev.add("slots", serializeSlots(container.previousSnapshot().slots()));
+            obj.add("previous", prev);
+        }
+        return obj;
+    }
+
+    private JsonArray serializeSlots(List<ChestSlotEntry> slots) {
         JsonArray slotsArr = new JsonArray();
-        for (ChestSlotEntry slot : container.slots()) {
+        for (ChestSlotEntry slot : slots) {
             JsonObject slotObj = new JsonObject();
             slotObj.addProperty("slot", slot.slotIndex());
             slotObj.addProperty("itemId", slot.itemId());
             slotObj.addProperty("count", slot.count());
             slotsArr.add(slotObj);
         }
-        obj.add("slots", slotsArr);
-        return obj;
+        return slotsArr;
     }
 
     private JsonObject serializePosition(StoragePosition pos) {

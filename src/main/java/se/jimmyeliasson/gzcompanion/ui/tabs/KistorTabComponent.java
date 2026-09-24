@@ -1,715 +1,500 @@
 package se.jimmyeliasson.gzcompanion.ui.tabs;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import org.lwjgl.glfw.GLFW;
 import se.jimmyeliasson.gzcompanion.chest.ChestManager;
+import se.jimmyeliasson.gzcompanion.chest.KistorRuntime;
+import se.jimmyeliasson.gzcompanion.chest.bridge.MinecraftPlayerPoseReader;
+import se.jimmyeliasson.gzcompanion.chest.material.ChestMaterialRequest;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus;
-import se.jimmyeliasson.gzcompanion.chest.model.ChestSortMode;
-import se.jimmyeliasson.gzcompanion.chest.model.ChestTypeFilter;
-import se.jimmyeliasson.gzcompanion.chest.model.StorageShape;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainerId;
+import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationMath;
+import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationReading;
+import se.jimmyeliasson.gzcompanion.chest.nav.KistorNavigationText;
+import se.jimmyeliasson.gzcompanion.chest.nav.PlayerPose;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
+import se.jimmyeliasson.gzcompanion.settings.CompanionSettings;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
+import se.jimmyeliasson.gzcompanion.ui.ItemHoverTooltips;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
 import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
 import se.jimmyeliasson.gzcompanion.ui.layout.KistorLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
+import se.jimmyeliasson.gzcompanion.ui.tabs.kistor.KistorActions;
+import se.jimmyeliasson.gzcompanion.ui.tabs.kistor.KistorItemsView;
+import se.jimmyeliasson.gzcompanion.ui.tabs.kistor.KistorMaterialView;
+import se.jimmyeliasson.gzcompanion.ui.tabs.kistor.KistorRenderContext;
+import se.jimmyeliasson.gzcompanion.ui.tabs.kistor.KistorStorageView;
+import se.jimmyeliasson.gzcompanion.ui.tabs.kistor.KistorUi;
+import se.jimmyeliasson.gzcompanion.ui.tabs.kistor.KistorUiState;
+import se.jimmyeliasson.gzcompanion.ui.tabs.kistor.ScrollState;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * Renders the Kistor (Chest Manager) tab: a searchable, filterable, sortable local list of
- * storage the player has personally and legitimately opened, showing "senast känt innehåll"
- * (last known contents) — never presented as live/current state.
+ * Kistor 2.0 tab coordinator: header with the SAKER / FÖRVARING (/ MATERIAL) mode control, the
+ * "NAVIGERAR" banner, the global local search, per-mode controls, and input routing. The views
+ * themselves live in {@code ui.tabs.kistor} ({@link KistorItemsView}, {@link KistorStorageView},
+ * {@link KistorMaterialView}); every domain rule lives in the pure {@code chest} packages.
+ *
+ * <p>Everything shown is "senast känt" (last known) from storage the player personally and
+ * legitimately opened - never presented as live/current state.
  */
 public class KistorTabComponent implements TextInputHandler {
-    private static final int MAX_SEARCH_LENGTH = 48;
-    private static final int MAX_LABEL_LENGTH = 32;
-
-    private String searchText = "";
-    private boolean searchFocused = false;
-    private StoredContainerId selectedId = null;
-    private int listScrollOffset = 0;
-    private int detailScrollOffset = 0;
-    private boolean compactShowingDetail = false;
-    private boolean confirmingForget = false;
-    private long forgetConfirmExpiry = 0;
-
-    private ChestTypeFilter typeFilter = ChestTypeFilter.ALL;
-    private ChestSortMode sortMode = ChestSortMode.RECENT;
-
-    private boolean labelEditFocused = false;
-    private String labelEditText = "";
-
-    private long copyFeedbackExpiry = 0;
+    private final KistorUiState state = new KistorUiState();
+    private final KistorItemsView itemsView = new KistorItemsView();
+    private final KistorStorageView storageView = new KistorStorageView();
+    private final KistorMaterialView materialView = new KistorMaterialView();
+    private final ItemHoverTooltips itemHoverTooltips = new ItemHoverTooltips();
+    private final List<KistorRenderContext.Hit> hits = new ArrayList<>();
 
     private KistorLayout layout;
-    private final List<ListRowHit> listHitTargets = new ArrayList<>();
-    private UiRect labelFieldRect = null;
-
-    public record ListRowHit(UiRect rect, StoredContainerId id) {}
+    private boolean lastNavigating = false;
+    private boolean lastMaterialAvailable = false;
 
     public KistorLayout getLayout() {
         return layout;
     }
 
-    /** True while ANY Companion text input owned by this tab (search or label editor) is focused. */
+    public ItemHoverTooltips getItemHoverTooltips() {
+        return itemHoverTooltips;
+    }
+
+    /** True while ANY Companion text input owned by this tab (search or an inline editor) is focused. */
+    @Override
     public boolean isTextInputFocused() {
-        return searchFocused || labelEditFocused;
+        return state.isTextInputFocused();
     }
 
     public boolean isSearchFocused() {
-        return searchFocused;
+        return state.searchFocused;
     }
 
+    /**
+     * Opens "Hitta material i kistor" for a planner's material requirement set (Settlement /
+     * Byggplaner). The request itself is session-only state in {@link KistorRuntime}.
+     */
+    public void openMaterialRequest(ChestMaterialRequest request) {
+        if (request == null) return;
+        CompanionSession session = CompanionSession.getInstance();
+        session.getKistorRuntime().openMaterialRequest(session.getCurrentStorageContext(), request);
+        state.switchMode(KistorLayout.Mode.MATERIAL);
+        state.mode = KistorLayout.Mode.MATERIAL;
+        state.materialShowPickupList = false;
+        state.materialScroll.reset();
+    }
+
+    private KistorLayout computeLayout(UiRect bounds, boolean navigating, boolean materialAvailable) {
+        if (state.mode == KistorLayout.Mode.MATERIAL && !materialAvailable) state.mode = KistorLayout.Mode.SAKER;
+        return KistorLayout.calculate(bounds, state.mode, navigating, materialAvailable, state.compactShowingDetail);
+    }
+
+    // ------------------------------------------------------------------
+    // Rendering
+    // ------------------------------------------------------------------
+
     public void render(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
-        this.layout = KistorLayout.calculate(bounds);
-        listHitTargets.clear();
-        labelFieldRect = null;
+        hits.clear();
+        itemHoverTooltips.clear();
+        long now = System.currentTimeMillis();
 
         CompanionSession session = CompanionSession.getInstance();
         ChestManager manager = session.getChestManager();
+        KistorRuntime runtime = session.getKistorRuntime();
         String contextKey = session.getCurrentStorageContext();
 
-        if (manager == null || !manager.getStatus().isAvailable()) {
-            drawUnavailableState(extractor, font, bounds, manager != null ? manager.getStatus() : ChestManagerStatus.UNAVAILABLE);
+        // Validate navigation against the CURRENT index/context (stops safely if forgotten/reset).
+        runtime.navigation().onContextObserved(contextKey);
+        Optional<StoredContainer> navTarget = runtime.navigation().resolveTarget(manager);
+        boolean materialAvailable = runtime.materialRequest(contextKey).isPresent();
+
+        this.layout = computeLayout(bounds, navTarget.isPresent(), materialAvailable);
+        this.lastNavigating = navTarget.isPresent();
+        this.lastMaterialAvailable = materialAvailable;
+
+        boolean available = manager != null && manager.getStatus().isAvailable();
+        renderHeader(extractor, font, manager, contextKey, mouseX, mouseY, available, materialAvailable);
+        if (!available) {
+            drawUnavailableState(extractor, font, new UiRect(bounds.x(), layout.searchRect().y(), bounds.width(), bounds.bottom() - layout.searchRect().y()),
+                    manager != null ? manager.getStatus() : ChestManagerStatus.UNAVAILABLE);
             return;
         }
 
-        List<StoredContainer> all = manager.getContainers(contextKey);
-        List<StoredContainer> filtered = manager.search(contextKey, searchText, typeFilter, sortMode);
-        boolean isFiltering = !searchText.isBlank() || typeFilter != ChestTypeFilter.ALL;
+        Optional<PlayerPose> pose = MinecraftPlayerPoseReader.read(1.0f);
+        CompanionSettings settings = session.getSettingsManager().getSettings();
+        KistorRenderContext ctx = new KistorRenderContext(extractor, font, mouseX, mouseY, now, layout, state, manager, runtime, contextKey,
+                pose, settings.showTechnicalIds(), settings.useLastKnownChestDataInPlanners(), hits, itemHoverTooltips);
 
-        renderHeader(extractor, font, layout.headerRect(), all.size(), filtered.size(), isFiltering);
-        renderSearch(extractor, font, layout.searchRect(), layout.clearBtnRect(), mouseX, mouseY);
-        renderControls(extractor, font, layout.filterBtnRect(), layout.sortBtnRect(), mouseX, mouseY);
+        navTarget.ifPresent(target -> renderNavigationBanner(ctx, target));
+        renderSearch(ctx);
+        renderControls(ctx);
 
-        if (all.isEmpty()) {
-            renderEmptyState(extractor, font, contentArea(bounds), true);
-            return;
+        switch (state.mode) {
+            case SAKER -> itemsView.render(ctx);
+            case FORVARING -> storageView.render(ctx);
+            case MATERIAL -> runtime.materialRequest(contextKey).ifPresent(request -> materialView.render(ctx, request));
         }
+    }
 
-        // Deterministic selection upkeep: keep the current selection if it is still visible in
-        // the filtered results; otherwise select the first visible result; otherwise clear it.
-        if (selectedId == null || filtered.stream().noneMatch(c -> c.id().equals(selectedId))) {
-            selectedId = filtered.isEmpty() ? null : filtered.get(0).id();
-            if (selectedId == null) {
-                compactShowingDetail = false;
+    private void renderHeader(GuiGraphicsExtractor g, Font font, ChestManager manager, String contextKey, int mouseX, int mouseY,
+                              boolean available, boolean materialAvailable) {
+        UiRect header = layout.headerRect();
+        GZTheme.drawIcon(g, IconId.CHEST, header.x(), header.y() + 1, 10, GZTheme.COLOR_MINT);
+        TextUtil.drawScaledText(g, font, "Kistor", header.x() + 13, header.y() + 1, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
+        if (available) {
+            int count = manager.getIndexedCount(contextKey);
+            int countX = header.x() + 13 + TextUtil.scaledWidth(font, "Kistor", TypographyScale.HEADING.getScale()) + 6;
+            int maxW = layout.modeSakerRect().x() - countX - 4;
+            if (maxW > 20) {
+                TextUtil.drawScaledEllipsizedText(g, font, count + " sparade", countX, header.y() + 3, maxW,
+                        TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
             }
         }
-
-        if (filtered.isEmpty()) {
-            renderEmptyState(extractor, font, contentArea(bounds), false);
-            return;
+        drawSegment(g, font, layout.modeSakerRect(), "SAKER", state.mode == KistorLayout.Mode.SAKER, mouseX, mouseY);
+        drawSegment(g, font, layout.modeForvaringRect(), "FÖRVARING", state.mode == KistorLayout.Mode.FORVARING, mouseX, mouseY);
+        if (materialAvailable) {
+            drawSegment(g, font, layout.modeMaterialRect(), "MATERIAL", state.mode == KistorLayout.Mode.MATERIAL, mouseX, mouseY);
         }
+    }
 
-        if (layout.isCompact()) {
-            if (compactShowingDetail && selectedId != null) {
-                renderDetailPane(extractor, font, layout.detailRect(), manager, contextKey, mouseX, mouseY, true);
-            } else {
-                renderList(extractor, font, layout.listRect(), filtered, mouseX, mouseY);
-            }
+    private static void drawSegment(GuiGraphicsExtractor g, Font font, UiRect rect, String label, boolean active, int mouseX, int mouseY) {
+        boolean hovered = rect.contains(mouseX, mouseY);
+        GZTheme.drawCard(g, rect, active ? GZTheme.COLOR_NAV_ACTIVE : (hovered ? GZTheme.COLOR_NAV_HOVER : GZTheme.COLOR_CARD_INNER),
+                active ? GZTheme.COLOR_BORDER_EMERALD : GZTheme.COLOR_BORDER_SUBTLE);
+        TextUtil.drawScaledCenteredText(g, font, label, rect.x() + rect.width() / 2, rect.y() + (rect.height() - 7) / 2, rect.width() - 4,
+                TypographyScale.META.getScale(), active ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_SECONDARY, active);
+    }
+
+    private void renderNavigationBanner(KistorRenderContext ctx, StoredContainer target) {
+        GuiGraphicsExtractor g = ctx.extractor();
+        Font font = ctx.font();
+        UiRect banner = layout.navBannerRect();
+        GZTheme.drawCard(g, banner, 0x3310B981, GZTheme.COLOR_BORDER_EMERALD);
+
+        String detail;
+        if (state.bannerFlash != null && ctx.nowMs() < state.bannerFlashExpiry) {
+            detail = state.bannerFlash;
         } else {
-            renderList(extractor, font, layout.listRect(), filtered, mouseX, mouseY);
-            renderDetailPane(extractor, font, layout.detailRect(), manager, contextKey, mouseX, mouseY, false);
+            ChestNavigationReading reading = ctx.playerPose().map(p -> ChestNavigationMath.evaluate(p, target)).orElse(null);
+            detail = reading != null ? KistorNavigationText.bannerSummary(reading) : "";
         }
+        String text = "NAVIGERAR: " + target.displayTitle() + (detail.isEmpty() ? "" : " · " + detail);
+        TextUtil.drawScaledEllipsizedText(g, font, text, banner.x() + 4, banner.y() + 3, banner.width() - 8,
+                TypographyScale.META.getScale(), GZTheme.COLOR_MINT, false);
+        StoredContainerId id = target.id();
+        UiRect openRect = new UiRect(banner.x(), banner.y(), banner.width(), banner.height());
+        ctx.addHit(openRect, () -> state.openStorage(id));
+
+        UiRect stop = layout.navStopBtnRect();
+        KistorUi.drawButton(g, font, stop, "Stoppa", false, ctx.hovered(stop), true);
+        ctx.addHit(stop, () -> KistorActions.stopNavigation(ctx));
     }
 
-    private UiRect contentArea(UiRect bounds) {
-        return new UiRect(bounds.x(), layout.listRect().y(), bounds.width(),
-                Math.max(10, layout.forgetBtnRect().y() - 4 - layout.listRect().y()));
-    }
-
-    private void renderHeader(GuiGraphicsExtractor extractor, Font font, UiRect headerRect, int totalCount, int filteredCount, boolean isFiltering) {
-        GZTheme.drawIcon(extractor, IconId.CHEST, headerRect.x(), headerRect.y() + 1, 10, GZTheme.COLOR_MINT);
-        TextUtil.drawScaledText(extractor, font, "Kistor", headerRect.x() + 13, headerRect.y() + 1,
-                TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
-
-        String countLabel = isFiltering ? (filteredCount + " av " + totalCount) : (totalCount + " sparade");
-        int badgeW = TextUtil.scaledWidth(font, countLabel, TypographyScale.META.getScale()) + 14;
-        GZTheme.drawBadge(extractor, font, headerRect.right() - badgeW, headerRect.y(), countLabel, GZTheme.COLOR_TEXT_SECONDARY, GZTheme.COLOR_STATUS_GREY);
-    }
-
-    private void renderSearch(GuiGraphicsExtractor extractor, Font font, UiRect searchRect, UiRect clearBtnRect, int mouseX, int mouseY) {
-        int bg = searchFocused ? GZTheme.COLOR_CARD_HOVER : GZTheme.COLOR_CARD_INNER;
-        int border = searchFocused ? GZTheme.COLOR_BORDER_EMERALD : GZTheme.COLOR_BORDER_SUBTLE;
-        GZTheme.drawCard(extractor, searchRect, bg, border);
-
-        int textX = searchRect.x() + 4;
-        int textY = searchRect.y() + 3;
-        int maxW = searchRect.width() - 8;
-
-        if (searchText.isEmpty() && !searchFocused) {
-            TextUtil.drawScaledEllipsizedText(extractor, font, "Sök föremål, etikett, typ, dimension eller koordinat...", textX, textY,
-                    maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-        } else {
-            String shown = searchText + (searchFocused && ((System.currentTimeMillis() / 500) % 2 == 0) ? "_" : "");
-            TextUtil.drawScaledEllipsizedText(extractor, font, shown, textX, textY,
-                    maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
-        }
-
-        if (!searchText.isEmpty()) {
-            boolean hov = clearBtnRect.contains(mouseX, mouseY);
-            GZTheme.drawCard(extractor, clearBtnRect, hov ? GZTheme.COLOR_CARD_HOVER : GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
-            TextUtil.drawCenteredText(extractor, font, "x", clearBtnRect.x() + (clearBtnRect.width() / 2), clearBtnRect.y() + 2,
-                    clearBtnRect.width(), hov ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_MUTED, false);
-        }
-    }
-
-    private void renderControls(GuiGraphicsExtractor extractor, Font font, UiRect filterBtnRect, UiRect sortBtnRect, int mouseX, int mouseY) {
-        boolean filterHov = filterBtnRect.contains(mouseX, mouseY);
-        boolean filterActive = typeFilter != ChestTypeFilter.ALL;
-        String filterLabel = "Typ: " + typeFilter.getDisplayName();
-        GZTheme.drawCard(extractor, filterBtnRect, filterActive ? GZTheme.COLOR_NAV_ACTIVE : (filterHov ? GZTheme.COLOR_NAV_HOVER : GZTheme.COLOR_CARD_INNER),
-                filterActive ? GZTheme.COLOR_BORDER_EMERALD : GZTheme.COLOR_BORDER_SUBTLE);
-        TextUtil.drawScaledEllipsizedText(extractor, font, filterLabel, filterBtnRect.x() + 3, filterBtnRect.y() + 2,
-                filterBtnRect.width() - 6, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-
-        boolean sortHov = sortBtnRect.contains(mouseX, mouseY);
-        String sortLabel = "Sortering: " + sortMode.getDisplayName();
-        GZTheme.drawCard(extractor, sortBtnRect, sortHov ? GZTheme.COLOR_NAV_HOVER : GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
-        TextUtil.drawScaledEllipsizedText(extractor, font, sortLabel, sortBtnRect.x() + 3, sortBtnRect.y() + 2,
-                sortBtnRect.width() - 6, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-    }
-
-    private void renderEmptyState(GuiGraphicsExtractor extractor, Font font, UiRect area, boolean noIndexedStorageAtAll) {
-        GZTheme.drawCard(extractor, area, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
-        int centerX = area.x() + (area.width() / 2);
-        int maxW = area.width() - 20;
-        int y = area.y() + Math.max(6, (area.height() / 2) - 24);
-
-        GZTheme.drawIcon(extractor, IconId.CHEST, centerX - 8, y, 16, GZTheme.COLOR_MINT);
-        y += 20;
-
-        if (noIndexedStorageAtAll) {
-            TextUtil.drawCenteredText(extractor, font, "Du har inga sparade förvaringar ännu.", centerX, y, maxW, GZTheme.COLOR_TEXT_PRIMARY, true);
-            y += 12;
-            y += TextUtil.drawScaledWrappedText(extractor, font,
-                    "Öppna en kista, tunna eller annan stödd förvaring så sparar GZ Companion senast känt innehåll automatiskt.",
-                    area.x() + 10, y, maxW, TypographyScale.SMALL.getScale(), 3, 1, GZTheme.COLOR_TEXT_SECONDARY, false);
-            y += 6;
-            TextUtil.drawScaledCenteredText(extractor, font, "Inga oöppnade förvaringar skannas.", centerX, y, maxW,
-                    TypographyScale.META.getScale(), GZTheme.COLOR_STATUS_GREEN, false);
-        } else {
-            TextUtil.drawCenteredText(extractor, font, "Inga sparade förvaringar matchar sökningen.", centerX, y, maxW, GZTheme.COLOR_TEXT_PRIMARY, true);
-        }
-    }
-
-    public static int calculateMaxListScroll(UiRect listRect, int rowCount) {
-        return calculateMaxListScroll(listRect, rowCount, false);
-    }
-
-    public static int calculateMaxListScroll(UiRect listRect, int rowCount, boolean compact) {
-        int rowH = rowHeight(compact);
-        int totalH = 15 + (rowCount * (rowH + 1)) + 4;
-        int visibleH = Math.max(1, listRect.height() - 4);
-        return Math.max(0, totalH - visibleH);
-    }
-
-    private static int rowHeight(boolean compact) {
-        return compact ? 22 : 30;
-    }
-
-    private void renderList(GuiGraphicsExtractor extractor, Font font, UiRect listRect, List<StoredContainer> containers, int mouseX, int mouseY) {
-        GZTheme.drawCard(extractor, listRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
-
-        boolean compact = layout.isCompact();
-        int rowH = rowHeight(compact);
-        int maxScroll = calculateMaxListScroll(listRect, containers.size(), compact);
-        this.listScrollOffset = Math.max(0, Math.min(listScrollOffset, maxScroll));
-
-        extractor.enableScissor(listRect.x() + 1, listRect.y() + 1, listRect.right() - 1, listRect.bottom() - 1);
-
-        int currentY = listRect.y() + 3 - listScrollOffset;
-        TextUtil.drawScaledText(extractor, font, "FÖRVARINGAR", listRect.x() + 4, currentY,
-                TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-        currentY += 12;
-
-        for (StoredContainer container : containers) {
-            UiRect rowRect = new UiRect(listRect.x() + 2, currentY, listRect.width() - 4, rowH);
-            if (rowRect.bottom() >= listRect.y() + 2 && rowRect.y() <= listRect.bottom() - 2) {
-                listHitTargets.add(new ListRowHit(rowRect, container.id()));
-            }
-
-            if (currentY + rowH >= listRect.y() && currentY <= listRect.bottom()) {
-                boolean isSelected = container.id().equals(selectedId);
-                boolean isHovered = rowRect.contains(mouseX, mouseY);
-
-                int bg = isSelected ? GZTheme.COLOR_NAV_ACTIVE : (isHovered ? GZTheme.COLOR_NAV_HOVER : 0);
-                int border = isSelected ? GZTheme.COLOR_BORDER_EMERALD : 0;
-                if (bg != 0) GZTheme.drawCard(extractor, rowRect, bg, border);
-
-                boolean hasLabel = container.label() != null && !container.label().isBlank();
-                String title = hasLabel ? container.label() : container.kind().getDisplayName();
-                String secondary = hasLabel ? container.kind().getDisplayName() + " · " + container.anchor().toDisplayString()
-                        : container.anchor().toDisplayString();
-
-                TextUtil.drawScaledEllipsizedText(extractor, font, title, rowRect.x() + 4, rowRect.y() + 3,
-                        rowRect.width() - 8, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, isSelected);
-                TextUtil.drawScaledEllipsizedText(extractor, font, secondary, rowRect.x() + 4, rowRect.y() + 12,
-                        rowRect.width() - 8, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-
-                if (!compact) {
-                    TextUtil.drawScaledEllipsizedText(extractor, font, formatRelativeTime(container.lastOpenedAtMs()), rowRect.x() + 4, rowRect.y() + 20,
-                            rowRect.width() - 8, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-                }
-            }
-
-            currentY += rowH + 1;
-        }
-
-        extractor.disableScissor();
-    }
-
-    private int calculateMaxDetailScroll(Font font, UiRect contentArea, StoredContainer container) {
-        if (font == null || contentArea == null || container == null) return 0;
-        int maxW = Math.max(10, contentArea.width() - 8);
-        int totalH = 4;
-        if (container.label() != null && !container.label().isBlank()) totalH += 11;
-        if (labelEditFocused) totalH += 11;
-        totalH += 10; // type · dimension
-        totalH += 9;  // coordinates
-        if (shapeStatusText(container) != null) totalH += 9;
-        totalH += 12; // senast öppnad
-        totalH += 12; // "SENAST KÄNT INNEHÅLL" header
-        totalH += Math.max(1, container.aggregatedItems().size()) * 10;
-        totalH += TextUtil.measureWrappedHeight(font, "Kan ha ändrats sedan du öppnade förvaringen.", maxW, TypographyScale.META.getScale(), 1) + 10;
-        return Math.max(0, totalH - contentArea.height());
-    }
-
-    private String shapeStatusText(StoredContainer container) {
-        return switch (container.shape()) {
-            case DOUBLE -> "Dubbel kista";
-            case UNKNOWN -> container.kind().isChestFamily() ? "(kan vara dubbel)" : null;
-            case SINGLE, NOT_APPLICABLE -> null;
+    private void renderSearch(KistorRenderContext ctx) {
+        GuiGraphicsExtractor g = ctx.extractor();
+        Font font = ctx.font();
+        String placeholder = switch (state.mode) {
+            case SAKER -> "Vad letar du efter? Sök sak, förvaring, grupp, plats...";
+            case FORVARING -> "Vad letar du efter? Sök förvaring, grupp, notering, koordinat...";
+            case MATERIAL -> "Vad letar du efter?";
         };
+        KistorUi.drawTextField(g, font, layout.searchRect(), state.searchText, placeholder, state.searchFocused, ctx.nowMs());
+        UiRect clear = layout.clearBtnRect();
+        if (!state.searchText.isEmpty()) {
+            boolean hov = ctx.hovered(clear);
+            GZTheme.drawCard(g, clear, hov ? GZTheme.COLOR_CARD_HOVER : GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
+            TextUtil.drawCenteredText(g, font, "x", clear.x() + clear.width() / 2, clear.y() + 2, clear.width(),
+                    hov ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_MUTED, false);
+        }
     }
 
-    private void renderDetailPane(GuiGraphicsExtractor extractor, Font font, UiRect detailRect, ChestManager manager,
-                                  String contextKey, int mouseX, int mouseY, boolean isCompact) {
-        GZTheme.drawCard(extractor, detailRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
-
-        StoredContainer container = selectedId != null ? manager.getContainer(contextKey, selectedId).orElse(null) : null;
-        if (container == null) {
-            TextUtil.drawCenteredText(extractor, font, "Välj en förvaring i listan", detailRect.x() + (detailRect.width() / 2),
-                    detailRect.y() + (detailRect.height() / 2) - 4, detailRect.width(), GZTheme.COLOR_TEXT_MUTED, false);
-            return;
-        }
-
-        int pad = 5;
-        int contentTop = detailRect.y() + (isCompact ? 16 : 4);
-        UiRect contentArea = new UiRect(detailRect.x() + 1, contentTop, detailRect.width() - 2, detailRect.bottom() - contentTop - 1);
-
-        int maxScroll = calculateMaxDetailScroll(font, contentArea, container);
-        this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset, maxScroll));
-
-        if (isCompact) {
-            UiRect backBtn = layout.backBtnRect();
-            boolean backHover = backBtn.contains(mouseX, mouseY);
-            GZTheme.drawButton(extractor, font, backBtn, "< Lista", false, backHover, TypographyScale.SMALL.getScale());
-        }
-
-        extractor.enableScissor(contentArea.x(), contentArea.y(), contentArea.right(), contentArea.bottom());
-        int currY = contentArea.y() + 2 - detailScrollOffset;
-        int maxW = contentArea.width() - (pad * 2);
-
-        // 1. Local label (if any), or an inline editor while renaming.
-        boolean hasLabel = container.label() != null && !container.label().isBlank();
-        if (labelEditFocused) {
-            UiRect fieldRect = new UiRect(contentArea.x() + pad, currY, maxW, 11);
-            this.labelFieldRect = fieldRect;
-            GZTheme.drawCard(extractor, fieldRect, GZTheme.COLOR_CARD_HOVER, GZTheme.COLOR_BORDER_EMERALD);
-            String shown = labelEditText + (((System.currentTimeMillis() / 500) % 2 == 0) ? "_" : "");
-            TextUtil.drawScaledEllipsizedText(extractor, font, shown, fieldRect.x() + 3, fieldRect.y() + 2,
-                    fieldRect.width() - 6, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
-            currY += 11;
-        } else if (hasLabel) {
-            TextUtil.drawScaledEllipsizedText(extractor, font, container.label(), contentArea.x() + pad, currY,
-                    maxW, TypographyScale.HEADING.getScale(), GZTheme.COLOR_MINT, true);
-            currY += 11;
-        }
-
-        // 2. Storage type · dimension
-        String typeLine = container.kind().getDisplayName() + " · " + shortDimensionName(container.dimensionKey());
-        TextUtil.drawScaledEllipsizedText(extractor, font, typeLine, contentArea.x() + pad, currY,
-                maxW, hasLabel || labelEditFocused ? TypographyScale.SMALL.getScale() : TypographyScale.HEADING.getScale(),
-                hasLabel || labelEditFocused ? GZTheme.COLOR_TEXT_SECONDARY : GZTheme.COLOR_TEXT_PRIMARY, !(hasLabel || labelEditFocused));
-        currY += 10;
-
-        // 3. Coordinates
-        TextUtil.drawScaledEllipsizedText(extractor, font, container.anchor().toDisplayString(), contentArea.x() + pad, currY,
-                maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-        currY += 9;
-
-        // 4. Shape status, only if relevant
-        String shapeText = shapeStatusText(container);
-        if (shapeText != null) {
-            int shapeColor = container.shape() == StorageShape.UNKNOWN ? GZTheme.COLOR_STATUS_YELLOW : GZTheme.COLOR_TEXT_MUTED;
-            TextUtil.drawScaledEllipsizedText(extractor, font, shapeText, contentArea.x() + pad, currY,
-                    maxW, TypographyScale.META.getScale(), shapeColor, false);
-            currY += 9;
-        }
-
-        // 5. Senast öppnad
-        TextUtil.drawScaledEllipsizedText(extractor, font, "Senast öppnad: " + formatRelativeTime(container.lastOpenedAtMs()),
-                contentArea.x() + pad, currY, maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-        currY += 12;
-
-        // 6. SENAST KÄNT INNEHÅLL + items
-        TextUtil.drawScaledText(extractor, font, "SENAST KÄNT INNEHÅLL", contentArea.x() + pad, currY,
-                TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-        currY += 10;
-
-        List<StoredContainer.AggregatedItem> items = new ArrayList<>(container.aggregatedItems());
-        items.sort(Comparator.comparing((StoredContainer.AggregatedItem i) -> manager.itemDisplayName(i.itemId()), String.CASE_INSENSITIVE_ORDER));
-
-        if (items.isEmpty()) {
-            TextUtil.drawScaledText(extractor, font, "(Tom förvaring senast öppnad)", contentArea.x() + pad, currY,
-                    TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-            currY += 10;
-        } else {
-            for (StoredContainer.AggregatedItem item : items) {
-                String name = manager.itemDisplayName(item.itemId());
-                String countText = String.valueOf(item.count());
-                int countW = TextUtil.scaledWidth(font, countText, TypographyScale.SMALL.getScale());
-                TextUtil.drawScaledEllipsizedText(extractor, font, name, contentArea.x() + pad, currY,
-                        maxW - countW - 6, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
-                TextUtil.drawScaledRightAlignedText(extractor, font, countText, contentArea.x() + pad + maxW, currY,
-                        countW + 2, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-                currY += 10;
+    private void renderControls(KistorRenderContext ctx) {
+        GuiGraphicsExtractor g = ctx.extractor();
+        Font font = ctx.font();
+        switch (state.mode) {
+            case SAKER -> {
+                drawControl(ctx, layout.filterBtnRect(), "Typ: " + state.typeFilter.getDisplayName(), state.typeFilter != se.jimmyeliasson.gzcompanion.chest.model.ChestTypeFilter.ALL);
+                drawControl(ctx, layout.sortBtnRect(), "Sortering: " + state.itemSort.getDisplayName(), false);
+                drawControl(ctx, layout.groupBtnRect(), "Grupp: " + state.groupFilter.displayName(), state.groupFilter.kind() != se.jimmyeliasson.gzcompanion.chest.model.ChestGroupFilter.Kind.ALL);
+            }
+            case FORVARING -> {
+                drawControl(ctx, layout.filterBtnRect(), "Typ: " + state.typeFilter.getDisplayName(), state.typeFilter != se.jimmyeliasson.gzcompanion.chest.model.ChestTypeFilter.ALL);
+                drawControl(ctx, layout.sortBtnRect(), "Sortering: " + state.storageSort.getDisplayName(), false);
+                drawControl(ctx, layout.groupBtnRect(), "Grupp: " + state.groupFilter.displayName(), state.groupFilter.kind() != se.jimmyeliasson.gzcompanion.chest.model.ChestGroupFilter.Kind.ALL);
+            }
+            case MATERIAL -> {
+                drawControl(ctx, layout.filterBtnRect(), state.materialShowPickupList ? "Visa: Hämtningslista" : "Visa: Tillgång", true);
+                drawControl(ctx, layout.sortBtnRect(), state.materialShowPickupList ? "Visa tillgång" : "Hämtningslista", false);
+                drawControl(ctx, layout.groupBtnRect(), "Stäng materiallista", false);
             }
         }
-        currY += 4;
-
-        // 7. Last-known warning
-        TextUtil.drawScaledWrappedText(extractor, font, "Kan ha ändrats sedan du öppnade förvaringen.",
-                contentArea.x() + pad, currY, maxW, TypographyScale.META.getScale(), 2, 1, GZTheme.COLOR_STATUS_YELLOW, false);
-
-        extractor.disableScissor();
-
-        renderActionRow(extractor, font, mouseX, mouseY, hasLabel);
     }
 
-    private void renderActionRow(GuiGraphicsExtractor extractor, Font font, int mouseX, int mouseY, boolean hasLabel) {
-        UiRect renameBtn = layout.renameBtnRect();
-        UiRect copyBtn = layout.copyBtnRect();
-        UiRect forgetBtn = layout.forgetBtnRect();
-
-        String renameLabel = labelEditFocused ? "Spara" : (hasLabel ? "Byt namn" : "Namnge");
-        GZTheme.drawButton(extractor, font, renameBtn, renameLabel, false, renameBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
-
-        boolean copyFeedbackActive = System.currentTimeMillis() < copyFeedbackExpiry;
-        String copyLabel = copyFeedbackActive ? "Kopierat!" : "Kopiera koord.";
-        int copyBg = copyFeedbackActive ? 0x4010B981 : (copyBtn.contains(mouseX, mouseY) ? GZTheme.COLOR_NAV_HOVER : GZTheme.COLOR_CARD_INNER);
-        int copyBorder = copyFeedbackActive ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_BORDER_SUBTLE;
-        GZTheme.drawCard(extractor, copyBtn, copyBg, copyBorder);
-        TextUtil.drawScaledCenteredText(extractor, font, copyLabel, copyBtn.x() + (copyBtn.width() / 2),
-                copyBtn.y() + ((copyBtn.height() - 7) / 2), copyBtn.width() - 4,
-                TypographyScale.META.getScale(), copyFeedbackActive ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_TEXT_MUTED, false);
-
-        boolean confirmActive = isForgetConfirmActive();
-        String forgetLabel = confirmActive ? "Bekräfta!" : "Glöm förvaring";
-        int fBg = confirmActive ? 0x99EF4444 : (forgetBtn.contains(mouseX, mouseY) ? GZTheme.COLOR_NAV_HOVER : GZTheme.COLOR_CARD_INNER);
-        int fBorder = confirmActive ? 0xFFEF4444 : GZTheme.COLOR_BORDER_SUBTLE;
-        int fText = confirmActive ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_MUTED;
-        GZTheme.drawCard(extractor, forgetBtn, fBg, fBorder);
-        TextUtil.drawScaledCenteredText(extractor, font, forgetLabel, forgetBtn.x() + (forgetBtn.width() / 2),
-                forgetBtn.y() + ((forgetBtn.height() - 7) / 2), forgetBtn.width() - 4, TypographyScale.META.getScale(), fText, false);
+    private void drawControl(KistorRenderContext ctx, UiRect rect, String label, boolean active) {
+        GuiGraphicsExtractor g = ctx.extractor();
+        boolean hov = ctx.hovered(rect);
+        GZTheme.drawCard(g, rect, active ? GZTheme.COLOR_NAV_ACTIVE : (hov ? GZTheme.COLOR_NAV_HOVER : GZTheme.COLOR_CARD_INNER),
+                active ? GZTheme.COLOR_BORDER_EMERALD : GZTheme.COLOR_BORDER_SUBTLE);
+        TextUtil.drawScaledEllipsizedText(g, ctx.font(), label, rect.x() + 3, rect.y() + 2, rect.width() - 6,
+                TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
     }
 
-    private void drawUnavailableState(GuiGraphicsExtractor extractor, Font font, UiRect bounds, ChestManagerStatus status) {
-        GZTheme.drawCard(extractor, bounds, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
+    private void drawUnavailableState(GuiGraphicsExtractor extractor, Font font, UiRect area, ChestManagerStatus status) {
+        GZTheme.drawCard(extractor, area, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         String msg = switch (status) {
             case ERROR -> "Fel inträffade vid inläsning av kistindexet.";
             case UNAVAILABLE -> "Kistor är inte tillgängligt just nu.";
             case INCOMPATIBLE -> "Kistindexet är sparat av en nyare version av GZ Companion och kan inte läsas här.";
             case LOADED -> "Laddar...";
         };
-        TextUtil.drawCenteredText(extractor, font, msg, bounds.x() + (bounds.width() / 2),
-                bounds.y() + (bounds.height() / 2) - 4, bounds.width(), GZTheme.COLOR_TEXT_MUTED, false);
+        TextUtil.drawScaledWrappedText(extractor, font, msg, area.x() + 10, area.y() + (area.height() / 2) - 8, area.width() - 20,
+                TypographyScale.SMALL.getScale(), 3, 1, GZTheme.COLOR_TEXT_MUTED, false);
     }
 
-    private boolean isForgetConfirmActive() {
-        return confirmingForget && System.currentTimeMillis() < forgetConfirmExpiry;
+    /**
+     * Legacy pure list-scroll bound (kept for layout tests): the FÖRVARING list's section header
+     * plus one row pitch per storage row, against the list viewport.
+     */
+    public static int calculateMaxListScroll(UiRect listRect, int rowCount) {
+        return calculateMaxListScroll(listRect, rowCount, false);
     }
 
-    private String shortDimensionName(String dimensionKey) {
-        if (dimensionKey == null) return "Okänd värld";
-        return switch (dimensionKey) {
-            case "minecraft:overworld" -> "Overworld";
-            case "minecraft:the_nether" -> "Nether";
-            case "minecraft:the_end" -> "The End";
-            default -> dimensionKey.contains(":") ? dimensionKey.substring(dimensionKey.indexOf(':') + 1) : dimensionKey;
-        };
-    }
-
-    private String formatRelativeTime(long thenMs) {
-        if (thenMs <= 0) return "okänt";
-        long diff = Math.max(0, System.currentTimeMillis() - thenMs);
-        if (diff < 60_000L) return "just nu";
-        if (diff < 3_600_000L) return (diff / 60_000L) + " min sedan";
-        if (diff < 86_400_000L) return (diff / 3_600_000L) + " h sedan";
-        return (diff / 86_400_000L) + " dagar sedan";
+    public static int calculateMaxListScroll(UiRect listRect, int rowCount, boolean compact) {
+        int rowH = compact ? KistorStorageView.COMPACT_ROW_H : KistorStorageView.ROW_H;
+        int totalH = 2 + 11 + (rowCount * (rowH + 1)) + 2;
+        int visibleH = Math.max(1, listRect.height() - 2);
+        return Math.max(0, totalH - visibleH);
     }
 
     // ------------------------------------------------------------------
     // Input handling
     // ------------------------------------------------------------------
 
+    private void ensureLayout(UiRect bounds) {
+        if (layout == null && bounds != null) {
+            layout = computeLayout(bounds, lastNavigating, lastMaterialAvailable);
+        }
+    }
+
+    private KistorRenderContext.Hit findHit(double mouseX, double mouseY) {
+        for (KistorRenderContext.Hit hit : hits) {
+            if (hit.rect().contains(mouseX, mouseY)) return hit;
+        }
+        return null;
+    }
+
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
         if (button != 0) return false;
-        if (layout == null) layout = KistorLayout.calculate(bounds);
+        ensureLayout(bounds);
+        if (layout == null) return false;
 
-        CompanionSession session = CompanionSession.getInstance();
-        ChestManager manager = session.getChestManager();
-        String contextKey = session.getCurrentStorageContext();
-
-        // Clicking the search box focuses it and cancels any in-progress label edit (discarded,
-        // matching "clicking outside cancels" for the label editor - see keyPressed javadoc).
-        boolean insideSearch = layout.searchRect().contains(mouseX, mouseY);
-        boolean insideClear = layout.clearBtnRect().contains(mouseX, mouseY);
-        boolean insideLabelField = labelEditFocused && labelFieldRect != null && labelFieldRect.contains(mouseX, mouseY);
-        boolean insideRenameBtn = layout.renameBtnRect().contains(mouseX, mouseY);
-
-        if (insideLabelField) {
-            searchFocused = false;
-            return true;
-        }
-        if (labelEditFocused && !insideRenameBtn) {
-            // Clicked outside the label field (and not on the Spara/commit button itself) while
-            // editing: cancel without saving. The rename button's own click handler below is
-            // what actually commits when the click IS on it - it must not be preempted here.
-            cancelLabelEdit();
-        }
-
-        if (insideClear) {
-            searchText = "";
-            return true;
-        }
-
-        searchFocused = insideSearch;
-        if (insideSearch) {
-            return true;
-        }
-
-        if (layout.filterBtnRect().contains(mouseX, mouseY)) {
-            typeFilter = typeFilter.next();
-            return true;
-        }
-        if (layout.sortBtnRect().contains(mouseX, mouseY)) {
-            sortMode = sortMode.next();
-            return true;
-        }
-
-        if (layout.isCompact() && compactShowingDetail) {
-            if (layout.backBtnRect().contains(mouseX, mouseY)) {
-                compactShowingDetail = false;
+        // 1. An open inline editor: its own controls (field, Spara, group chips) keep it open;
+        //    any other click cancels it without saving ("click away cancels"), then is handled.
+        if (state.editField != null) {
+            KistorRenderContext.Hit hit = findHit(mouseX, mouseY);
+            if (hit != null && hit.keepsEdit()) {
+                hit.action().run();
                 return true;
             }
+            state.cancelEdit();
         }
 
-        if (layout.listRect().contains(mouseX, mouseY)) {
-            for (ListRowHit hit : listHitTargets) {
-                if (hit.rect.contains(mouseX, mouseY)) {
-                    selectedId = hit.id;
-                    compactShowingDetail = true;
-                    confirmingForget = false;
-                    detailScrollOffset = 0;
-                    return true;
-                }
-            }
+        // 2. Search field + clear.
+        if (layout.clearBtnRect().contains(mouseX, mouseY)) {
+            state.searchText = "";
+            return true;
+        }
+        state.searchFocused = layout.searchRect().contains(mouseX, mouseY);
+        if (state.searchFocused) return true;
+
+        // 3. Mode segments.
+        if (layout.modeSakerRect().contains(mouseX, mouseY)) {
+            state.switchMode(KistorLayout.Mode.SAKER);
+            return true;
+        }
+        if (layout.modeForvaringRect().contains(mouseX, mouseY)) {
+            state.switchMode(KistorLayout.Mode.FORVARING);
+            return true;
+        }
+        if (layout.modeMaterialRect().contains(mouseX, mouseY)) {
+            state.switchMode(KistorLayout.Mode.MATERIAL);
+            return true;
         }
 
-        if (selectedId != null) {
-            StoredContainer selected = manager.getContainer(contextKey, selectedId).orElse(null);
+        // 4. Controls row.
+        if (handleControlClick(mouseX, mouseY)) return true;
 
-            if (layout.renameBtnRect().contains(mouseX, mouseY)) {
-                if (labelEditFocused) {
-                    commitLabelEdit(manager, contextKey);
-                } else if (selected != null) {
-                    labelEditFocused = true;
-                    labelEditText = selected.label() != null ? selected.label() : "";
-                    detailScrollOffset = 0;
-                }
-                return true;
+        // 5. Everything drawn last frame (content rows, banner STOPPA, pinned actions).
+        KistorRenderContext.Hit hit = findHit(mouseX, mouseY);
+        if (hit != null) {
+            if (!(state.mode == KistorLayout.Mode.FORVARING && hit.rect().equals(layout.forgetBtnRect()))) {
+                state.confirmingForget = false;
             }
-
-            if (layout.copyBtnRect().contains(mouseX, mouseY) && selected != null) {
-                copyCoordinates(selected);
-                return true;
-            }
-
-            if (layout.forgetBtnRect().contains(mouseX, mouseY)) {
-                if (isForgetConfirmActive()) {
-                    manager.forgetContainer(contextKey, selectedId);
-                    confirmingForget = false;
-                    forgetConfirmExpiry = 0;
-
-                    // Select a sensible remaining entry rather than leaving a dangling selection.
-                    List<StoredContainer> remaining = manager.search(contextKey, searchText, typeFilter, sortMode);
-                    selectedId = remaining.isEmpty() ? null : remaining.get(0).id();
-                    if (selectedId == null) {
-                        compactShowingDetail = false;
-                    }
-                } else {
-                    confirmingForget = true;
-                    forgetConfirmExpiry = System.currentTimeMillis() + 4000;
-                }
-                return true;
-            }
+            hit.action().run();
+            return true;
         }
-
         return false;
     }
 
-    private void copyCoordinates(StoredContainer container) {
-        try {
-            Minecraft client = Minecraft.getInstance();
-            if (client != null && client.keyboardHandler != null) {
-                client.keyboardHandler.setClipboard(container.anchor().toCoordinateText());
-                copyFeedbackExpiry = System.currentTimeMillis() + 2000;
+    private boolean handleControlClick(double mouseX, double mouseY) {
+        boolean filter = layout.filterBtnRect().contains(mouseX, mouseY);
+        boolean sort = layout.sortBtnRect().contains(mouseX, mouseY);
+        boolean group = layout.groupBtnRect().contains(mouseX, mouseY);
+        if (!filter && !sort && !group) return false;
+
+        switch (state.mode) {
+            case SAKER, FORVARING -> {
+                if (filter) state.typeFilter = state.typeFilter.next();
+                if (sort) {
+                    if (state.mode == KistorLayout.Mode.SAKER) state.itemSort = state.itemSort.next();
+                    else state.storageSort = state.storageSort.next();
+                }
+                if (group) {
+                    CompanionSession session = CompanionSession.getInstance();
+                    state.groupFilter = state.groupFilter.next(session.getChestManager().getGroups(session.getCurrentStorageContext()));
+                }
+                state.itemListScroll.reset();
+                state.storageListScroll.reset();
             }
-        } catch (Exception ignored) {
-            // Clipboard access is a pure local OS convenience - never let a failure here affect anything else.
+            case MATERIAL -> {
+                if (filter || sort) {
+                    state.materialShowPickupList = !state.materialShowPickupList;
+                    state.materialScroll.reset();
+                }
+                if (group) {
+                    CompanionSession.getInstance().getKistorRuntime().clearMaterialRequest();
+                    state.switchMode(KistorLayout.Mode.SAKER);
+                }
+            }
         }
-    }
-
-    private void commitLabelEdit(ChestManager manager, String contextKey) {
-        String sanitized = labelEditText.trim();
-        manager.setLabel(contextKey, selectedId, sanitized.isEmpty() ? null : sanitized);
-        labelEditFocused = false;
-        labelEditText = "";
-    }
-
-    private void cancelLabelEdit() {
-        labelEditFocused = false;
-        labelEditText = "";
+        return true;
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (layout == null) return false;
 
         // In compact mode, listRect() and detailRect() are the SAME rectangle (only one pane is
-        // rendered at a time), so checking listRect() first would always win and silently eat
-        // every scroll event meant for the detail pane. Route explicitly on compactShowingDetail
-        // first so the two panes are never aliased.
-        if (layout.isCompact() && compactShowingDetail) {
-            return layout.detailRect().contains(mouseX, mouseY) && scrollDetail(scrollY);
+        // rendered at a time), so routing must follow compactShowingDetail - never the rect alone,
+        // or the hidden pane would silently eat every scroll event.
+        if (state.mode == KistorLayout.Mode.MATERIAL) {
+            return layout.listRect().contains(mouseX, mouseY) && state.materialScroll.scrollBy(scrollY);
         }
+        ScrollState list = state.mode == KistorLayout.Mode.SAKER ? state.itemListScroll : state.storageListScroll;
+        ScrollState detail = state.mode == KistorLayout.Mode.SAKER ? state.itemDetailScroll : state.storageDetailScroll;
+        boolean hasSelection = state.mode == KistorLayout.Mode.SAKER ? state.selectedItemId != null : state.selectedStorage != null;
 
+        if (layout.isCompact()) {
+            if (!layout.listRect().contains(mouseX, mouseY)) return false;
+            if (state.compactShowingDetail) {
+                return hasSelection && detail.scrollBy(scrollY);
+            }
+            return list.scrollBy(scrollY);
+        }
         if (layout.listRect().contains(mouseX, mouseY)) {
-            CompanionSession session = CompanionSession.getInstance();
-            ChestManager manager = session.getChestManager();
-            int count = manager != null ? manager.search(session.getCurrentStorageContext(), searchText, typeFilter, sortMode).size() : 0;
-            int maxScroll = calculateMaxListScroll(layout.listRect(), count, layout.isCompact());
-            this.listScrollOffset = Math.max(0, Math.min(listScrollOffset - (int) (scrollY * 14), maxScroll));
+            list.scrollBy(scrollY);
             return true;
         }
-
         if (layout.detailRect().contains(mouseX, mouseY)) {
-            return scrollDetail(scrollY);
+            return hasSelection && detail.scrollBy(scrollY);
         }
-
         return false;
     }
 
-    private boolean scrollDetail(double scrollY) {
-        if (selectedId == null) return false;
-        CompanionSession session = CompanionSession.getInstance();
-        ChestManager manager = session.getChestManager();
-        String contextKey = session.getCurrentStorageContext();
-        StoredContainer container = manager != null ? manager.getContainer(contextKey, selectedId).orElse(null) : null;
-        if (container == null) return false;
-        Font font = Minecraft.getInstance().font;
-        int contentTop = layout.detailRect().y() + (layout.isCompact() ? 16 : 4);
-        UiRect contentArea = new UiRect(layout.detailRect().x() + 1, contentTop, layout.detailRect().width() - 2, layout.detailRect().bottom() - contentTop - 1);
-        int maxScroll = calculateMaxDetailScroll(font, contentArea, container);
-        this.detailScrollOffset = Math.max(0, Math.min(detailScrollOffset - (int) (scrollY * 14), maxScroll));
-        return true;
-    }
-
     /**
-     * Test-only: drives the compact list/detail scroll-routing state directly, since {@link #layout}
-     * is otherwise only ever set inside the render path, which needs a live Font.
+     * Test-only: drives the compact list/detail scroll-routing state directly, since the layout is
+     * otherwise only computed inside the render path, which needs a live Font.
      */
     void setCompactStateForTesting(UiRect bounds, boolean compactShowingDetail, StoredContainerId selectedId) {
-        this.layout = KistorLayout.calculate(bounds);
-        this.compactShowingDetail = compactShowingDetail;
-        this.selectedId = selectedId;
+        this.state.mode = KistorLayout.Mode.FORVARING;
+        this.state.compactShowingDetail = compactShowingDetail;
+        this.state.selectedStorage = selectedId;
+        this.layout = computeLayout(bounds, false, false);
     }
 
     int listScrollOffsetForTesting() {
-        return listScrollOffset;
+        return state.mode == KistorLayout.Mode.SAKER ? state.itemListScroll.offset() : state.storageListScroll.offset();
     }
 
+    KistorUiState stateForTesting() {
+        return state;
+    }
+
+    @Override
     public boolean charTyped(CharacterEvent event) {
         if (event == null) return false;
         String s = event.codepointAsString();
         if (s == null || s.isEmpty()) return false;
 
-        if (labelEditFocused) {
-            if (labelEditText.length() < MAX_LABEL_LENGTH) {
-                labelEditText = labelEditText + s;
+        if (state.editField != null) {
+            if (state.editText.length() < state.editMaxLength()) {
+                state.editText = state.editText + s;
             }
             return true;
         }
-        if (searchFocused) {
-            if (searchText.length() < MAX_SEARCH_LENGTH) {
-                searchText = searchText + s;
+        if (state.searchFocused) {
+            if (state.searchText.length() < KistorUiState.MAX_SEARCH_LENGTH) {
+                state.searchText = state.searchText + s;
             }
+            // The search is global: typing while the material list is open goes back to SAKER.
+            if (state.mode == KistorLayout.Mode.MATERIAL) {
+                state.switchMode(KistorLayout.Mode.SAKER);
+                state.searchFocused = true;
+            }
+            state.itemListScroll.reset();
+            state.storageListScroll.reset();
             return true;
         }
         return false;
     }
 
     /**
-     * Handles a key press while the Kistor tab is active. Priority: an in-progress label edit
-     * takes ESC/Enter/Backspace first, then the search field. Any other key while a text input
-     * is focused is consumed here (so it never leaks into unrelated global shortcuts) but does
-     * nothing beyond that - the actual character insertion happens via {@link #charTyped}.
+     * Handles a key press while the Kistor tab is active. Priority: an open inline editor takes
+     * ESC (cancel) / Enter (save) / Backspace first, then the search field. Any other key while
+     * an editor is open is consumed here (so it never leaks into unrelated global shortcuts) but
+     * does nothing beyond that - character insertion happens via {@link #charTyped}.
      */
+    @Override
     public boolean keyPressed(KeyEvent event) {
         if (event == null) return false;
         int key = event.key();
 
-        if (labelEditFocused) {
+        if (state.editField != null) {
             if (key == GLFW.GLFW_KEY_ESCAPE) {
-                cancelLabelEdit();
+                state.cancelEdit();
                 return true;
             }
             if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
                 CompanionSession session = CompanionSession.getInstance();
-                commitLabelEdit(session.getChestManager(), session.getCurrentStorageContext());
+                KistorStorageView.commitEdit(state, session.getChestManager(), session.getCurrentStorageContext(), state.selectedStorage);
                 return true;
             }
             if (key == GLFW.GLFW_KEY_BACKSPACE) {
-                if (!labelEditText.isEmpty()) {
-                    labelEditText = labelEditText.substring(0, labelEditText.length() - 1);
+                if (!state.editText.isEmpty()) {
+                    state.editText = state.editText.substring(0, state.editText.length() - 1);
                 }
                 return true;
             }
             return true;
         }
 
-        if (searchFocused) {
+        if (state.searchFocused) {
             if (key == GLFW.GLFW_KEY_BACKSPACE) {
-                if (!searchText.isEmpty()) {
-                    searchText = searchText.substring(0, searchText.length() - 1);
+                if (!state.searchText.isEmpty()) {
+                    state.searchText = state.searchText.substring(0, state.searchText.length() - 1);
                 }
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_ESCAPE) {
-                searchFocused = false;
+            if (key == GLFW.GLFW_KEY_ESCAPE || key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+                state.searchFocused = false;
                 return true;
             }
             return false;

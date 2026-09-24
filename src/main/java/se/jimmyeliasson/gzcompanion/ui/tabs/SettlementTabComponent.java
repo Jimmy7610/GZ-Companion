@@ -6,6 +6,7 @@ import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
+import se.jimmyeliasson.gzcompanion.chest.material.PlannerMaterialRequests;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.gamezone.GameZoneLiveContext;
@@ -118,6 +119,8 @@ public class SettlementTabComponent implements TextInputHandler {
 
     private final List<ListRowHit> hitTargets = new ArrayList<>();
     private final ItemHoverTooltips itemHoverTooltips = new ItemHoverTooltips();
+    /** The screen this tab last rendered into - used only to hand a material request to Kistor. */
+    private GZCompanionMainScreen currentScreen;
 
     public ItemHoverTooltips getItemHoverTooltips() {
         return itemHoverTooltips;
@@ -141,6 +144,7 @@ public class SettlementTabComponent implements TextInputHandler {
     }
 
     private void renderContent(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
+        this.currentScreen = mainScreen;
         this.layout = SettlementLayout.calculate(bounds);
         hitTargets.clear();
         itemHoverTooltips.clear();
@@ -824,12 +828,25 @@ public class SettlementTabComponent implements TextInputHandler {
                 x, y, maxW, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
         y += 12;
 
-        boolean chestEstimateEnabled = session.getSettingsManager().getSettings().useLastKnownChestDataInPlanners();
+        boolean chestEstimateEnabled = PlannerMaterialRequests.isChestLookupEnabled(session.getSettingsManager().getSettings());
         if (chestEstimateEnabled) {
-            UiRect calcBtn = new UiRect(x, y, Math.min(150, area.width() - 8), 11);
+            int btnW = Math.min(150, (area.width() - 8 - 3) / 2);
+            UiRect calcBtn = new UiRect(x, y, btnW, 11);
             boolean calcHov = calcBtn.contains(mouseX, mouseY);
             GZTheme.drawButton(extractor, font, calcBtn, "Beräkna från sparade kistor", false, calcHov, TypographyScale.META.getScale());
             hitTargets.add(new ListRowHit(calcBtn, () -> showingContainerPicker = !showingContainerPicker));
+
+            // Kistor 2.0: show where this level range's materials were last known to be - local
+            // last-known chest snapshots only, never GameZone's live server inventory.
+            UiRect findBtn = new UiRect(calcBtn.right() + 3, y, btnW, 11);
+            GZTheme.drawButton(extractor, font, findBtn, "Hitta material i kistor", true, findBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+            GZCompanionMainScreen screen = currentScreen;
+            int fromLevel = effective.level();
+            int toLevel = profile.targetLevel();
+            List<ItemRequirement> requirements = summary.mergedItems();
+            hitTargets.add(new ListRowHit(findBtn, () -> {
+                if (screen != null) screen.openKistorMaterialRequest(PlannerMaterialRequests.fromSettlement(fromLevel, toLevel, requirements));
+            }));
             y += 13;
 
             y += TextUtil.drawScaledWrappedText(extractor, font, "Lokalt estimat från senast känt innehåll. Detta är inte serverns registrerade settlement inventory.",

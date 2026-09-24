@@ -15,10 +15,13 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import se.jimmyeliasson.gzcompanion.chest.ChestManager;
+import se.jimmyeliasson.gzcompanion.chest.KistorRuntime;
+import se.jimmyeliasson.gzcompanion.chest.model.ChestCaptureEvent;
 import se.jimmyeliasson.gzcompanion.chest.model.StorageKind;
 import se.jimmyeliasson.gzcompanion.chest.model.StoragePosition;
 import se.jimmyeliasson.gzcompanion.chest.model.StorageShape;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
+import se.jimmyeliasson.gzcompanion.gamezone.toast.GameZoneToastManager;
 
 import java.util.Optional;
 import java.util.Set;
@@ -50,7 +53,7 @@ public final class ChestCaptureController {
 
     private ChestCaptureController() {}
 
-    public static void register(ChestManager manager) {
+    public static void register(ChestManager manager, KistorRuntime kistor, GameZoneToastManager toastManager) {
         UseBlockCallback.EVENT.register((player, level, hand, hitResult) -> {
             onUseBlock(manager, player, level, hitResult);
             return InteractionResult.PASS;
@@ -58,7 +61,7 @@ public final class ChestCaptureController {
 
         ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
             if (screen instanceof AbstractContainerScreen<?> containerScreen) {
-                onContainerScreenOpened(manager, client, containerScreen);
+                onContainerScreenOpened(manager, kistor, toastManager, client, containerScreen);
             }
         });
 
@@ -66,7 +69,21 @@ public final class ChestCaptureController {
         // always tears down the client play connection first. Clearing transient capture state
         // here means a pending interaction or an active capture can never survive into another
         // world/server context - without ever persisting a guessed or fake final snapshot.
-        ClientPlayConnectionEvents.DISCONNECT.register((listener, client) -> manager.clearTransientCaptureState());
+        ClientPlayConnectionEvents.DISCONNECT.register((listener, client) -> {
+            manager.clearTransientCaptureState();
+            // Kistor 2.0: an active navigation target (and any Hämtningslista) belongs to the
+            // world/server being left - stop it so it can never be shown in another context.
+            kistor.onDisconnect();
+        });
+        // Defense in depth: when a new play connection is established, any still-active target
+        // that does not belong to the newly joined context is stopped.
+        ClientPlayConnectionEvents.JOIN.register((listener, sender, client) -> {
+            try {
+                kistor.navigation().onContextObserved(CompanionSession.getInstance().getCurrentStorageContext());
+            } catch (Exception ignored) {
+                kistor.navigation().onDisconnect();
+            }
+        });
     }
 
     private static void onUseBlock(ChestManager manager, Player player, Level level, BlockHitResult hitResult) {
@@ -100,7 +117,8 @@ public final class ChestCaptureController {
         }
     }
 
-    private static void onContainerScreenOpened(ChestManager manager, Minecraft client, AbstractContainerScreen<?> screen) {
+    private static void onContainerScreenOpened(ChestManager manager, KistorRuntime kistor, GameZoneToastManager toastManager,
+                                                Minecraft client, AbstractContainerScreen<?> screen) {
         try {
             AbstractContainerMenu menu = screen.getMenu();
             if (client == null || client.player == null || menu == null) {
@@ -143,10 +161,21 @@ public final class ChestCaptureController {
                 var finalSlots = MinecraftChestCaptureAdapter.extractStorageSlots(menu, playerInventory);
                 long now = System.currentTimeMillis();
                 manager.updateCaptureSlots(finalSlots, now);
-                manager.endCapture(now);
+                // Kistor 2.0 feedback happens only AFTER the one legitimate finalization/persist -
+                // never while the open menu is being read.
+                manager.endCapture(now).ifPresent(event -> onCaptureFinalized(kistor, toastManager, event, now));
             });
         } catch (Exception ignored) {
             // Defensive: a capture bookkeeping failure must never break the player's screen.
+        }
+    }
+
+    private static void onCaptureFinalized(KistorRuntime kistor, GameZoneToastManager toastManager, ChestCaptureEvent event, long now) {
+        try {
+            kistor.onCaptureFinalized(event).ifPresent(message ->
+                    toastManager.offerCompanion(message.dedupeKey(), message.title(), message.body(), now));
+        } catch (Exception ignored) {
+            // Feedback is a convenience - it must never affect capture or the player's screen.
         }
     }
 }

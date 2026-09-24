@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Kistor 2.0** - the Kistor tab is rebuilt around "where are my things?", still built only on
+  storage the player has legitimately opened (the M3 capture system is unchanged). See
+  `docs/CHEST-MANAGER.md`.
+  - **SAKER** (default mode): an aggregated last-known item index across the current context's
+    storage (`chest.index.ChestItemIndex`), with real vanilla item icons, totals, "Finns i N
+    förvaringar", and per-item detail listing every storage location with amount, freshness,
+    distance and **Hitta**; **Hitta närmaste** picks the nearest known same-dimension storage.
+  - **FÖRVARING**: storage cards with top items and freshness, favorites pinned under FÄSTA, and a
+    full detail pane (type/shape, dimension, coordinates, group, location note, contents with
+    icons, "Sedan förra öppningen", actions). "Glöm" is now a quiet secondary action that still
+    needs confirmation.
+  - Local **favorites**, one-level **groups** and **location notes** per storage - local only,
+    sanitized and length-capped; searchable and filterable.
+  - One global local search ("Vad letar du efter?") matching item names/ids, labels, groups,
+    notes, storage type, dimension and coordinates.
+  - **Freshness** badges (`ChestFreshness`) and a bounded one-step **previous snapshot** with a
+    "Sedan förra öppningen" diff (`ChestSnapshotDiff`).
+  - **Capture feedback** toasts after legitimate finalization: "Ny förvaring sparad", "<namn>
+    uppdaterad" (only when contents changed) and "✓ <namn> hittad"; respects the Companion
+    notification setting, deduped and bounded.
+  - **HITTA navigation** to ONE explicitly selected known storage: a top-center HUD
+    (`KistorNavigationHudElement`, `HudElementRegistry`) with a smoothly rotating camera-relative
+    arrow, straight-line distance ("fågelvägen"), vertical difference, near/arrived states and an
+    honest wrong-dimension state; a NAVIGERAR banner with Stoppa in Kistor. Ends when the exact
+    target is legitimately opened, and stops safely on forget/reset/context change/disconnect.
+  - **Hitta material i kistor** from Settlement (Material) and Byggplaner (building detail), and a
+    local **Hämtningslista** grouped by storage with a documented deterministic allocation rule and
+    estimated shortages - gated on the existing "use last-known chest data in planners" setting.
+  - Pure domain packages `chest.index`, `chest.nav`, `chest.material`, plus `KistorRuntime`;
+    `KistorFairPlayTest` structurally forbids world/chunk/block-entity access, raytracing, world
+    rendering, player automation, chat/commands/packets and networking in all Kistor 2.0 code.
+  - Diagnostics now include the Kistor index schema/count and whether navigation is active (never
+    the target or any coordinates).
+
+### Changed
+- `chest-index.json` schema **v1 → v2** (optional `favorite`, `group`, `locationNote`, `previous`
+  per storage). v1 files load losslessly in memory and are rewritten as v2 on the next legitimate
+  save; a future schema still fails closed without being touched. An older v1-only build will
+  treat a v2 file as incompatible (fails closed, never overwrites).
+- Unknown/future item ids no longer resolve to "Air" in Kistor display names.
+
+---
+
 ## [0.1.0-alpha.6] - 2026-09-17
 
 Turns the Settlement tab from an offline-only planner into a real **LIVE** GameZone settlement

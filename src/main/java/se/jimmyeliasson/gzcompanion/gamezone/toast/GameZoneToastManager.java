@@ -40,6 +40,24 @@ public final class GameZoneToastManager {
         if (!notificationsEnabledSupplier.get() || !gameZoneToastsEnabledSupplier.get()) {
             return false;
         }
+        return enqueue(dedupeKey, title, body, nowMs);
+    }
+
+    /**
+     * Offers a Companion-originated toast that is NOT a GameZone chat event (e.g. Kistor's
+     * "Ny förvaring sparad" after a legitimate storage capture was persisted). Respects only the
+     * global Companion notifications setting - the GameZone-event toggle is about GameZone chat
+     * events and deliberately doesn't silence local Companion feedback. Same dedupe window and
+     * the same bounded queue as {@link #offer}.
+     */
+    public boolean offerCompanion(String dedupeKey, String title, String body, long nowMs) {
+        if (!notificationsEnabledSupplier.get()) {
+            return false;
+        }
+        return enqueue(dedupeKey, title, body, nowMs);
+    }
+
+    private boolean enqueue(String dedupeKey, String title, String body, long nowMs) {
         pruneExpiredDedupeEntries(nowMs);
 
         Long lastShown = lastShownAtByDedupeKey.get(dedupeKey);

@@ -9,6 +9,7 @@ import org.lwjgl.glfw.GLFW;
 import se.jimmyeliasson.gzcompanion.building.BuildingPlanManager;
 import se.jimmyeliasson.gzcompanion.building.storage.BuildingPlan;
 import se.jimmyeliasson.gzcompanion.building.storage.BuildingRequirementKey;
+import se.jimmyeliasson.gzcompanion.chest.material.PlannerMaterialRequests;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.knowledge.building.BuildingKnowledgeBase;
 import se.jimmyeliasson.gzcompanion.knowledge.building.BuildingRequirement;
@@ -94,6 +95,8 @@ public class BuildingsTabComponent implements TextInputHandler {
     private BuildingLayout layout;
     private final List<ListRowHit> hitTargets = new ArrayList<>();
     private final ItemHoverTooltips itemHoverTooltips = new ItemHoverTooltips();
+    /** The screen this tab last rendered into - used only to hand a material request to Kistor. */
+    private GZCompanionMainScreen mainScreenForKistor;
 
     public ItemHoverTooltips getItemHoverTooltips() {
         return itemHoverTooltips;
@@ -118,6 +121,7 @@ public class BuildingsTabComponent implements TextInputHandler {
     }
 
     private void renderContent(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY, GZCompanionMainScreen mainScreen) {
+        this.mainScreenForKistor = mainScreen;
         this.layout = BuildingLayout.calculate(bounds);
         hitTargets.clear();
         itemHoverTooltips.clear();
@@ -389,6 +393,7 @@ public class BuildingsTabComponent implements TextInputHandler {
             TextUtil.drawScaledEllipsizedText(extractor, font, line, x + 16, y, maxW - 16, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
             y += 12;
         }
+        y = renderKistorLookupRow(extractor, font, x, y, maxW, building, mouseX, mouseY, mainScreenForKistor);
 
         if (!building.mainBonus().isBlank()) {
             y += 4;
@@ -419,6 +424,49 @@ public class BuildingsTabComponent implements TextInputHandler {
         // The special-requirement item icon above is drawn the same unconditional way - filter its
         // hover target out too if it scrolled outside contentArea, for the same reason.
         itemHoverTooltips.removeOutside(contentArea);
+    }
+
+    static final String KISTOR_LOOKUP_DISABLED_TEXT = "Kistdata i planerare är avstängd i Inställningar.";
+
+    /**
+     * Height of the "Hitta material i kistor" row - reserved whenever the building has at least one
+     * concrete item requirement, whether the setting shows the button or the "avstängd" note, so
+     * the detail-height estimate never depends on a live setting read.
+     */
+    static int kistorLookupRowHeight(SettlementBuilding building) {
+        return hasConcreteRequirement(building) ? 14 : 0;
+    }
+
+    private static boolean hasConcreteRequirement(SettlementBuilding building) {
+        for (BuildingRequirement req : building.specialRequirements()) {
+            if (req.hasConcreteItem()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Kistor 2.0: routes this building's requirements to Kistor's "Hitta material i kistor" view -
+     * local last-known chest snapshots only; no scanning, movement or item transfer. Gated on the
+     * existing "use last-known chest data in planners" setting.
+     */
+    private int renderKistorLookupRow(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, SettlementBuilding building,
+                                      int mouseX, int mouseY, GZCompanionMainScreen screen) {
+        int rowH = kistorLookupRowHeight(building);
+        if (rowH == 0) return y;
+        boolean enabled = PlannerMaterialRequests.isChestLookupEnabled(CompanionSession.getInstance().getSettingsManager().getSettings());
+        if (enabled) {
+            UiRect btn = new UiRect(x, y + 1, Math.min(140, maxW), 11);
+            GZTheme.drawButton(extractor, font, btn, "Hitta material i kistor", true, btn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+            String name = building.name();
+            List<BuildingRequirement> requirements = building.specialRequirements();
+            hitTargets.add(new ListRowHit(btn, () -> {
+                if (screen != null) screen.openKistorMaterialRequest(PlannerMaterialRequests.fromBuilding(name, requirements));
+            }));
+        } else {
+            TextUtil.drawScaledEllipsizedText(extractor, font, KISTOR_LOOKUP_DISABLED_TEXT, x, y + 3, maxW,
+                    TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        }
+        return y + rowH;
     }
 
     /**
@@ -544,6 +592,7 @@ public class BuildingsTabComponent implements TextInputHandler {
         h += 9 + 11; // Väggkrav, Takkrav
         h += 10; // "SPECIALKRAV"
         h += building.specialRequirements().size() * 12;
+        h += kistorLookupRowHeight(building);
         if (!building.mainBonus().isBlank()) {
             h += 4 + 9; // gap + "BONUS" label
             h += measurer.measure(building.mainBonus(), maxW, TypographyScale.SMALL.getScale(), 2, 1) + 2;

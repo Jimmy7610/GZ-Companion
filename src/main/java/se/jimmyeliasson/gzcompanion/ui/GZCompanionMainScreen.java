@@ -69,6 +69,16 @@ public class GZCompanionMainScreen extends Screen {
         return kistorTab;
     }
 
+    /**
+     * "Hitta material i kistor" from a planner tab (Settlement / Byggplaner): switches to Kistor
+     * and shows where the request's materials were last known to be. Local snapshots only.
+     */
+    public void openKistorMaterialRequest(se.jimmyeliasson.gzcompanion.chest.material.ChestMaterialRequest request) {
+        if (request == null) return;
+        this.activeTab = TabType.KISTOR;
+        this.kistorTab.openMaterialRequest(request);
+    }
+
     public void openGuideStep(String stepId) {
         this.activeTab = TabType.GUIDE;
         if (stepId != null) {
@@ -334,6 +344,9 @@ public class GZCompanionMainScreen extends Screen {
      * interface every tab (including the ones with no items at all) would have to implement.
      */
     private ItemHoverTooltips activeTabItemHoverTooltips() {
+        if (activeTab == TabType.KISTOR) {
+            return kistorTab.getItemHoverTooltips();
+        }
         if (activeTab == TabType.CRAFTING) {
             return craftingTab.getItemHoverTooltips();
         }

@@ -23,6 +23,10 @@ public final class DiagnosticsTextBuilder {
         sb.append("Aktiv profil: ").append(session.getCurrentServerProfile()).append('\n');
         sb.append("Guide-status: ").append(session.getGuideEngine().getLoadStatus()).append('\n');
         sb.append("Kistor-status: ").append(session.getChestManager().getStatus()).append('\n');
+        // Kistor 2.0: schema + count + whether navigation is active - never coordinates, labels,
+        // groups, location notes, contents, or the navigation target/its position.
+        sb.append("Kistor-index: ").append(session.getChestManager().getDiagnostics(session.getCurrentStorageContext()).toSafeString()).append('\n');
+        sb.append(session.getKistorRuntime().diagnosticsNavigationLine()).append('\n');
         sb.append("Kommando-status: ").append(session.getCommandCatalogStatus()).append('\n');
         sb.append("Crafting-status: ").append(session.getCraftingKnowledgeStatus()).append(" / ").append(session.getItemKnowledgeStatus()).append('\n');
         sb.append("Settlement-status: ").append(session.getSettlementCatalogStatus()).append('\n');

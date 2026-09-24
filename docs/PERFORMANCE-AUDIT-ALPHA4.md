@@ -52,6 +52,7 @@ Every registration against a Fabric client-tick/event hook in production code, t
 | `ChestCaptureController` — `ClientPlayConnectionEvents.DISCONNECT` | Disconnect/quit/reconnect | Event-driven | Client/main thread | Clears transient capture state | No | Negligible | N/A | **NONE** |
 | `GameZoneChatObserver` — `ClientReceiveMessageEvents.GAME`/`CHAT` | Every chat/game message received | Event-driven, frequency = server chat volume | Client/main thread | Profile-gate check (cheap boolean) first; if connected to GameZone, runs the message through the active parser list (regex/contains/exact, patterns pre-compiled and cached) | No | O(active parsers) per eligible message; currently 0 active parsers in the bundled Rule Pack | Bounded (Rule Pack size) | **LOW** |
 | `GameZoneToastHudElement` (HUD render) | `HudElementRegistry` — every render frame **while no `Screen` is open** (vanilla HUD contract) | ~Every frame, only outside any Screen (so never while Companion's own screen is open) | Render thread | One `Optional` check against a 3-item toast deque; draws only if non-empty | No | O(1) when empty (the common case) | Bounded (max 3 queued toasts) | **NONE** |
+| `KistorNavigationHudElement` (HUD render, Kistor 2.0) | `HudElementRegistry` — every render frame | ~Every frame | Render thread | Inactive (the common case): one boolean check, draws nothing. Active: one O(1) target hash lookup, the player's own pose, a few trig ops, a context-key check throttled to 1/s | No | O(1) | Bounded (at most one target) | **NONE** |
 | `LeaderboardsTabComponent.render()` → `manager.ensureFresh(current)` | Render, but only while Leaderboards is the active tab of an open Companion screen | Every frame **of that tab only** | Render thread (the check) / background executor (the actual fetch) | Cheap `Instant` comparison against the 60s auto-refresh floor; only schedules a background fetch if stale | **Yes** | O(1) per frame | Bounded | **NONE** |
 | `UpdateManager` scheduled checks | `ScheduledExecutorService`, 20s after startup then every 45 min | Fixed interval | Dedicated `gzcompanion-updater` daemon thread | Fetches GitHub releases JSON, parses, compares versions | No | Small JSON parse, infrequent | Bounded | **NONE** (by design) |
 
@@ -77,6 +78,10 @@ focus):
   cached rows — no re-parsing, no re-fetching, no HTML processing on every frame.
 - `GameZoneToastHudElement` (§3) is the only HUD element that renders unconditionally every frame
   regardless of any Screen; its cost when idle is one `Optional` check.
+- Kistor 2.0 (2026-09-24): `KistorNavigationHudElement` costs one boolean check when no
+  navigation is active. Kistor's own tab memoizes its item index, storage search, SAKER search and
+  material plans against `ChestManager.revision()`, so steady-state frames rebuild nothing; see
+  docs/CHEST-MANAGER.md §22.
 
 **No HTTP call, filesystem write, or GameZone HTML parse happens on the render thread, the tick
 thread, or the main client thread anywhere in the codebase** — every network/parsing call site

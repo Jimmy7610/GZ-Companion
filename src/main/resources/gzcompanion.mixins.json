@@ -3,7 +3,8 @@
   "package": "se.jimmyeliasson.gzcompanion.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
-    "PlayerTabOverlayAccessor"
+    "PlayerTabOverlayAccessor",
+    "BossHealthOverlayAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

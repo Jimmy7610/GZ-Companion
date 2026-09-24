@@ -166,7 +166,9 @@ public final class MinecraftChestCaptureAdapter {
         try {
             Identifier id = Identifier.tryParse(itemId);
             if (id == null) return "";
-            Item item = BuiltInRegistries.ITEM.getValue(id);
+            // getOptional, not getValue: the item registry is a defaulted registry, so getValue
+            // would silently turn an unknown/future id into "Air".
+            Item item = BuiltInRegistries.ITEM.getOptional(id).orElse(null);
             if (item == null) return "";
             return new ItemStack(item).getHoverName().getString();
         } catch (Exception ignored) {

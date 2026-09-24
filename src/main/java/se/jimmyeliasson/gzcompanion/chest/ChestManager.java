@@ -1,7 +1,12 @@
 package se.jimmyeliasson.gzcompanion.chest;
 
+import se.jimmyeliasson.gzcompanion.chest.index.ChestSearchMatcher;
+import se.jimmyeliasson.gzcompanion.chest.index.ChestSnapshotDiff;
+import se.jimmyeliasson.gzcompanion.chest.model.ChestCaptureEvent;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestDiagnosticsSummary;
+import se.jimmyeliasson.gzcompanion.chest.model.ChestGroupFilter;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus;
+import se.jimmyeliasson.gzcompanion.chest.model.StorageMetadata;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestSlotEntry;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestSortMode;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestTypeFilter;
@@ -40,18 +45,38 @@ public class ChestManager {
     /** Maximum time between a physical block interaction and a compatible menu opening. */
     public static final long PENDING_INTERACTION_WINDOW_MS = 2000L;
 
+    /** Local label cap, shared by the Kistor UI's inline editor. */
+    public static final int MAX_LABEL_LENGTH = 32;
+
+    /** Upper bound for the display-name memo - comfortably above the vanilla item registry size. */
+    private static final int MAX_DISPLAY_NAME_CACHE = 4096;
+
     private final ChestIndexStore store;
     private ChestIndexData indexData;
     private ChestManagerStatus status = ChestManagerStatus.UNAVAILABLE;
 
+    /**
+     * Bumped on EVERY in-memory index change (load, capture finalization, forget, clear, label or
+     * metadata edits). Derived views such as the Kistor item index cache themselves per revision,
+     * so they are rebuilt deterministically on mutation and never per render frame.
+     */
+    private long revision = 0L;
+
     private PendingInteraction pendingInteraction;
     private ActiveCapture activeCapture;
+
+    private final java.util.Map<String, String> displayNameCache = new java.util.HashMap<>();
 
     public ChestManager(ChestIndexStore store) {
         this.store = store;
     }
 
+    public long revision() {
+        return revision;
+    }
+
     public void initialize() {
+        revision++;
         try {
             ChestIndexLoadResult result = store.load();
             if (result == null) {
@@ -202,28 +227,46 @@ public class ChestManager {
      * <p>Every session that DID capture at least one legitimate snapshot always persists exactly
      * once here, even if the final contents are identical to the existing record — this is what
      * keeps "senast öppnad" (last opened) accurate on every reopen, not just on a content change.
+     *
+     * <p>Kistor 2.0: when a known record is replaced, its current snapshot becomes the single
+     * retained {@link se.jimmyeliasson.gzcompanion.chest.model.PreviousSnapshot} (bounded to one
+     * step - never an unbounded history), and its label and local metadata are preserved. This is
+     * still exactly one persist per finalized session; nothing extra is written while the screen
+     * is open.
+     *
+     * @return the finalization event, present only when a legitimate snapshot was persisted.
      */
-    public void endCapture(long nowMs) {
+    public Optional<ChestCaptureEvent> endCapture(long nowMs) {
         ActiveCapture cap = this.activeCapture;
         this.activeCapture = null;
-        if (cap == null) return;
-        if (!requireLoaded()) return;
+        if (cap == null) return Optional.empty();
+        if (!requireLoaded()) return Optional.empty();
 
         if (!cap.hasAnyUpdate) {
             // No legitimate snapshot was ever captured this session - fail closed.
-            return;
+            return Optional.empty();
         }
 
         StoredContainerId id = new StoredContainerId(cap.contextKey, cap.dimensionKey, cap.anchor, cap.kind);
         ContextContainers contextContainers = indexData.getContext(cap.contextKey);
         StoredContainer existing = contextContainers.containers().get(id.asStableKey());
-        String label = existing != null ? existing.label() : null;
 
-        StoredContainer updated = new StoredContainer(id, label, cap.partner, cap.shape, cap.lastUpdateAtMs, cap.lastSlots);
+        StoredContainer updated;
+        boolean contentsChanged;
+        if (existing == null) {
+            updated = new StoredContainer(id, null, cap.partner, cap.shape, cap.lastUpdateAtMs, cap.lastSlots);
+            contentsChanged = true;
+        } else {
+            updated = existing.withNewSnapshot(cap.partner, cap.shape, cap.lastUpdateAtMs, cap.lastSlots);
+            contentsChanged = !ChestSnapshotDiff.compute(existing.slots(), cap.lastSlots).isEmpty();
+        }
 
         ContextContainers updatedContext = contextContainers.withContainer(updated);
         indexData = indexData.withContext(cap.contextKey, updatedContext);
+        revision++;
         store.save(indexData);
+        return Optional.of(new ChestCaptureEvent(existing == null ? ChestCaptureEvent.Kind.NEW : ChestCaptureEvent.Kind.UPDATED,
+                updated, contentsChanged));
     }
 
     public boolean isCaptureActive() {
@@ -281,19 +324,49 @@ public class ChestManager {
      * type filter and sort mode. No world scanning of any kind is ever performed here.
      */
     public List<StoredContainer> search(String contextKey, String query, ChestTypeFilter typeFilter, ChestSortMode sortMode) {
+        return search(contextKey, query, typeFilter, sortMode, ChestGroupFilter.ALL);
+    }
+
+    /**
+     * Local-only search additionally restricted by a Kistor 2.0 {@link ChestGroupFilter}. Matching
+     * is delegated to {@link ChestSearchMatcher} (label, group, location note, type, dimension,
+     * coordinates, item ids and display names).
+     */
+    public List<StoredContainer> search(String contextKey, String query, ChestTypeFilter typeFilter, ChestSortMode sortMode,
+                                        ChestGroupFilter groupFilter) {
         List<StoredContainer> all = getContainers(contextKey); // already RECENT-desc by default
-        String q = (query != null && !query.isBlank()) ? query.trim().toLowerCase(Locale.ROOT) : null;
+        String q = ChestSearchMatcher.normalizeQuery(query);
         ChestTypeFilter safeFilter = typeFilter != null ? typeFilter : ChestTypeFilter.ALL;
         ChestSortMode safeSort = sortMode != null ? sortMode : ChestSortMode.RECENT;
+        ChestGroupFilter safeGroup = groupFilter != null ? groupFilter : ChestGroupFilter.ALL;
 
         List<StoredContainer> result = new ArrayList<>();
         for (StoredContainer container : all) {
             if (!safeFilter.matches(container.kind())) continue;
-            if (q != null && !matches(container, q)) continue;
+            if (!safeGroup.matches(container)) continue;
+            if (q != null && !ChestSearchMatcher.containerMatches(container, q, this::itemDisplayName)) continue;
             result.add(container);
         }
         sortContainers(result, safeSort);
         return result;
+    }
+
+    /**
+     * Every distinct local group name used in this context, sorted case-insensitively. Two
+     * spellings differing only by case are one group (the first-sorted spelling wins).
+     */
+    public List<String> getGroups(String contextKey) {
+        java.util.TreeMap<String, String> byLower = new java.util.TreeMap<>();
+        for (StoredContainer container : getContainers(contextKey)) {
+            String group = container.group();
+            if (group == null) continue;
+            String lower = group.toLowerCase(Locale.ROOT);
+            String current = byLower.get(lower);
+            if (current == null || current.compareTo(group) > 0) byLower.put(lower, group);
+        }
+        List<String> groups = new ArrayList<>(byLower.values());
+        groups.sort(String.CASE_INSENSITIVE_ORDER);
+        return groups;
     }
 
     private void sortContainers(List<StoredContainer> containers, ChestSortMode mode) {
@@ -313,31 +386,24 @@ public class ChestManager {
         return (c.label() != null && !c.label().isBlank()) ? c.label() : c.anchor().toCoordinateText();
     }
 
-    private boolean matches(StoredContainer container, String q) {
-        if (container.anchor().toCoordinateText().toLowerCase(Locale.ROOT).contains(q)) return true;
-        if (container.kind().getDisplayName().toLowerCase(Locale.ROOT).contains(q)) return true;
-        if (container.kind().name().toLowerCase(Locale.ROOT).contains(q)) return true;
-        if (container.dimensionKey().toLowerCase(Locale.ROOT).contains(q)) return true;
-        if (container.label() != null && container.label().toLowerCase(Locale.ROOT).contains(q)) return true;
-
-        for (ChestSlotEntry slot : container.slots()) {
-            if (slot.itemId().toLowerCase(Locale.ROOT).contains(q)) return true;
-            String displayName = itemDisplayName(slot.itemId());
-            if (displayName.toLowerCase(Locale.ROOT).contains(q)) return true;
-        }
-        return false;
-    }
-
     /**
      * Resolves a human-readable display name for an item ID. Overridden at runtime by a
      * Minecraft-aware supplier where available; falls back to a readable transform of the ID.
+     * Memoized (bounded) so searches and the item index never re-resolve the same id every frame.
      */
     public String itemDisplayName(String itemId) {
+        if (itemId == null) return "";
+        String cached = displayNameCache.get(itemId);
+        if (cached != null) return cached;
+        String name = null;
         if (displayNameResolver != null) {
             String resolved = displayNameResolver.resolve(itemId);
-            if (resolved != null && !resolved.isBlank()) return resolved;
+            if (resolved != null && !resolved.isBlank()) name = resolved;
         }
-        return fallbackDisplayName(itemId);
+        if (name == null) name = fallbackDisplayName(itemId);
+        if (displayNameCache.size() >= MAX_DISPLAY_NAME_CACHE) displayNameCache.clear();
+        displayNameCache.put(itemId, name);
+        return name;
     }
 
     private static String fallbackDisplayName(String itemId) {
@@ -357,6 +423,8 @@ public class ChestManager {
 
     public void setDisplayNameResolver(ItemDisplayNameResolver resolver) {
         this.displayNameResolver = resolver;
+        this.displayNameCache.clear();
+        revision++;
     }
 
     @FunctionalInterface
@@ -380,6 +448,7 @@ public class ChestManager {
 
         ContextContainers updated = contextContainers.withoutContainer(id.asStableKey());
         indexData = indexData.withContext(contextKey, updated);
+        revision++;
         store.save(indexData);
         return true;
     }
@@ -387,11 +456,14 @@ public class ChestManager {
     /**
      * Clears every locally indexed container for one context, leaving other contexts untouched.
      * Used by the Settings tab's "Rensa Kistor-index" action - never touches the actual
-     * Minecraft chests/containers, only this local JSON index.
+     * Minecraft chests/containers, only this local JSON index. This also clears every Kistor 2.0
+     * favorite/group/location note and previous snapshot for that context, since they live on the
+     * container records themselves.
      */
     public boolean clearContext(String contextKey) {
         if (!requireLoaded() || contextKey == null) return false;
         indexData = indexData.withContext(contextKey, ContextContainers.empty());
+        revision++;
         store.save(indexData);
         return true;
     }
@@ -399,18 +471,53 @@ public class ChestManager {
     /**
      * Sets a local-only custom label for an indexed container. Never writes signs, blocks,
      * server state, commands, or chat — the label exists only inside chest-index.json.
+     * Control characters are stripped and the label is capped at {@link #MAX_LABEL_LENGTH}.
      */
     public boolean setLabel(String contextKey, StoredContainerId id, String label) {
+        String sanitized = StorageMetadata.sanitizeText(label, MAX_LABEL_LENGTH);
+        return mutateContainer(contextKey, id, existing -> existing.withLabel(sanitized));
+    }
+
+    /** Local-only favorite/pinned flag. Never touches the world, chat, commands or any server. */
+    public boolean setFavorite(String contextKey, StoredContainerId id, boolean favorite) {
+        return mutateContainer(contextKey, id, existing -> existing.withMetadata(existing.metadata().withFavorite(favorite)));
+    }
+
+    /**
+     * Assigns a simple one-level local group, or removes it with a blank/null value. If a group
+     * with the same name (ignoring case) already exists in this context, its existing spelling is
+     * reused so one group never splits into two by capitalization.
+     */
+    public boolean setGroup(String contextKey, StoredContainerId id, String group) {
+        String sanitized = StorageMetadata.sanitizeGroup(group);
+        if (sanitized != null) {
+            for (String existingGroup : getGroups(contextKey)) {
+                if (existingGroup.equalsIgnoreCase(sanitized)) {
+                    sanitized = existingGroup;
+                    break;
+                }
+            }
+        }
+        String finalGroup = sanitized;
+        return mutateContainer(contextKey, id, existing -> existing.withMetadata(existing.metadata().withGroup(finalGroup)));
+    }
+
+    /** Local-only free-text location note (sanitized, capped); blank/null clears it. */
+    public boolean setLocationNote(String contextKey, StoredContainerId id, String note) {
+        return mutateContainer(contextKey, id, existing -> existing.withMetadata(existing.metadata().withLocationNote(note)));
+    }
+
+    private boolean mutateContainer(String contextKey, StoredContainerId id, java.util.function.UnaryOperator<StoredContainer> change) {
         if (!requireLoaded()) return false;
         if (contextKey == null || id == null) return false;
         ContextContainers contextContainers = indexData.getContext(contextKey);
         StoredContainer existing = contextContainers.containers().get(id.asStableKey());
         if (existing == null) return false;
 
-        String sanitized = (label != null && !label.isBlank()) ? label.trim() : null;
-        StoredContainer updated = existing.withLabel(sanitized);
+        StoredContainer updated = change.apply(existing);
         ContextContainers updatedContext = contextContainers.withContainer(updated);
         indexData = indexData.withContext(contextKey, updatedContext);
+        revision++;
         store.save(indexData);
         return true;
     }

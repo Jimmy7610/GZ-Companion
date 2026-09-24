@@ -3,6 +3,7 @@ package se.jimmyeliasson.gzcompanion.core;
 import se.jimmyeliasson.gzcompanion.bounty.BountyManager;
 import se.jimmyeliasson.gzcompanion.bounty.GameZoneBountySource;
 import se.jimmyeliasson.gzcompanion.chest.ChestManager;
+import se.jimmyeliasson.gzcompanion.chest.KistorRuntime;
 import se.jimmyeliasson.gzcompanion.chest.bridge.MinecraftChestCaptureAdapter;
 import se.jimmyeliasson.gzcompanion.chest.storage.JsonChestIndexStore;
 import se.jimmyeliasson.gzcompanion.core.feature.FeatureManager;
@@ -75,6 +76,7 @@ public class CompanionSession {
     private final CompatibilityService compatibilityService;
     private final GuideEngine guideEngine;
     private final ChestManager chestManager;
+    private final KistorRuntime kistorRuntime;
     private RulePack activeRulePack;
     private CompatibilityResult compatibilityResult;
 
@@ -135,6 +137,7 @@ public class CompanionSession {
 
         this.chestManager = new ChestManager(new JsonChestIndexStore(configDir.resolve("chest-index.json")));
         this.chestManager.setDisplayNameResolver(MinecraftChestCaptureAdapter::resolveItemDisplayName);
+        this.kistorRuntime = new KistorRuntime(chestManager);
 
         this.settlementPlannerManager = new SettlementPlannerManager(new JsonSettlementPlannerStore(configDir.resolve("settlement-planner.json")));
         this.buildingPlanManager = new BuildingPlanManager(new JsonBuildingPlanStore(configDir.resolve("building-plans.json")));
@@ -315,6 +318,11 @@ public class CompanionSession {
 
     public ChestManager getChestManager() {
         return chestManager;
+    }
+
+    /** Session-only Kistor 2.0 state: navigation target, item index cache, Hämtningslista. */
+    public KistorRuntime getKistorRuntime() {
+        return kistorRuntime;
     }
 
     public CommandCatalog getCommandCatalog() {

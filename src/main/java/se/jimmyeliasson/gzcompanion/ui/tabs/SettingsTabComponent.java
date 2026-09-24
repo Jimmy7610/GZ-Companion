@@ -173,7 +173,10 @@ public class SettingsTabComponent {
         y = renderConfirmButton(extractor, font, x, y, maxW, "guide_reset", "Återställ Guide-progression", mouseX, mouseY,
                 () -> session.getGuideEngine().resetGuideProgress(session.getCurrentGuideContext()));
         y = renderConfirmButton(extractor, font, x, y, maxW, "chest_clear", "Rensa Kistor-index", mouseX, mouseY,
-                () -> session.getChestManager().clearContext(contextKey));
+                () -> {
+                    session.getChestManager().clearContext(contextKey);
+                    session.getKistorRuntime().onChestIndexCleared(contextKey);
+                });
         y = renderConfirmButton(extractor, font, x, y, maxW, "settlement_clear", "Rensa Settlement-planerare", mouseX, mouseY,
                 () -> session.getSettlementPlannerManager().clearContext(contextKey));
         y = renderConfirmButton(extractor, font, x, y, maxW, "building_clear", "Rensa Byggplaner", mouseX, mouseY,
@@ -242,6 +245,7 @@ public class SettingsTabComponent {
     private void clearAllEverything(CompanionSession session, String contextKey) {
         session.getGuideEngine().resetGuideProgress(session.getCurrentGuideContext());
         session.getChestManager().clearContext(contextKey);
+        session.getKistorRuntime().onChestIndexCleared(contextKey);
         session.getSettlementPlannerManager().clearContext(contextKey);
         session.getBuildingPlanManager().clearContext(contextKey);
         session.getMarketWatchNotesManager().clearContext(contextKey);

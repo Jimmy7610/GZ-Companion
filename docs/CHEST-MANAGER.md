@@ -1,10 +1,19 @@
-# GZ Companion — Chest Manager (Kistor)
+# GZ Companion — Chest Manager (Kistor 2.0)
 
 > **GZ Companion is an unofficial community project for GameZoneMC. It is not affiliated with or
 > endorsed by GameZoneMC.**
 
-Milestone 3 status: **implemented, pending human gameplay QA.** Do not treat this milestone as
-complete until the manual QA sequence in this document has been run in real Minecraft gameplay.
+Status: **Kistor 2.0 implemented, pending human gameplay QA.** The Milestone 3 capture system is
+unchanged; Kistor 2.0 is a domain/UI/navigation layer on top of it. Do not treat Kistor 2.0 as
+complete until the manual QA checklist in §24 has been run in real Minecraft gameplay.
+
+Kistor 2.0 answers four questions, all from storage the player has legitimately opened before:
+
+1. **Where are my things?** — SAKER (§15)
+2. **Which storage contains them?** — SAKER item detail, FÖRVARING (§15–§16)
+3. **How do I get back to that storage?** — HITTA navigation (§20)
+4. **Do I already have the materials for my Settlement/building goal?** — Hitta material i kistor
+   + Hämtningslista (§21)
 
 ## 1. Fair-Play Boundary
 
@@ -18,20 +27,31 @@ GZ Companion knows ONLY what the Minecraft client legitimately showed the player
 - GZ Companion saves the final visible state when the screen closes.
 - The user later browses/searches that local cached snapshot.
 - The user sees coordinates/dimension of storage they personally opened.
+- **Kistor 2.0:** the player explicitly selects ONE of those already-known storage locations and
+  the HUD compares the player's OWN current position and camera yaw with that saved coordinate
+  (§20).
 
 **Forbidden — and not implemented anywhere in this module:**
-- World scanning for containers, or searching block entities to discover unopened storage.
+- World scanning for containers, chunk scanning, or searching block entities to discover
+  unopened storage.
 - Reading unopened container inventories.
-- X-ray, packet tricks, or any server-internal data extraction.
-- Hidden chest detection, container radar, or plugin data extraction.
+- X-ray, packet tricks/sniffing, or any server-internal data extraction; GameZone private APIs.
+- Hidden chest detection, chest/container radar, or plugin data extraction.
+- ESP, outlines/boxes through walls, or any world-space rendering; raytracing for the chest.
+- Automatic chest discovery — only storage in the local index can ever be a navigation target.
+- Pathfinding, A* routes, auto-walking, auto-turning, route generation.
+- Automatic GUI clicks, automatic item transfers, automatic chat, commands or teleports.
 - Claiming cached contents are current/live.
 - Recursively opening/reading nested storage the player did not open themselves (shulker box
   contents inside an item stack, bundle contents, etc.).
-- Any automation that violates GameZone rules.
+
+These guarantees are enforced structurally by `KistorFairPlayTest`, which scans every Kistor 2.0
+source file for world/chunk/block-entity access, raytracing, world rendering, player
+automation, chat/command/packet/network use.
 
 Every UI surface uses **last-known** language, never "live" or "current" language:
-"Senast känt innehåll", "Senast öppnad", and "Kan ha ändrats sedan du öppnade förvaringen."
-("May have changed since you opened this storage.")
+"Senast känt innehåll", "Senast känt totalt", "Senast öppnad", "Saknas enligt estimat" and
+"Kan ha ändrats sedan du öppnade förvaringen." Cached chest contents are never labeled LIVE.
 
 ## 2. Capture Lifecycle
 
@@ -155,31 +175,41 @@ human gameplay QA (a normal single chest was shown as "kan vara dubbel").
   dubbel)" — the ambiguity is surfaced honestly rather than silently asserting a wrong shape.
 - Non-chest-family kinds are always `NOT_APPLICABLE` and never show any chest-shape text.
 
-## 7. Local Persistence
+## 7. Local Persistence (schema v2)
 
 Path: `config/gzcompanion/chest-index.json`.
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "contexts": {
     "<profileId>@@<contextKey>": {
       "containers": {
         "<stableContainerKey>": {
           "kind": "CHEST",
-          "label": "Gruvbas",
+          "label": "Materiallager",
           "dimension": "minecraft:overworld",
           "anchor": { "x": 120, "y": 64, "z": -32 },
           "partner": { "x": 121, "y": 64, "z": -32 },
           "shape": "DOUBLE",
           "lastOpenedAtMs": 1234567890,
-          "slots": [ { "slot": 0, "itemId": "minecraft:iron_ingot", "count": 32 } ]
+          "slots": [ { "slot": 0, "itemId": "minecraft:iron_ingot", "count": 32 } ],
+          "favorite": true,
+          "group": "Min bas",
+          "locationNote": "Källaren bakom smedjan",
+          "previous": {
+            "lastOpenedAtMs": 1234000000,
+            "slots": [ { "slot": 0, "itemId": "minecraft:iron_ingot", "count": 12 } ]
+          }
         }
       }
     }
   }
 }
 ```
+
+The four Kistor 2.0 fields (`favorite`, `group`, `locationNote`, `previous`) are optional and are
+only written when set.
 
 - Atomic writes: data is written to a `.tmp` file and moved into place with
   `StandardCopyOption.ATOMIC_MOVE`, exactly like `JsonGuideProgressStore`.
@@ -190,41 +220,51 @@ Path: `config/gzcompanion/chest-index.json`.
 - **Incompatible future schema fails closed, without any overwrite risk.** `JsonChestIndexStore`
   returns a typed `ChestIndexLoadResult` distinguishing `NOT_FOUND` / `LOADED` /
   `CORRUPT_RECOVERED` (all safe, all result in `ChestManagerStatus.LOADED`) from
-  `INCOMPATIBLE_SCHEMA` (a `schemaVersion` higher than this build understands). On
-  `INCOMPATIBLE_SCHEMA` the file on disk is **never moved, deleted, or overwritten**, and
-  `ChestManager` reports `ChestManagerStatus.INCOMPATIBLE` instead of `LOADED`. Every capture and
-  mutation entry point (`recordPendingInteraction`, `tryBeginCapture`, `updateCaptureSlots`,
-  `endCapture`, `forgetContainer`, `setLabel`) requires `LOADED` status and is a safe no-op
-  otherwise — so an older client can never silently replace or partially overwrite an index file
-  written by a newer version. Only in-memory queries (`getContainers`, `search`, etc.) remain
-  available while incompatible; the Kistor tab shows a controlled "kistindexet är sparat av en
-  nyare version" message, and the rest of GZ Companion (Guide, Home, etc.) is unaffected.
-- Unknown/future JSON fields are tolerated and ignored on read, so a newer version of the file
-  written by a future GZ Companion release doesn't break an older one that reads it.
+  `INCOMPATIBLE_SCHEMA` (a `schemaVersion` higher than this build understands — now anything
+  above 2). On `INCOMPATIBLE_SCHEMA` the file on disk is **never moved, deleted, or overwritten**,
+  and `ChestManager` reports `ChestManagerStatus.INCOMPATIBLE`. Every capture and mutation entry
+  point (`recordPendingInteraction`, `tryBeginCapture`, `updateCaptureSlots`, `endCapture`,
+  `forgetContainer`, `clearContext`, `setLabel`, `setFavorite`, `setGroup`, `setLocationNote`)
+  requires `LOADED` status and is a safe no-op otherwise. The Kistor tab shows a controlled
+  "kistindexet är sparat av en nyare version" message; active navigation stops.
+- Unknown/future JSON fields are tolerated and ignored on read. A present-but-malformed Kistor 2.0
+  field (e.g. `"favorite": {"x":1}`) falls back to its default instead of discarding the storage
+  entry.
 - Container identity is a **stable key** (context + dimension + canonical anchor position +
   storage kind), never an array index — re-opening the same physical storage updates the existing
-  entry.
+  entry, keeping its label and Kistor 2.0 metadata.
 - 100% local. No telemetry, no cloud account, no external API calls.
-- **Growth policy:** nothing is automatically deleted in Milestone 3. The index grows only as
-  large as the set of storage locations the player has actually opened. See §9.
+- **Growth policy:** nothing is automatically deleted. The index grows only as large as the set of
+  storage locations the player has actually opened; each record keeps at most ONE previous
+  snapshot (§18), so history is bounded.
 
-**Backward-compatible `StorageShape` migration.** The very first M3 release shipped a container
-schema with `partner` + a boolean `partnerUnknown` instead of an explicit `shape` field. Real
-gameplay data already exists under that shape, so schema stays at v1 and the old fields are read
-losslessly rather than the whole index being rewritten or discarded:
+### 7a. Schema migration v1 → v2
+
+Real players already have schema-v1 files. Migration is lossless and needs no manual editing:
+
+- A v1 file loads with every existing field intact — ids/stable keys, labels, dimension, anchor,
+  partner, shape (including the legacy `partnerUnknown` mapping below), `lastOpenedAtMs`, slots.
+- Missing Kistor 2.0 fields get safe defaults: not a favorite, no group, no location note, no
+  previous snapshot.
+- Migration happens **in memory only**. Merely loading a v1 file never rewrites it; the loaded
+  data is tagged schema v2 and the next legitimate save (a capture finalization or a local edit)
+  writes v2 atomically.
+- The serializer always writes the current schema version.
+- Consequence to be aware of: once written as v2, an older GZ Companion build (v1-only) reads the
+  file as `INCOMPATIBLE` and — by design — fails closed without touching it. Nothing is lost; it
+  simply can't be edited by the older build.
+
+Covered by `ChestIndexSchemaMigrationTest` with a realistic alpha.6 v1 fixture.
+
+**Backward-compatible `StorageShape` migration (unchanged).** The very first M3 release shipped a
+container schema with `partner` + a boolean `partnerUnknown` instead of an explicit `shape` field.
+Those records are still read losslessly:
 
 - A record that already has an explicit `"shape"` value uses it directly.
-- A legacy record without `"shape"` is migrated in-memory (never rewritten on disk merely because
-  it was loaded) using this conservative mapping:
-  - `partner != null` → `DOUBLE`
-  - `partner == null && partnerUnknown == true` → `UNKNOWN`
-  - `partner == null && partnerUnknown == false` → `SINGLE` for a chest-family kind, otherwise
-    `NOT_APPLICABLE`
-- An explicit `"shape"` value this build doesn't recognize (e.g. written by a future version)
-  falls back to the same legacy mapping rather than crashing or guessing.
-- Every record written by this version onward always includes the explicit `"shape"` field.
-- The future-schema fail-closed behavior (§7, `ChestIndexLoadResult`) is completely unaffected by
-  this migration — it only concerns individual container records under the *same* schema version.
+- A legacy record without `"shape"` is mapped: `partner != null` → `DOUBLE`;
+  `partner == null && partnerUnknown == true` → `UNKNOWN`; otherwise `SINGLE` for a chest-family
+  kind, `NOT_APPLICABLE` for everything else.
+- An explicit `"shape"` value this build doesn't recognize falls back to the same legacy mapping.
 
 ## 8. Context Isolation
 
@@ -239,49 +279,38 @@ container's identity, so:
 
 ## 9. Search, Filter, and Sort
 
-`ChestManager.search(contextKey, query, typeFilter, sortMode)` operates purely on already-indexed
-local data — it never triggers any world lookup, and never returns a result from a different
-context. Matching (case-insensitive) is checked against:
+One prominent local search field at the top of Kistor: **"Vad letar du efter?"**. It never
+triggers any world lookup and never returns a result from a different context.
+`ChestSearchMatcher` is the single source of truth for matching (case-insensitive):
 
-- The raw Minecraft item ID (`minecraft:iron_ingot`).
-- A resolved item display name (the real vanilla translated name when running in-game via
-  `MinecraftChestCaptureAdapter.resolveItemDisplayName`, or a readable fallback transform of the
-  ID — e.g. `iron_ingot` → `Iron Ingot` — when no live resolver is wired, such as in unit tests).
-- Coordinate text (`"120 64 -32"`).
-- Storage kind name/display name (`"barrel"`, `"Tunna"`).
-- The dimension key (`"overworld"` matches `minecraft:overworld`).
-- The player's local custom label, if set.
+- Translated item display name (the real vanilla name via
+  `MinecraftChestCaptureAdapter.resolveItemDisplayName`, memoized per id) and raw item id.
+- Custom label, **group**, **location note**.
+- Storage type (`"Tunna"`, `"barrel"`, `"dubbel kista"`).
+- Dimension key and short name (`"nether"`, `"minecraft:the_nether"`).
+- Coordinates, typed with spaces or commas (`"120 64 -32"`, `"120, 64, -32"`).
 
-An empty query returns every indexed container for the current context (subject to the type
-filter). The Kistor search bar shows a live "X av Y" result count once a query or filter is
-active, and a small clear button next to the field. Tag-based search was intentionally left out
-of Milestone 3 per the roadmap scope — it did not block this milestone.
+**FÖRVARING** searches storage locations by all of the above. **SAKER** searches aggregated items:
+if any item name/id matches, those items are shown; otherwise, if the query matches storage
+metadata (e.g. the group "Min bas"), the result is every item stored in those matching storage
+locations (`ChestItemSearch`, scope `STORAGE_MATCH`).
 
-**Storage type filter (`ChestTypeFilter`).** A compact cycle button ("Typ: ...") restricts results
-to one storage grouping: `ALL`, `CHEST` (Chest + Trapped Chest), `BARREL`, `SHULKER_BOX`,
-`HOPPER`, `DISPENSER_DROPPER` (Dispenser + Dropper). It combines with the search query (both must
-match) and is local UI state, not persisted.
+Controls row (local UI state, never persisted):
+- **Typ** (`ChestTypeFilter`): Alla / Kista (+ Fällkista) / Tunna / Shulker / Hopper /
+  Dispenser+Dropper.
+- **Sortering**: FÖRVARING uses `ChestSortMode` (senast öppnad / namn / typ); SAKER uses
+  `ChestItemSortMode` (antal / namn / förvaringar). All orders are total and deterministic.
+- **Grupp** (`ChestGroupFilter`): Alla → each existing group → Utan grupp.
 
-**Sort mode (`ChestSortMode`).** A second compact cycle button ("Sortering: ...") controls result
-order: `RECENT` (default, most recently opened first), `NAME` (local label if present, otherwise
-the storage type's display name, case-insensitive), `TYPE` (grouped by storage kind, then by
-label/coordinates). Also local UI state, not persisted.
+Technical ids: the item detail shows the raw id only when the existing "Visa tekniska Minecraft-ID"
+setting is on (item tooltips follow the same setting); raw-id search always works.
 
 ## 10. Local Custom Labels
 
-`ChestManager.setLabel(contextKey, id, label)` stores a purely local, player-chosen label (e.g.
-"Gruvbas", "Mat") **only** inside `chest-index.json`. It never writes a sign, places or edits a
-block, sends a chat message, or issues a server command. Saving an empty or whitespace-only label
-clears it; any real label is trimmed and capped at 32 characters.
-
-**Kistor UI.** The detail pane's pinned action row has a "Namnge"/"Byt namn" button (its label
-changes to "Spara" while editing). Clicking it opens an inline local text field pre-filled with
-the current label. While editing: `Enter` commits, `Escape` cancels without saving, and clicking
-anywhere else (other than the field itself or the commit button) also cancels without saving —
-a single, consistently-documented "click away cancels" behavior. Labeled storage shows its label
-as the primary line in both the list row and the detail pane, with the storage type demoted to
-secondary information; unlabeled storage shows the storage type as the primary line, exactly as
-before labels existed.
+`ChestManager.setLabel` stores a purely local label **only** inside `chest-index.json`. It never
+writes a sign, edits a block, sends chat, or issues a command. Blank clears it; control characters
+become spaces; capped at 32 characters. Edited inline from the FÖRVARING detail ("Namnge" /
+"Byt namn" → "Spara"; Enter saves, Esc cancels, clicking elsewhere cancels).
 
 ## 10a. Copy Coordinates
 
@@ -292,17 +321,24 @@ clipboard via the real, current Minecraft 26.1.2 API — `Minecraft.getInstance(
 button label for two seconds. This is a pure local convenience; nothing is sent anywhere, and
 chat is never used for the confirmation.
 
-## 10b. Item Icons — Deliberately Not Implemented This Pass
+## 10b. Real Item Icons
 
-Minecraft 26.1.2's render abstraction (`GuiGraphicsExtractor.item(ItemStack, x, y)`) *is* a clean,
-non-reflective API for rendering a real vanilla item icon, and was verified to exist before this
-decision was made. It was deliberately not wired into the aggregated item list this pass: vanilla
-item rendering is built around a fixed 16×16 icon, while the Kistor item rows are a dense ~10px
-line height, so fitting a real icon in would require scaling the render pipeline down (via pose
-transforms) in a way that cannot be visually verified without a running display in this
-environment — and a visually broken icon would be worse than no icon. Functionality was
-prioritized over this polish item, per instruction. A future pass can revisit this once it can be
-checked against a real screenshot.
+Kistor 2.0 renders real vanilla item icons everywhere items appear (SAKER rows and detail,
+storage cards, storage contents, "sedan förra öppningen", material view, Hämtningslista).
+Stored snapshots contain item ids, not ItemStacks, so `chest.bridge.ChestItemIcons`:
+
+- resolves the id against the running client's own item registry with
+  `BuiltInRegistries.ITEM.getOptional(...)` (never `getValue`, which would silently turn an
+  unknown/future id into Air), memoized with a bounded cache;
+- renders with the real 26.1.2 `GuiGraphicsExtractor.fakeItem(ItemStack, x, y)` — the same call
+  Crafting/Settlement/Byggplaner already use. Icons smaller than 16 px (10 px in dense rows) are
+  drawn by scaling the extractor's own 2D pose (`pose().pushMatrix()/translate/scale`), so text
+  next to them stays on the normal pixel grid;
+- draws a neutral placeholder for an unknown id, keeping row alignment;
+- keeps Minecraft types out of every pure domain class. No reflection.
+
+Hovering an icon shows the shared item tooltip (vanilla name, plus the raw id when technical ids
+are enabled). Final icon sizing must be confirmed visually (§24).
 
 ## 11. Corruption Behavior
 
@@ -312,11 +348,24 @@ with an empty index; the rest of the mod (Guide, Home, etc.) is entirely unaffec
 cannot initialize at all, `ChestManagerStatus.ERROR` is reported and the Kistor tab shows a
 controlled error state instead of pretending to work.
 
-## 12. Privacy
+## 12. Privacy & Diagnostics
 
-Chest Manager diagnostics intentionally expose only status, schema version, and an indexed-count
-number for the current context — never coordinates, labels, or item contents — in any generic
-diagnostic output. All chest data is local-first: it never leaves the player's machine.
+All Kistor data — labels, favorites, groups, location notes, previous snapshots, contents,
+coordinates — is local-first and never leaves the player's machine.
+
+Generic diagnostics ("Kopiera diagnostik") expose only:
+- `Kistor-status` (manager status),
+- `Kistor-index: ... (schema vN, M indexerade)` for the current context,
+- `Kistor-navigering: aktiv|inaktiv`.
+
+They never include coordinates, labels, location notes, groups, item contents, or the navigation
+target or its position (`ChestNavigationLifecycleTest.diagnosticsAreRedacted`).
+
+**Reset.** Settings → "Rensa Kistor-index" (and "Rensa ALL lokal data") clears every container
+record of the current context — which removes its favorites, groups, location notes and previous
+snapshots too, since they live on those records — and immediately stops any navigation toward
+storage in that context (`KistorRuntime.onChestIndexCleared`). Navigation also stops lazily if
+the target ever disappears from the index for any other reason.
 
 ## 12a. Capture Session Cleanup
 
@@ -342,86 +391,333 @@ interaction even if one were somehow still sitting in memory.
 
 ## 13. Input Behavior (G, Escape, and Companion Text Fields)
 
-`G` closes the Companion globally, exactly as established in Milestone 1 — **except** while a
-legitimate Companion text input owned by the Kistor tab (the search field or the local label
-editor) is focused, in which case `G` types into that field instead. This is implemented as a
-single condition in `GZCompanionMainScreen.keyPressed`: the global close action for `G` is
-skipped whenever `KistorTabComponent.isTextInputFocused()` is true; Minecraft's own `charTyped`
-callback still inserts the character normally, since it is a separate event from `keyPressed`.
-This fixed a real usability bug where searching for "gold", "glass", "gravel", or "gruvbas" (or
-naming a label starting with "g") was impossible.
+`G` closes the Companion globally — **except** while a Kistor text input is focused (the search
+field or an inline label/group/note editor), in which case `G` types into it. Implemented through
+the shared `TextInputHandler` contract (`KistorTabComponent.isTextInputFocused()`).
 
-`Escape` priority, active-tab-aware:
-1. If the label editor is focused, the first `Escape` cancels the edit without saving.
-2. Otherwise, if the search field is focused, the first `Escape` unfocuses it and preserves the
-   typed query.
-3. Otherwise (nothing left focused), `Escape` closes the Companion normally, exactly as before.
+`Escape` priority:
+1. An open inline editor: the first `Escape` cancels it without saving.
+2. Otherwise a focused search field: `Escape` (or `Enter`) unfocuses it and keeps the query.
+3. Otherwise `Escape` closes the Companion normally.
 
-Every other tab (Guide, Home, etc.) is completely unaffected — `isTextInputFocused()` is only ever
-true while the Kistor tab is active, so `G` and `Escape` behave exactly as they did in M1/M2
-everywhere else.
+No new global keybind was added for Kistor 2.0.
 
-## 14. Known Limitations
+## 14. Kistor 2.0 Layout
+
+```
+Kistor  12 sparade                     [SAKER][FÖRVARING][MATERIAL*]
+[ NAVIGERAR: Materiallager · 284 block fågelvägen · 12 block lägre ][Stoppa]   (only while navigating)
+[ Vad letar du efter? ...                                           ][x]
+[ Typ: Alla ] [ Sortering: ... ] [ Grupp: Alla ]
++-------------- list --------------+ +------------- detail -------------+
+|                                  | |                                  |
++----------------------------------+ +----------------------------------+
+                                     [ Hitta ][ Byt namn ][ ★ Fäst     ]   FÖRVARING: 2 pinned rows
+                                     [Koord.][Notering][ Grupp ][ Glöm ]   SAKER: 1 row (Hitta närmaste)
+```
+
+`*` MATERIAL appears only while a planner material request is active. No new top-level Companion
+tab was added. `KistorLayout` is pure geometry:
+
+- **Normal/large** (≥ 300 px content width): list (40%) beside detail (60%).
+- **Compact** (< 300 px): ONE pane at a time (list and detail are the same rectangle) with a
+  "< Saker" / "< Förvaring" back button; a compact list that isn't showing a detail reserves no
+  action zone and uses the full height.
+- Pinned action rows are reserved below the detail pane, outside every scrollable area, so no
+  action button can overlap scrolled content (`Kistor2LayoutTest` checks every
+  mode/banner/detail combination at several sizes).
+- Scroll ranges are recorded from the content height actually drawn each frame
+  (`ScrollState`), and routing in compact mode follows the visible pane.
+- Rows never overlap icons/counts: counts are right-aligned and names ellipsize before them.
+
+## 15. SAKER — aggregated items (default mode)
+
+`ChestItemIndex.build(context, containers, displayName)` aggregates the already-stored snapshots
+of the CURRENT context (other contexts are ignored even if passed in):
+
+- item id, display name, **total last-known count**, number of storage locations, and every
+  contributing location with its count (duplicate slots in one container are summed; zero
+  counts, blank ids and air are ignored);
+- locations ordered largest amount first, then most recently opened, then stable key;
+- items ordered by total (default), name, or spread — always deterministic.
+
+List rows: real icon · name · total (right-aligned) · "Finns i N förvaringar".
+
+Item detail: icon + name, "Senast känt totalt: 438", "Finns i 4 förvaringar", raw id (setting),
+then **SENAST KÄNDA PLATSER** — one row per storage: label, amount, relative time/freshness,
+distance (only when the player is in the same dimension) or the storage's dimension, a
+**NÄRMAST** tag, and a **Hitta** button. Clicking the row itself opens that storage's full
+FÖRVARING detail. Wording always says the amounts are last known, not the server's current
+stock.
+
+**Hitta närmaste** (pinned) selects the nearest known storage holding the item, considering only
+the current context and the player's current dimension (`ChestItemIndex.nearestSameDimension`).
+It never discovers anything new.
+
+Caching: the index is cached per (context, `ChestManager.revision()`, type filter, group filter)
+by `ChestItemIndexCache`, and SAKER search results are memoized per (index, query, sort) — so a
+normal render frame does no rebuilding at all.
+
+## 16. FÖRVARING — known storage
+
+Cards show `★` for favorites, the title (label, or storage type), a freshness badge, the most
+meaningful items (largest counts first, as many 10 px icon+count chips as fit, then "+N andra"),
+and "Overworld · Öppnad 18 min sedan · Min bas". Favorites are listed first under **FÄSTA**.
+
+Detail: title, storage type + shape ("Dubbel kista", or "(kan vara dubbel)" for UNKNOWN),
+dimension, coordinates, group, location note, freshness + last opened, "● NAVIGERAR HIT" when it
+is the navigation target, **SENAST KÄNT INNEHÅLL** with icons and counts, **SEDAN FÖRRA
+ÖPPNINGEN** (§18), and the last-known warning.
+
+Actions: **Hitta** (or **Stoppa** when this is the target), **Namnge/Byt namn**, **★ Fäst / Ta
+bort favorit**; secondary row **Koord.** (copy), **Notering**, **Grupp**, and a deliberately quiet
+**Glöm** that needs a second click ("Bekräfta!") within 4 seconds.
+
+## 17. Favorites, groups and location notes
+
+Local metadata per storage (`StorageMetadata`), only ever stored in `chest-index.json`, never
+touching signs, chat, commands, the world, or any GameZone API:
+
+- **Favorite/pinned** — shown first under FÄSTA.
+- **Group** — one simple level (no nested folders). The group editor lets the player type a new
+  group or click an existing group chip, or "Ingen grupp" to remove it. Assigning a name that
+  matches an existing group ignoring case reuses that spelling. Filter via the Grupp control;
+  search matches group names.
+- **Location note** — free text, e.g. "Källaren bakom smedjan".
+
+Sanitization (shared `StorageMetadata.sanitizeText`): control characters/newlines become spaces,
+whitespace collapses, trimmed; blank means "not set". Caps: label 32, group 24, note 80
+characters.
+
+## 18. Freshness and "sedan förra öppningen"
+
+`ChestFreshness.classify(lastOpenedAtMs, now)`: **FÄRSK** (< 30 min), **SENASTE DYGNET**
+(< 24 h), **TIDIGARE** (< 3 days), **ÄLDRE SNAPSHOT** (≥ 3 days), **OKÄND TID** (no timestamp),
+plus relative text ("just nu", "18 min sedan", "2 h sedan", "3 dagar sedan"). An old snapshot is
+presented as older, never as wrong; the last-known warning is always shown.
+
+Previous snapshot: when a known storage is legitimately reopened and its final snapshot persisted,
+the old current snapshot becomes the ONE retained `previous` snapshot (the older one is dropped —
+bounded, no history). `ChestSnapshotDiff` shows only real per-item differences (appeared,
+disappeared, increased, decreased; slot moves with equal totals are not changes), ordered by delta
+descending (largest gain first, largest loss last), capped at 12 lines plus "+N fler ändringar".
+Nothing extra is written while the storage screen is open — still exactly one persist per
+finalized capture.
+
+## 19. Capture feedback
+
+After (and only after) a legitimate finalization + persist, `ChestManager.endCapture` returns a
+`ChestCaptureEvent`; `ChestCaptureFeedback` decides the local toast:
+
+- New storage: **"Ny förvaring sparad"** — "Dubbel kista • 17 olika föremål".
+- Known storage whose contents changed: **"Materiallager uppdaterad"** (or "Förvaring
+  uppdaterad") — "Senast känt innehåll sparat".
+- Known storage reopened unchanged: **no toast** (anti-spam).
+- The exact navigation target: **"✓ Materiallager hittad"** (§20).
+
+Toasts go through the existing `GameZoneToastManager` via `offerCompanion`: respects the
+Companion notifications setting (the separate GameZone-event toggle does not silence local Kistor
+feedback), dedupes per storage within the existing 8 s window, and keeps the existing bounded
+3-toast queue. No toast is ever produced per tick.
+
+## 20. HITTA — navigation to ONE known storage
+
+**What it is:** the player selects one storage location they previously legitimately opened and
+presses **Hitta**. The HUD then compares the player's own current position and camera yaw with that
+saved coordinate and shows direction and distance.
+
+**What it is not:** chest radar, world/chunk/block-entity scanning, hidden storage detection, ESP
+or outlines through walls, raytracing, pathfinding, route generation, auto-walking or
+auto-turning. No nearby unknown storage can ever appear — only a container that already exists in
+the local index can be a target (`ChestNavigationManager.start` refuses anything else).
+
+**State.** `ChestNavigationManager` (inside the session-only `KistorRuntime`) holds at most one
+target by its stable `StoredContainerId`. It is memory-only and never persisted, so it cannot
+survive a restart. Starting navigation shows "Navigering startad · stäng Companion med G för att
+se pilen" and a **NAVIGERAR: Materiallager** banner with **Stoppa** at the top of Kistor
+(clicking the banner opens the target's detail).
+
+**HUD** (`KistorNavigationHudElement`, registered with `HudElementRegistry` exactly like
+`GameZoneToastHudElement`):
+
+- Inactive: one boolean check, draws nothing.
+- Top-center card, placed below any boss bars the client is already drawing (counted via the
+  read-only `BossHealthOverlayAccessor` mixin, capped at a third of the screen height) and pushed
+  below the Companion toast card if they would overlap on a narrow screen.
+- Hidden while a screen (Companion, a storage menu, inventory) is open — except chat.
+- **A real, smoothly rotating arrow**: an up-pointing arrow drawn from fills in a half-pixel local
+  grid under the extractor's 2D pose rotated by the relative bearing, using the interpolated
+  (partial-tick) camera yaw and position, so it rotates smoothly while the player turns the camera
+  standing still. Arrow up = the camera faces the target; clockwise = target to the right; down =
+  behind. Direction is relative to the CAMERA/LOOK yaw, not movement.
+- Title, **"284 block fågelvägen"** (straight-line horizontal distance — the wording can't be
+  confused with a route distance), and **"↓ 12"** / **"↑ 17"** vertical difference (hidden when
+  under 2 blocks).
+- **Nära** (< 15 blocks 3D): emphasized card, "Nära · 11 block fågelvägen".
+- **DU ÄR FRAMME** (≤ 4.5 blocks 3D, roughly reach distance): arrow removed. Coordinate proximity
+  only — nothing is highlighted, outlined or raytraced.
+- **Wrong dimension**: no arrow at all; "⚠ Finns i Nether" / "Du är i Overworld". Saved
+  coordinates stay visible in Kistor. When the player later enters the right dimension the arrow
+  resumes automatically. No cross-dimension or portal routing is ever invented.
+
+**Math** (`ChestNavigationMath`, pure). Minecraft yaw: 0 = facing +Z (south), 90 = −X (west),
+180 = −Z (north), −90 = +X (east), increasing as the camera turns right; a player with yaw θ looks
+along (−sin θ, cos θ). Target yaw = `atan2(−dx, dz)`; relative bearing =
+`wrap(targetYaw − playerYaw)` into [−180, 180). The target point is the block center, or the
+midpoint of both halves of a proven double chest. Tested without a live client
+(`ChestNavigationMathTest`): ahead/right/left/behind, wraparound at ±180 and unnormalized yaw,
+identical position, different Y levels, vertical deltas, thresholds, wrong dimension.
+
+**Ending navigation.** It stays active until the player presses **Stoppa**, or the capture
+controller proves the player legitimately opened the EXACT target (same stable identity rules as
+the Chest Manager: context + dimension + canonical anchor + kind — opening either half of the
+target double chest counts, a different chest or the same coordinates in another dimension do
+not). Then it stops and shows "✓ Materiallager hittad".
+
+**Fail-safe stop** (prefers STOP over any risk of cross-context navigation):
+- the target no longer exists in the local index (forgotten, Kistor reset),
+- the Chest Manager is not LOADED (error/incompatible schema),
+- the world/server context changes (checked on join, once per second on the HUD, and every Kistor
+  frame),
+- the client disconnects / leaves the world (`ClientPlayConnectionEvents.DISCONNECT`).
+While the player/level is unavailable (e.g. loading), the HUD simply draws nothing.
+
+## 21. Planner integration: "Hitta material i kistor" and Hämtningslista
+
+**Settlement → Material** and **Byggplaner → building detail** get a **Hitta material i kistor**
+button. It hands a `ChestMaterialRequest` (built by `PlannerMaterialRequests` from the planner's own
+requirement data) to Kistor, which opens its MATERIAL view. The planners themselves never read
+chest data for this.
+
+Gate: offered only while the existing setting **"Använd senast kända kistodata i planerare"** is
+on. When it is off, Settlement doesn't show the button, Byggplaner shows "Kistdata i planerare är
+avstängd i Inställningar.", and Kistor's material view refuses to compute. Settlement's
+live-vs-local truth semantics (LIVE settlement data, "Planerad nuvarande nivå", owned-amount
+checklist) are untouched.
+
+**Tillgång** (`ChestMaterialAvailability`), per required material: needed amount, "Senast känt i
+kistor" total, and **"SAKNAS ENLIGT ESTIMAT"** (needed − last known, never negative), plus the top
+three storage locations with amount, distance/dimension and **Hitta**. Category requirements with
+no concrete item ("any Wool") are listed as "kan inte matchas mot kistdata" and never guessed.
+
+**Hämtningslista** (`ChestPickupPlanner`): pickup suggestions grouped by storage, each group with
+its own **Hitta**, each line a local checkbox. **Allocation rule:** for each material, in the
+planner's order, take from the storage locations that last held it — *largest last-known amount
+first* (fewest stops), ties broken by *most recently opened* (freshest data), then stable key —
+until the need is covered or the known stock runs out; any remainder is listed under **SAKNAS
+ENLIGT ESTIMAT**. The player's position is deliberately not an input, so the list never reshuffles
+while walking. Groups are ordered by total pickup amount. Checkmarks are session-only state (kept
+while the Companion is closed to go fetch things, cleared on disconnect, a new request, or a
+Kistor reset) — no long-term state is created.
+
+Planning assistance only: nothing withdraws items, clicks storage slots, moves the player, runs
+commands or completes objectives. Everything is labeled as a local estimate from last-known
+snapshots, never GameZone's live server inventory.
+
+## 22. Performance
+
+- No disk write per frame; still exactly one persist per finalized capture, plus one per explicit
+  local edit (label, favorite, group, note, forget, reset).
+- No world, chunk or block-entity scanning; no networking; no new executors or threads.
+- `ChestManager.revision()` is bumped on every index mutation; the item index, storage search
+  results, SAKER search results and material plans are memoized against it (and their query/filter
+  keys), so steady-state frames rebuild nothing. Item display names are memoized (bounded).
+- Inactive navigation HUD: one boolean check. Active: one O(1) hash lookup for the target, the
+  player's own pose, a few trig operations, and a throttled (1 s) context-key check.
+- Bounded everywhere: one previous snapshot per storage, the existing 3-entry toast queue with its
+  pruned dedupe map, a 512-entry cap on pickup checkmarks, 4096-entry caps on the icon and
+  display-name memos.
+
+## 23. Known Limitations
 
 - **Client cannot distinguish a real chest's real contents from a real chest whose contents a
-  server-side plugin has deliberately customized.** If GameZone (or any plugin) intercepts a
-  right-click on a genuine, previously-placed Chest block and serves a modified inventory through
-  the same vanilla `ChestMenu`, GZ Companion has no way to know that server-side substitution
-  happened — the interaction and the menu are both completely legitimate from the client's point
-  of view. This is an inherent client-side limitation, not a bug, and is not specific to GZ
-  Companion.
+  server-side plugin has deliberately customized.** Inherent client-side limitation.
 - **Ender Chests, container entities (minecart with chest), and mount inventories are not
-  indexed** in Milestone 3 (see §4). These are candidates for a future, separately-designed
-  extension.
-- **The double-chest partner detection relies on `ChestBlock.getConnectedBlockPos`.** If that
-  ever returns an unexpected shape, GZ Companion deliberately records `StorageShape.UNKNOWN`
-  rather than guessing (see §6).
-- **No automated retention/cleanup exists yet.** The index can only grow as large as the storage
-  locations a player has actually opened; a future milestone may add player-facing retention
-  controls (e.g. "forget storage not opened in 90 days").
-- **Real item icons are not rendered in the item list this pass** — see §10b for why, and what a
-  future pass would need to verify first.
+  indexed** (see §4).
+- **Double-chest partner detection relies on `ChestBlock.getConnectedBlockPos`**; an unexpected
+  shape is recorded as `UNKNOWN` rather than guessed (§6).
+- **No automated retention/cleanup** of old storage records yet.
+- **Navigation is straight-line only** by design — no route, no portal awareness. A target behind
+  a wall or under a mountain still points straight at it.
+- **Downgrade:** once saved as schema v2, an older v1-only build treats the file as incompatible
+  (fails closed, never overwrites).
+- Icon scaling, HUD placement and arrow appearance could not be verified visually in this
+  environment — see §24.
 
-## 15. Testing
+## 24. Testing and Human QA
 
-Automated JUnit tests cover the storage model (stable identity, context/dimension isolation,
-double-chest canonicalization, `StorageShape` resolution and legacy migration), snapshot/
-fingerprint behavior, correlation rejection paths (stale/mismatched/unsupported/virtual-GUI),
-capture cleanup and pending-interaction hygiene, persistence (round-trip, atomic write, corruption
-recovery, schema rejection, unknown-field/unknown-shape tolerance, malformed-entry skipping,
-context/dimension isolation across a full reload), search/filter/sort, labels (set/clear/reload/
-search), forget, layout geometry, Kistor text-input focus routing, and the M2 Home objective
-fallback fix (`ChestManagerTest`, `JsonChestIndexStoreTest`, `KistorLayoutTest`,
-`KistorTabInputTest`, `HomeTabComponentTest`).
+Automated JUnit coverage (all Minecraft-free except the tab input tests, which only use
+Minecraft's plain input records): `ChestIndexSchemaMigrationTest` (v1→v2, defaults, round-trip,
+malformed fields, future schema fails closed), `ChestManagerKistor2Test` (metadata persistence,
+sanitization, groups, previous-snapshot rollover, capture events, revision), `ChestItemIndexTest`,
+`ChestItemIndexCacheTest`, `ChestSearchTest`, `ChestSnapshotDiffTest`, `ChestMaterialTest`
+(availability, allocation, shortages, planner gate), `ChestNavigationMathTest`,
+`ChestNavigationLifecycleTest`, `ChestCaptureFeedbackTest`, `Kistor2LayoutTest` (responsive
+geometry, HUD placement), `KistorFairPlayTest`, plus the pre-existing `ChestManagerTest`,
+`JsonChestIndexStoreTest`, `KistorLayoutTest`, `KistorTabInputTest`, `KistorTabComponentTest`.
 
-Consistent with the Guide Engine's own testing tiers, the Minecraft-specific capture adapter and
-controller (`MinecraftChestCaptureAdapter`, `ChestCaptureController`) are **not** unit tested —
-they require live Minecraft block/menu/screen state that only exists in real gameplay. They are
-verified instead through the manual human gameplay QA sequence below. Automated tests alone are
-not sufficient sign-off for this milestone.
+The Minecraft-specific adapters (`MinecraftChestCaptureAdapter`, `ChestCaptureController`,
+`ChestItemIcons`, `MinecraftPlayerPoseReader`, `KistorNavigationHudElement`) need live client
+state and are verified by the manual checklist below. Automated tests alone are not sign-off.
 
-### Manual gameplay QA sequence
+### Manual gameplay QA checklist
 
-Run with `.\gradlew.bat runClient`:
+Run with `.\gradlew.bat runClient` (singleplayer first, then GameZone):
 
-1. Open a new single chest containing items, close it, open GZ Companion → Kistor. The chest
-   should appear with the correct last-known contents, and must show NO double-chest text.
-2. Reopen the same chest, move items between the chest and your own inventory, close it. GZ
-   Companion should update the **same** record, not create a duplicate.
-3. Open a genuine double chest. It should show "Dubbel kista" and resolve to one entry regardless
-   of which half is clicked.
-4. Open another chest at a different position. Both should appear as separate entries.
-5. Search for an item, a label, a storage type, and a dimension name. Only already-saved,
-   previously-opened storage should match. Try the type filter and each sort mode.
-6. Rename a storage entry, confirm the label appears in the list, search for it, then clear it.
-7. Use "Kopiera koord." and paste the clipboard contents somewhere to confirm the format.
-8. While the search field is focused, type a query containing the letter "g" (e.g. "gold" or
-   "gruvbas") — it must NOT close the Companion.
-9. Open a normal plugin/virtual GUI, if one is available on the server. It must **not** be
-   indexed as a physical chest.
-10. Restart Minecraft. The same world's indexed storage should still be there.
-11. Create or join another world. World A's chest index must not appear in World B.
-12. Return to World A. Its storage index should reappear unchanged.
+1. Open a new normal single chest containing items, close it.
+2. Verify the toast "Ny förvaring sparad" — "Kista • N olika föremål".
+3. Open Companion (G) → Kistor. SAKER is the default mode.
+4. Confirm the storage appears under FÖRVARING with NO double-chest text.
+5. Confirm real item icons render at a sensible size in SAKER rows, storage cards (10 px chips),
+   detail contents, and that text/counts don't overlap icons.
+6. Rename the storage to "Materiallager" (Byt namn → type → Enter).
+7. Add group "Min bas" (Grupp → type → Enter), then check the group chip appears for a second
+   storage.
+8. Add a location note (Notering → type → Enter).
+9. Favorite it (★ Fäst) — it moves under FÄSTA.
+10. Search an item in SAKER (e.g. "järn" / "iron").
+11. Verify the aggregate total and "Finns i N förvaringar".
+12. Put the same item into a second chest, open and close it.
+13. Verify the item detail lists both storage locations with counts, distance and Hitta.
+14. Reopen Materiallager and change its contents; verify the "Materiallager uppdaterad" toast.
+15. Verify "SEDAN FÖRRA ÖPPNINGEN" shows only the real +/− differences. Reopen without changes:
+    no toast, and "Inga ändringar sedan förra öppningen."
+16. Start HITTA navigation from the storage detail; see "Navigering startad" and the NAVIGERAR
+    banner with Stoppa.
+17. Close Companion with G.
+18. Verify the navigation HUD card is top-center, below any boss bar, not covering the crosshair
+    or hotbar.
+19. Stand still and turn the camera left/right.
+20. Verify the arrow rotates smoothly, and arrow UP means the target is straight ahead (target on
+    your right → arrow points right; behind → down).
+21. Walk toward the target.
+22. Verify "N block fågelvägen" decreases.
+23. Move above/below the target (dig down / build up).
+24. Verify "↓ N" / "↑ N" and that it hides within 1 block.
+25. Travel to the Nether with the target active: "⚠ Finns i Overworld" / "Du är i Nether", no arrow.
+26. Return to the Overworld.
+27. Verify the arrow resumes automatically.
+28. Walk up to the target: "Nära ..." within 15 blocks, then "DU ÄR FRAMME". Nothing is highlighted
+    through walls.
+29. Open a different chest — navigation must remain active.
+30. Open the exact target — navigation ends and "✓ Materiallager hittad" appears (try clicking the
+    other half of a double-chest target too).
+31. Settlement → Material with a target level: "Hitta material i kistor" → Kistor MATERIAL view with
+    needed / senast känt / saknas enligt estimat. Turn the planner setting off: the button
+    disappears and the view refuses to compute.
+32. Byggplaner → a building with special requirements → "Hitta material i kistor".
+33. Hämtningslista: groups by storage, check lines, Hitta per group, shortages listed; close and
+    reopen Companion — checkmarks remain; Stäng materiallista removes the view.
+34. Compact GUI scale / small window: one pane at a time, back buttons, pinned buttons never over
+    scrolled content, all panes scroll correctly.
+35. Restart Minecraft: labels, favorites, groups, notes and the previous-snapshot diff remain; no
+    navigation is active after restart.
+36. With navigation active, disconnect and join another world/server: navigation must be stopped
+    and never appear there.
+37. With an alpha.6 (schema v1) `chest-index.json` copied in beforehand: all old storage, labels,
+    positions and contents are still present after the upgrade.
+38. Also re-check the original M3 items: plugin/virtual GUIs are never indexed; "g" in a Kistor
+    text field doesn't close the Companion; Rensa Kistor-index clears everything and stops
+    navigation.
 
-Do not consider Milestone 3 complete until this sequence has been run and confirmed in real
-gameplay.
+Do not consider Kistor 2.0 complete until this checklist has been run in real gameplay.

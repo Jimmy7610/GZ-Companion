@@ -58,6 +58,11 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Explicit `StorageShape`**: Single, double, or unknown-shape chests are shown honestly and distinctly — never guessed.
 - **Context & Dimension Isolated**: Reuses the Guide Engine's world/server identity rules; the same coordinates in a different world, server, or dimension are always separate entries.
 
+### Kistor 2.0
+- **Saker & Förvaring**: "Where are my things?" — an aggregated last-known item index with real item icons, plus storage cards with favorites, groups, location notes, freshness and "Sedan förra öppningen".
+- **Hitta**: select ONE storage you've already opened and a small HUD arrow guides you back to its saved coordinates — straight-line distance and height difference only; no scanning, radar, ESP or pathfinding.
+- **Hitta material i kistor & Hämtningslista**: see where Settlement/Byggplaner materials were last known to be, grouped into a local pickup list — estimates from last-known snapshots, never live server inventory.
+
 ### Milestone 4 — GameZone Knowledge Base *(Completed — confirmed via human gameplay QA)*
 - **Kommandon Tab**: A searchable, category-filtered catalog of GameZone commands sourced from the official GameZone Wiki, each with a verification badge and a "Kopiera kommando" clipboard action — never auto-sent, never auto-typed into chat.
 - **Crafting Tab**: Legitimately-unlocked client/server-synced crafting-table recipes read from your own Minecraft recipe book, shown alongside any documented GameZone crafting overrides (none exist on the wiki today) and the 50-relic GameZone item registry — switchable via an Alla/Recept/GameZone-föremål filter.

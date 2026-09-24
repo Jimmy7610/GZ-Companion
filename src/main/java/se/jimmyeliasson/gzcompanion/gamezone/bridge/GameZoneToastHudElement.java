@@ -37,6 +37,11 @@ public final class GameZoneToastHudElement implements HudElement {
         this.toastManager = toastManager;
     }
 
+    /** Where the toast card is drawn - shared so other HUD cards (Kistor navigation) can avoid it. */
+    public static UiRect cardRect(int screenWidth) {
+        return new UiRect(screenWidth - CARD_WIDTH - MARGIN, MARGIN, CARD_WIDTH, CARD_HEIGHT);
+    }
+
     public void register() {
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(CompanionConstants.MOD_ID, "gamezone_toast"), this);
     }
@@ -56,7 +61,7 @@ public final class GameZoneToastHudElement implements HudElement {
             Font font = client.font;
             int screenWidth = client.getWindow().getGuiScaledWidth();
 
-            UiRect card = new UiRect(screenWidth - CARD_WIDTH - MARGIN, MARGIN, CARD_WIDTH, CARD_HEIGHT);
+            UiRect card = cardRect(screenWidth);
             GZTheme.drawCard(graphics, card, GZTheme.COLOR_PANEL_BG, GZTheme.COLOR_BORDER_EMERALD);
 
             TextUtil.drawScaledEllipsizedText(graphics, font, toast.title(), card.x() + 5, card.y() + 3,

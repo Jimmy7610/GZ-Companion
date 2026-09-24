@@ -26,11 +26,20 @@ se.jimmyeliasson.gzcompanion
 │   └── progress/                 # Local progress storage & atomic file writes
 ├── chest/
 │   ├── ChestManager.java         # "Last known contents" index & capture session state machine
+│   │                              # (+ Kistor 2.0 metadata mutations, revision counter, capture events)
+│   ├── KistorRuntime.java        # Session-only Kistor 2.0 state: navigation, item-index cache, Hämtningslista
+│   ├── ChestCaptureFeedback.java # Pure "Ny förvaring sparad"/"... hittad" toast decision
 │   ├── bridge/                   # MinecraftChestCaptureAdapter + ChestCaptureController (the ONLY
-│   │                              # place touching Minecraft menu/block/screen classes)
-│   ├── model/                    # StoredContainer, StorageKind, StorageShape, ChestTypeFilter,
-│   │                              # ChestSortMode, StoragePosition (no MC types)
-│   └── storage/                  # JsonChestIndexStore, ChestIndexLoadResult & chest-index.json schema
+│   │                              # place touching Minecraft menu/block/screen classes), plus
+│   │                              # ChestItemIcons (real item icons), MinecraftPlayerPoseReader
+│   │                              # (the player's OWN position/yaw) and KistorNavigationHudElement
+│   ├── model/                    # StoredContainer, StorageMetadata, PreviousSnapshot, StorageKind,
+│   │                              # StorageShape, ChestFreshness, ChestGroupFilter, filters/sorts (no MC types)
+│   ├── index/                    # ChestItemIndex (+cache), ChestItemSearch, ChestSearchMatcher,
+│   │                              # ChestSnapshotDiff - pure SAKER/search/diff services
+│   ├── nav/                      # ChestNavigationMath/Manager/Reading, PlayerPose - pure HITTA logic
+│   ├── material/                 # ChestMaterialAvailability, ChestPickupPlanner, PlannerMaterialRequests
+│   └── storage/                  # JsonChestIndexStore, ChestIndexLoadResult & chest-index.json schema (v2)
 ├── minecraft/
 │   ├── MinecraftBridge.java      # Runtime abstraction interface
 │   └── VanillaMinecraftBridge.java # Minecraft client API caller
@@ -98,7 +107,8 @@ se.jimmyeliasson.gzcompanion
     └── tabs/
         ├── HomeTabComponent.java # Home dashboard
         ├── GuideTabComponent.java# Interactive 2-pane guide tab
-        ├── KistorTabComponent.java # Searchable 2-pane Chest Manager tab
+        ├── KistorTabComponent.java # Kistor 2.0 coordinator: SAKER/FÖRVARING/MATERIAL modes, search, NAVIGERAR banner
+        ├── kistor/               # KistorItemsView, KistorStorageView, KistorMaterialView + shared UI state/helpers
         ├── CommandsTabComponent.java # Searchable Kommandon tab (implements TextInputHandler)
         ├── CraftingTabComponent.java # Crafting tab: recipes + GameZone items (implements TextInputHandler)
         ├── SettlementTabComponent.java # M6: Översikt/Progression/Material/Medlemmar (implements TextInputHandler)
@@ -131,6 +141,8 @@ graph TD
     J --> L[config/gzcompanion/guide-progress.json]
     M --> N[config/gzcompanion/chest-index.json]
     N2[ChestCaptureController: UseBlockCallback + ScreenEvents] --> M
+    M --> KR[KistorRuntime: item index cache, navigation, Hämtningslista]
+    KR --> HUD[KistorNavigationHudElement]
     P --> I
     Q --> I
     R --> I
@@ -149,6 +161,16 @@ storage screen lifecycle). It translates real Minecraft state into plain domain 
 `ChestManager` via `MinecraftChestCaptureAdapter` — no Minecraft menu/block/screen types leak
 into `chest.model` or `chest.storage`. See [Chest Manager](CHEST-MANAGER.md) for the full capture
 lifecycle and fair-play boundary.
+
+Kistor 2.0 is a domain/UI/navigation layer ABOVE that capture system. `ChestManager.endCapture`
+returns a `ChestCaptureEvent` after its one persist; `KistorRuntime` turns it into local toast
+feedback and ends navigation when the exact target was opened. The pure `chest.index`,
+`chest.nav` and `chest.material` packages hold every Kistor 2.0 rule (aggregation, search, diff,
+navigation math, material availability, pickup allocation) with no Minecraft types; the
+Minecraft-dependent parts are confined to `chest.bridge` (`ChestItemIcons`,
+`MinecraftPlayerPoseReader`, `KistorNavigationHudElement`) and the `ui.tabs.kistor` views. The
+Settlement and Byggplaner tabs hand a `ChestMaterialRequest` to Kistor via
+`GZCompanionMainScreen.openKistorMaterialRequest` - they never read chest data themselves.
 
 ---
 

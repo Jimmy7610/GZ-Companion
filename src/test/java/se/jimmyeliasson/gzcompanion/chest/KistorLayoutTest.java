@@ -39,8 +39,17 @@ class KistorLayoutTest {
         assertFalse(layout.detailRect().intersects(layout.copyBtnRect()));
         assertFalse(layout.detailRect().intersects(layout.forgetBtnRect()));
 
-        assertTrue(layout.renameBtnRect().right() <= layout.copyBtnRect().x(), "Action buttons must not overlap each other");
-        assertTrue(layout.copyBtnRect().right() <= layout.forgetBtnRect().x());
+        // Kistor 2.0 uses two pinned action rows (HITTA/rename/favorite, then copy/note/group/forget):
+        // no two action buttons may overlap each other.
+        UiRect[] actions = {layout.primaryActionRect(), layout.renameBtnRect(), layout.favoriteBtnRect(),
+                layout.copyBtnRect(), layout.noteBtnRect(), layout.groupAssignBtnRect(), layout.forgetBtnRect()};
+        for (int i = 0; i < actions.length; i++) {
+            assertTrue(bounds.contains(actions[i]), "Action button " + i + " must stay contained");
+            assertFalse(layout.detailRect().intersects(actions[i]), "Action button " + i + " must not overlap the scrollable detail pane");
+            for (int j = i + 1; j < actions.length; j++) {
+                assertFalse(actions[i].intersects(actions[j]), "Action buttons " + i + " and " + j + " must not overlap each other");
+            }
+        }
     }
 
     @Test

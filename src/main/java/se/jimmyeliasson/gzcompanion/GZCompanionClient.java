@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import se.jimmyeliasson.gzcompanion.chest.bridge.ChestCaptureController;
+import se.jimmyeliasson.gzcompanion.chest.bridge.KistorNavigationHudElement;
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.gamezone.bridge.GameZoneToastHudElement;
@@ -46,7 +47,7 @@ public class GZCompanionClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(guideScheduler::onClientTick);
 
         // 4. Register fair-play opened-storage capture hooks for the Chest Manager
-        ChestCaptureController.register(session.getChestManager());
+        ChestCaptureController.register(session.getChestManager(), session.getKistorRuntime(), session.getToastManager());
         LOGGER.info(session.getChestManager().getDiagnostics(session.getCurrentStorageContext()).toSafeString());
 
         // 5. Report every independently-loaded knowledge/local-state module
@@ -77,6 +78,9 @@ public class GZCompanionClient implements ClientModInitializer {
         // ALLOW_GAME/ALLOW_CHAT - so it can observe but never cancel, rewrite, or hide a message.
         session.getChatObserver().register();
         new GameZoneToastHudElement(session.getToastManager()).register();
+        // Kistor 2.0 "HITTA" navigation HUD - draws nothing unless the player explicitly started
+        // navigation toward one already-known storage location.
+        new KistorNavigationHudElement(session.getKistorRuntime(), session.getToastManager()).register();
         LOGGER.info("GameZone-händelsemotor: {} ({} verifierade parsrar)",
                 session.getParserCatalogStatus().getDisplayName(),
                 session.getParserCatalog().activeCount());
