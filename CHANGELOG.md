@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.8] - 2026-09-24
+
 ### Changed
 - **Update panel ("UPPDATERA GZ COMPANION")**: the action buttons now sit in a fixed row directly
   under the title - [Ladda ner] [Senare], [Stäng och uppdatera] [Senare] or [Försök igen]
