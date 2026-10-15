@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.10] - 2026-10-15
+
 ### Added
 - **MarketWatch: type coordinates for a saved place** - the note's edit form now has
   `X [..] Y [..] Z [..]` fields, so a shop's coordinates can be entered by hand and then used with
