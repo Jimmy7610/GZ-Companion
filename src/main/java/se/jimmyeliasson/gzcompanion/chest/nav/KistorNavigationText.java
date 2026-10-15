@@ -43,7 +43,10 @@ public final class KistorNavigationText {
         return "DU ÄR FRAMME";
     }
 
-    /** Detail line for the two-line Kistor "NAVIGERAR" banner. */
+    /**
+     * Distance + vertical difference (or the dimension/arrival state): line 2 of the Kistor
+     * "NAVIGERAR" banner, and the distance part of a MarketWatch saved-location line.
+     */
     public static String bannerSummary(ChestNavigationReading reading) {
         if (reading == null) return "";
         return switch (reading.status()) {

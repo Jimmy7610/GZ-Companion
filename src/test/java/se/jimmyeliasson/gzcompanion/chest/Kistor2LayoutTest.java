@@ -50,14 +50,22 @@ class Kistor2LayoutTest {
                     if (nav) {
                         assertTrue(bounds.contains(l.navBannerRect()), c);
                         assertTrue(bounds.contains(l.navStopBtnRect()), c);
+                        // Two-line banner: Stoppa sits inside it on line 1 only; line 2 gets the full width.
+                        assertEquals(KistorLayout.BANNER_H, l.navBannerRect().height(), c);
                         assertEquals(bounds.width(), l.navBannerRect().width(), "Banner spans full width " + c);
                         assertTrue(l.navBannerRect().contains(l.navStopBtnRect()), "Stoppa sits inside line 1 " + c);
                         assertTrue(l.navBannerRect().contains(l.navTitleTextRect()), c);
                         assertTrue(l.navBannerRect().contains(l.navDetailTextRect()), c);
-                        assertFalse(l.navTitleTextRect().intersects(l.navStopBtnRect()), "Title leaves room for Stoppa " + c);
+                        assertFalse(l.navTitleTextRect().intersects(l.navStopBtnRect()), "Name never runs under Stoppa " + c);
+                        assertFalse(l.navDetailTextRect().intersects(l.navStopBtnRect()), "Distance line is below Stoppa " + c);
+                        assertTrue(l.navDetailTextRect().y() >= l.navTitleTextRect().bottom(), "Line 2 below line 1 " + c);
                         assertFalse(l.navTitleTextRect().intersects(l.navDetailTextRect()), "Line 2 sits below line 1 " + c);
-                        assertEquals(l.navBannerRect().width() - 8, l.navDetailTextRect().width(), "Line 2 gets full banner width " + c);
+                        assertTrue(l.navTitleTextRect().right() < l.navStopBtnRect().x(), "A long name is cut before Stoppa " + c);
+                        assertEquals(l.navBannerRect().width() - 8, l.navDetailTextRect().width(), "Line 2 spans the banner " + c);
                         assertFalse(l.navBannerRect().intersects(l.searchRect()), c);
+                        assertFalse(l.navBannerRect().intersects(l.filterBtnRect()), c);
+                        assertFalse(l.navBannerRect().intersects(l.headerRect()), c);
+                        assertTrue(l.searchRect().y() >= l.navBannerRect().bottom(), c);
                     } else {
                         assertEquals(0, l.navBannerRect().width(), c);
                     }
@@ -106,15 +114,27 @@ class Kistor2LayoutTest {
     }
 
     @Test
-    @DisplayName("The navigation banner pushes content down instead of overlapping it")
+    @DisplayName("The two-line navigation banner pushes search, filters and content down by its full height")
     void bannerReservesSpace() {
         UiRect wide = new UiRect(0, 0, 400, 240);
         KistorLayout without = KistorLayout.calculate(wide, KistorLayout.Mode.SAKER, false, false, true);
         KistorLayout with = KistorLayout.calculate(wide, KistorLayout.Mode.SAKER, true, false, true);
-        assertEquals(23, with.navBannerRect().height());
+        assertEquals(KistorLayout.BANNER_H, with.navBannerRect().height());
         assertEquals(wide.width(), with.navBannerRect().width());
-        assertTrue(with.searchRect().y() > without.searchRect().y());
-        assertTrue(with.listRect().y() > without.listRect().y());
+        int shift = KistorLayout.BANNER_H + 2;
+        assertEquals(without.searchRect().y() + shift, with.searchRect().y());
+        assertEquals(without.filterBtnRect().y() + shift, with.filterBtnRect().y());
+        assertEquals(without.listRect().y() + shift, with.listRect().y());
+    }
+
+    @Test
+    @DisplayName("Banner line 2 is wide enough for a realistic distance + height line even in compact mode")
+    void bannerLine2FitsInCompact() {
+        KistorLayout compact = KistorLayout.calculate(new UiRect(0, 0, 200, 170), KistorLayout.Mode.SAKER, true, false, false);
+        assertTrue(compact.isCompact());
+        // "9 block fågelvägen • 2 block högre" is ~34 glyphs; at META scale that is well under 170 px.
+        assertTrue(compact.navDetailTextRect().width() >= 180, "Compact line 2 width: " + compact.navDetailTextRect().width());
+        assertTrue(compact.navTitleTextRect().width() >= 130, "Compact line 1 width: " + compact.navTitleTextRect().width());
     }
 
     @Test

@@ -561,7 +561,7 @@ outside Stoppa opens the target's detail).
 - Title, **"284 block fågelvägen"** (straight-line horizontal distance — the wording can't be
   confused with a route distance), and **"↓ 12"** / **"↑ 17"** vertical difference (hidden when
   under 2 blocks).
-- **Nära** (< 15 blocks 3D): emphasized card, "Nära · 11 block fågelvägen".
+- **Nära** (< 15 blocks 3D): emphasized card, "Nära • 11 block fågelvägen".
 - **DU ÄR FRAMME** (≤ 4.5 blocks 3D, roughly reach distance): arrow removed. Coordinate proximity
   only — nothing is highlighted, outlined or raytraced.
 - **Wrong dimension**: no arrow at all; "⚠ Finns i Nether" / "Du är i Overworld". Saved

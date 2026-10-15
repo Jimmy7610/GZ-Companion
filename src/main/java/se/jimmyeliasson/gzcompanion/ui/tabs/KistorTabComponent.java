@@ -190,23 +190,30 @@ public class KistorTabComponent implements TextInputHandler {
             ChestNavigationReading reading = ctx.playerPose().map(p -> ChestNavigationMath.evaluate(p, target)).orElse(null);
             detail = reading != null ? KistorNavigationText.bannerSummary(reading) : "";
         }
+
+        // Line 1: what is being navigated to (beside Stoppa). Line 2: distance + height, full width.
         UiRect titleRect = layout.navTitleTextRect();
-        UiRect detailRect = layout.navDetailTextRect();
-        String title = "NAVIGERAR: " + target.title();
-        TextUtil.drawScaledEllipsizedText(g, font, title, titleRect.x(), titleRect.y() + 2, titleRect.width(),
-                TypographyScale.META.getScale(), GZTheme.COLOR_MINT, false);
+        TextUtil.drawScaledEllipsizedText(g, font, "NAVIGERAR: " + target.title(), titleRect.x(), titleRect.y(), titleRect.width(),
+                TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, true);
         if (!detail.isEmpty()) {
-            TextUtil.drawScaledEllipsizedText(g, font, detail, detailRect.x(), detailRect.y() + 1, detailRect.width(),
-                    TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+            UiRect detailRect = layout.navDetailTextRect();
+            TextUtil.drawScaledEllipsizedText(g, font, detail, detailRect.x(), detailRect.y(), detailRect.width(),
+                    TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
         }
 
         UiRect stop = layout.navStopBtnRect();
         KistorUi.drawButton(g, font, stop, "Stoppa", false, ctx.hovered(stop), true);
-        // Stoppa is inside the full-width banner, so it MUST be registered before the banner hit.
-        ctx.addHit(stop, () -> KistorActions.stopNavigation(ctx));
+        addNavigationBannerHits(ctx, target);
+    }
 
-        UiRect openRect = new UiRect(banner.x(), banner.y(), banner.width(), banner.height());
-        target.container().ifPresent(id -> ctx.addHit(openRect, () -> state.openStorage(id)));
+    /**
+     * The banner's click targets. Stoppa sits INSIDE the banner, so it is registered first (first
+     * match wins). Only a storage target makes the rest of the banner open that storage's detail -
+     * a saved point (e.g. from MarketWatch) has no storage to open, so its banner only has Stoppa.
+     */
+    private void addNavigationBannerHits(KistorRenderContext ctx, NavigationDestination target) {
+        ctx.addHit(layout.navStopBtnRect(), () -> KistorActions.stopNavigation(ctx));
+        target.container().ifPresent(id -> ctx.addHit(layout.navBannerRect(), () -> state.openStorage(id)));
     }
 
     private void renderSearch(KistorRenderContext ctx) {
@@ -428,6 +435,19 @@ public class KistorTabComponent implements TextInputHandler {
         this.state.compactShowingDetail = compactShowingDetail;
         this.state.selectedStorage = selectedId;
         this.layout = computeLayout(bounds, false, false);
+    }
+
+    /**
+     * Test-only: registers the NAVIGERAR banner's click targets exactly as a render frame does
+     * (drawing itself needs a live Font), so {@link #mouseClicked} can be driven against them.
+     */
+    void prepareNavigationBannerForTesting(UiRect bounds, KistorRuntime runtime, String contextKey, NavigationDestination target, long nowMs) {
+        hits.clear();
+        lastNavigating = true;
+        layout = computeLayout(bounds, true, false);
+        KistorRenderContext ctx = new KistorRenderContext(null, null, -1, -1, nowMs, layout, state, runtime.chestManager(), runtime,
+                contextKey, Optional.empty(), false, false, hits, itemHoverTooltips);
+        addNavigationBannerHits(ctx, target);
     }
 
     int listScrollOffsetForTesting() {

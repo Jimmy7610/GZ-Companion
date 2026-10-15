@@ -95,57 +95,57 @@ public final class KistorNavigationHudElement implements HudElement {
         }
     }
 
+    /**
+     * Everything the HUD card says for one frame, derived only from the resolved destination (a
+     * storage location or a saved point - the HUD never needs to know which) and the reading.
+     * {@code line3} is {@code null} when there is no third line. Long titles are ellipsized by the
+     * renderer to the card width, never cut here.
+     */
+    record HudText(String title, String line2, int line2Color, String line3, int line3Color, boolean showArrow, boolean emphasized) {}
+
+    static HudText describe(NavigationDestination target, ChestNavigationReading reading) {
+        ChestNavigationStatus status = reading.status();
+        boolean showArrow = status == ChestNavigationStatus.DIRECTIONAL || status == ChestNavigationStatus.NEAR;
+        boolean emphasized = status == ChestNavigationStatus.NEAR || status == ChestNavigationStatus.ARRIVED;
+        String title = target.title().toUpperCase(Locale.ROOT);
+        return switch (status) {
+            case WRONG_DIMENSION -> new HudText(title, KistorNavigationText.wrongDimensionTarget(reading), GZTheme.COLOR_STATUS_YELLOW,
+                    KistorNavigationText.wrongDimensionPlayer(reading), GZTheme.COLOR_TEXT_MUTED, showArrow, emphasized);
+            case ARRIVED -> new HudText(title, KistorNavigationText.arrived(), GZTheme.COLOR_STATUS_GREEN,
+                    null, GZTheme.COLOR_TEXT_MUTED, showArrow, emphasized);
+            case NEAR, DIRECTIONAL -> new HudText(title,
+                    (status == ChestNavigationStatus.NEAR ? "Nära • " : "") + KistorNavigationText.distance(reading), GZTheme.COLOR_TEXT_SECONDARY,
+                    KistorNavigationText.vertical(reading), GZTheme.COLOR_TEXT_PRIMARY, showArrow, emphasized);
+        };
+    }
+
     private void draw(GuiGraphicsExtractor graphics, Minecraft client, NavigationDestination target, ChestNavigationReading reading, long now) {
         Font font = client.font;
         int screenW = client.getWindow().getGuiScaledWidth();
         int screenH = client.getWindow().getGuiScaledHeight();
 
-        ChestNavigationStatus status = reading.status();
-        boolean showArrow = status == ChestNavigationStatus.DIRECTIONAL || status == ChestNavigationStatus.NEAR;
-        String vertical = status == ChestNavigationStatus.ARRIVED ? null : KistorNavigationText.vertical(reading);
-
-        String line2;
-        String line3 = null;
-        int line2Color = GZTheme.COLOR_TEXT_SECONDARY;
-        int line3Color = GZTheme.COLOR_TEXT_MUTED;
-        switch (status) {
-            case WRONG_DIMENSION -> {
-                line2 = KistorNavigationText.wrongDimensionTarget(reading);
-                line2Color = GZTheme.COLOR_STATUS_YELLOW;
-                line3 = KistorNavigationText.wrongDimensionPlayer(reading);
-            }
-            case ARRIVED -> {
-                line2 = KistorNavigationText.arrived();
-                line2Color = GZTheme.COLOR_STATUS_GREEN;
-            }
-            default -> {
-                line2 = (status == ChestNavigationStatus.NEAR ? "Nära · " : "") + KistorNavigationText.distance(reading);
-                line3 = vertical;
-                line3Color = GZTheme.COLOR_TEXT_PRIMARY;
-            }
-        }
-        int lineCount = 2 + (line3 != null ? 1 : 0);
+        HudText text = describe(target, reading);
+        int lineCount = 2 + (text.line3() != null ? 1 : 0);
 
         UiRect avoid = toastManager.currentToast(now).isPresent() ? GameZoneToastHudElement.cardRect(screenW) : null;
-        KistorNavigationHudLayout layout = KistorNavigationHudLayout.compute(screenW, screenH, bossBarCount(client), avoid, showArrow, lineCount);
+        KistorNavigationHudLayout layout = KistorNavigationHudLayout.compute(screenW, screenH, bossBarCount(client), avoid, text.showArrow(), lineCount);
 
-        boolean emphasized = status == ChestNavigationStatus.NEAR || status == ChestNavigationStatus.ARRIVED;
-        GZTheme.drawCard(graphics, layout.card(), NAVIGATION_CARD_BG, emphasized ? GZTheme.COLOR_EMERALD : GZTheme.COLOR_BORDER_EMERALD);
+        GZTheme.drawCard(graphics, layout.card(), NAVIGATION_CARD_BG, text.emphasized() ? GZTheme.COLOR_EMERALD : GZTheme.COLOR_BORDER_EMERALD);
 
-        if (showArrow) {
-            int arrowColor = status == ChestNavigationStatus.NEAR ? GZTheme.COLOR_EMERALD : GZTheme.COLOR_MINT;
+        if (text.showArrow()) {
+            int arrowColor = reading.status() == ChestNavigationStatus.NEAR ? GZTheme.COLOR_EMERALD : GZTheme.COLOR_MINT;
             drawRotatingArrow(graphics, layout.arrowCenterX(), layout.arrowCenterY(), (float) reading.relativeBearingDegrees(), arrowColor);
         }
 
         int cx = layout.card().x() + layout.card().width() / 2;
         int maxW = layout.card().width() - 8;
-        TextUtil.drawScaledCenteredText(graphics, font, target.title().toUpperCase(Locale.ROOT), cx, layout.line1Y(), maxW,
+        TextUtil.drawScaledCenteredText(graphics, font, text.title(), cx, layout.line1Y(), maxW,
                 TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, true);
-        TextUtil.drawScaledCenteredText(graphics, font, line2, cx, layout.line2Y(), maxW,
-                TypographyScale.META.getScale(), line2Color, true);
-        if (line3 != null) {
-            TextUtil.drawScaledCenteredText(graphics, font, line3, cx, layout.line3Y(), maxW,
-                    TypographyScale.META.getScale(), line3Color, true);
+        TextUtil.drawScaledCenteredText(graphics, font, text.line2(), cx, layout.line2Y(), maxW,
+                TypographyScale.META.getScale(), text.line2Color(), true);
+        if (text.line3() != null) {
+            TextUtil.drawScaledCenteredText(graphics, font, text.line3(), cx, layout.line3Y(), maxW,
+                    TypographyScale.META.getScale(), text.line3Color(), true);
         }
     }
 
