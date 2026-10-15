@@ -7,7 +7,8 @@ import java.util.Objects;
 
 /**
  * Pure navigation math for Kistor "HITTA". Compares ONLY the player's own pose with the saved
- * coordinates of one explicitly selected, previously legitimately opened storage location. No
+ * coordinates of one explicitly selected, previously legitimately opened storage location (or a
+ * {@link NavigationPoint} the player saved themselves). No
  * pathfinding, no route, no world access - just a bearing and straight-line distances.
  *
  * <p><b>Yaw convention (verified against Minecraft's own entity rotation):</b> a player with yaw
@@ -77,6 +78,12 @@ public final class ChestNavigationMath {
      * ({@link ChestNavigationStatus#WRONG_DIMENSION}) - never a guessed cross-dimension route.
      */
     public static ChestNavigationReading evaluate(PlayerPose pose, StoredContainer target) {
+        Objects.requireNonNull(target, "target");
+        return evaluate(pose, NavigationDestination.of(target));
+    }
+
+    /** Same evaluation for any resolved destination - a storage location or a saved coordinate point. */
+    public static ChestNavigationReading evaluate(PlayerPose pose, NavigationDestination target) {
         Objects.requireNonNull(pose, "pose");
         Objects.requireNonNull(target, "target");
         String targetDim = target.dimensionKey();
@@ -84,13 +91,12 @@ public final class ChestNavigationMath {
             return new ChestNavigationReading(ChestNavigationStatus.WRONG_DIMENSION, 0.0, 0.0, 0.0, 0, targetDim, pose.dimensionKey());
         }
 
-        double[] t = targetPoint(target);
-        double horizontal = horizontalDistance(pose.x(), pose.z(), t[0], t[2]);
+        double horizontal = horizontalDistance(pose.x(), pose.z(), target.x(), target.z());
         // Player reference height ~1 block above the feet (between feet and eyes).
-        double dy = t[1] - (pose.y() + 1.0);
+        double dy = target.y() - (pose.y() + 1.0);
         double distance3d = Math.sqrt(horizontal * horizontal + dy * dy);
-        double bearing = relativeBearingDegrees(pose.x(), pose.z(), pose.yawDegrees(), t[0], t[2]);
-        int vertical = verticalDelta(pose.y(), target.anchor().y());
+        double bearing = relativeBearingDegrees(pose.x(), pose.z(), pose.yawDegrees(), target.x(), target.z());
+        int vertical = verticalDelta(pose.y(), target.blockY());
 
         ChestNavigationStatus status;
         if (distance3d <= ARRIVAL_DISTANCE) {

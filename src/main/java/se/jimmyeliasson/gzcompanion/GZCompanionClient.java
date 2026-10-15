@@ -79,7 +79,7 @@ public class GZCompanionClient implements ClientModInitializer {
         session.getChatObserver().register();
         new GameZoneToastHudElement(session.getToastManager()).register();
         // Kistor 2.0 "HITTA" navigation HUD - draws nothing unless the player explicitly started
-        // navigation toward one already-known storage location.
+        // navigation toward one already-known storage location (or a place saved on a MarketWatch note).
         new KistorNavigationHudElement(session.getKistorRuntime(), session.getToastManager()).register();
         LOGGER.info("GameZone-händelsemotor: {} ({} verifierade parsrar)",
                 session.getParserCatalogStatus().getDisplayName(),

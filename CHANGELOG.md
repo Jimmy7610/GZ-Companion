@@ -43,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     rendering, player automation, chat/commands/packets and networking in all Kistor 2.0 code.
   - Diagnostics now include the Kistor index schema/count and whether navigation is active (never
     the target or any coordinates).
+- **MarketWatch: "Spara plats" + "Hitta"** - a MarketWatch note can store a place the player saved
+  themselves (their own current position, from the note's edit form); such notes get **Hitta**,
+  which guides there with the existing Kistor HITTA navigation (HUD arrow, distance, Stoppa).
+  MarketWatch still knows no shop coordinates. The optional `location` field is additive -
+  existing notes are untouched. Other features can navigate to a known coordinate through the new
+  `chest.nav.NavigationPoint` / `ChestNavigationManager.startPoint`. See `docs/MARKETWATCH.md`.
 
 ### Changed
 - `chest-index.json` schema **v1 → v2** (optional `favorite`, `group`, `locationNote`, `previous`

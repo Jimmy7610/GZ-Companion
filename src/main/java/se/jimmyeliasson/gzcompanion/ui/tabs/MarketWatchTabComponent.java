@@ -7,13 +7,24 @@ import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
+import se.jimmyeliasson.gzcompanion.chest.bridge.MinecraftPlayerPoseReader;
+import se.jimmyeliasson.gzcompanion.chest.model.DimensionNames;
+import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationManager;
+import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationMath;
+import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationReading;
+import se.jimmyeliasson.gzcompanion.chest.nav.KistorNavigationText;
+import se.jimmyeliasson.gzcompanion.chest.nav.NavigationDestination;
+import se.jimmyeliasson.gzcompanion.chest.nav.NavigationPoint;
+import se.jimmyeliasson.gzcompanion.chest.nav.PlayerPose;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeModuleStatus;
 import se.jimmyeliasson.gzcompanion.knowledge.crafting.bridge.MinecraftRecipeDisplayAdapter;
 import se.jimmyeliasson.gzcompanion.knowledge.economy.MarketWatchInfo;
 import se.jimmyeliasson.gzcompanion.knowledge.settlement.ProductionCategory;
+import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNavigation;
 import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNotesManager;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNote;
+import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchSavedLocation;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.ItemHoverTooltips;
@@ -30,7 +41,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.Optional;
 import java.util.function.ToIntFunction;
 
 /**
@@ -38,10 +49,18 @@ import java.util.function.ToIntFunction;
  * MarketWatch system (resource demand for settlement upgrades - NOT an auction price list),
  * plus a purely local "Mina anteckningar" watchlist. Never runs {@code /marketwatch}
  * automatically and never presents a local note as GameZone's actual live market state.
+ *
+ * <p>A note can carry a place the player saved themselves ("Spara plats" in the edit form, from
+ * their own current position). Only such notes show "Hitta", which hands the place to the shared
+ * Kistor navigation through {@link MarketWatchNavigation} - this tab draws no arrow and does no
+ * navigation math of its own beyond reusing {@link ChestNavigationMath} for the row's distance.
  */
 public class MarketWatchTabComponent implements TextInputHandler {
     private static final int MAX_FIELD_LENGTH = 48;
     private static final int ROW_H = 34;
+    /** A note with a saved location gets one extra line: "Din sparade plats • ..." + Hitta/Stoppa. */
+    private static final int ROW_H_WITH_LOCATION = 45;
+    private static final long FEEDBACK_MS = 4000L;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private enum EditField { ITEM, NOTE }
@@ -57,7 +76,12 @@ public class MarketWatchTabComponent implements TextInputHandler {
     private String editItemText = "";
     private String editNoteText = "";
     private String editCategoryId = null;
+    private MarketWatchSavedLocation editLocation = null;
+    private String editLocationError = null;
     private EditField focusedField = null;
+
+    private String navFeedbackNoteId = null;
+    private long navFeedbackExpiry = 0L;
 
     private String pendingDeleteId = null;
     private long pendingDeleteAtMs = 0L;
@@ -208,13 +232,43 @@ public class MarketWatchTabComponent implements TextInputHandler {
         editItemText = "";
         editNoteText = "";
         editCategoryId = null;
+        editLocation = null;
+        editLocationError = null;
         focusedField = EditField.ITEM;
+    }
+
+    private void beginEditNote(MarketWatchNote note) {
+        editing = true;
+        editingNoteId = note.id();
+        editItemText = note.itemId() != null ? note.itemId() : note.displayName();
+        editNoteText = note.note();
+        editCategoryId = note.categoryId();
+        editLocation = note.location();
+        editLocationError = null;
+        focusedField = null;
     }
 
     private void cancelEdit() {
         editing = false;
         editingNoteId = null;
+        editLocation = null;
+        editLocationError = null;
         focusedField = null;
+    }
+
+    /**
+     * "Spara plats": records the player's OWN current position into the open form (persisted on
+     * "Spara", discarded on "Avbryt"). Without a live position nothing is recorded.
+     */
+    private void captureEditLocation() {
+        Optional<MarketWatchSavedLocation> captured = MarketWatchNavigation.locationFromPose(
+                MinecraftPlayerPoseReader.read(1.0f), System.currentTimeMillis());
+        if (captured.isPresent()) {
+            editLocation = captured.get();
+            editLocationError = null;
+        } else {
+            editLocationError = "Kunde inte läsa din position - ingen plats sparades.";
+        }
     }
 
     private void renderEditForm(GuiGraphicsExtractor extractor, Font font, CompanionSession session, int mouseX, int mouseY) {
@@ -247,6 +301,8 @@ public class MarketWatchTabComponent implements TextInputHandler {
         hitTargets.add(new ListRowHit(noteRect, () -> focusedField = EditField.NOTE));
         y += 14;
 
+        y = renderEditLocation(extractor, font, x, y, maxW, mouseX, mouseY);
+
         int btnW = Math.max(40, (maxW - 4) / 2);
         UiRect saveBtn = new UiRect(x, y, btnW, 11);
         UiRect cancelBtn = new UiRect(x + btnW + 4, y, btnW, 11);
@@ -254,6 +310,53 @@ public class MarketWatchTabComponent implements TextInputHandler {
         GZTheme.drawButton(extractor, font, cancelBtn, "Avbryt", false, cancelBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
         hitTargets.add(new ListRowHit(saveBtn, () -> saveNote(session)));
         hitTargets.add(new ListRowHit(cancelBtn, this::cancelEdit));
+    }
+
+    /**
+     * The optional "Plats" section of the edit form. The wording always says the place is the
+     * player's OWN saved position, so it can never be mistaken for shop data from MarketWatch.
+     */
+    private int renderEditLocation(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, int mouseX, int mouseY) {
+        String status;
+        int statusColor;
+        if (editLocationError != null) {
+            status = editLocationError;
+            statusColor = GZTheme.COLOR_STATUS_YELLOW;
+        } else {
+            status = editLocationStatusText(editLocation);
+            statusColor = editLocation != null ? GZTheme.COLOR_TEXT_SECONDARY : GZTheme.COLOR_TEXT_MUTED;
+        }
+        // One ellipsized line keeps the whole form inside the list card even in the COMPACT layout.
+        TextUtil.drawScaledEllipsizedText(extractor, font, status, x, y, maxW, TypographyScale.META.getScale(), statusColor, false);
+        y += 11;
+
+        String saveLabel = editLocation != null ? "Uppdatera plats" : "Spara plats";
+        if (editLocation != null) {
+            int btnW = Math.max(40, (maxW - 4) / 2);
+            UiRect saveLocBtn = new UiRect(x, y, btnW, 11);
+            UiRect clearLocBtn = new UiRect(x + btnW + 4, y, btnW, 11);
+            GZTheme.drawButton(extractor, font, saveLocBtn, saveLabel, false, saveLocBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+            GZTheme.drawButton(extractor, font, clearLocBtn, "Ta bort plats", false, clearLocBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+            hitTargets.add(new ListRowHit(saveLocBtn, this::captureEditLocation));
+            hitTargets.add(new ListRowHit(clearLocBtn, () -> {
+                editLocation = null;
+                editLocationError = null;
+            }));
+        } else {
+            UiRect saveLocBtn = new UiRect(x, y, maxW, 11);
+            GZTheme.drawButton(extractor, font, saveLocBtn, saveLabel, false, saveLocBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+            hitTargets.add(new ListRowHit(saveLocBtn, this::captureEditLocation));
+        }
+        return y + 14;
+    }
+
+    /** Edit-form status line for the optional saved place. */
+    static String editLocationStatusText(MarketWatchSavedLocation location) {
+        if (location == null) {
+            return "Ingen plats sparad. Stå på platsen och tryck Spara plats.";
+        }
+        return "Din sparade plats: " + location.position().toDisplayString() + " • " + DimensionNames.shortName(location.dimensionKey())
+                + (location.savedAtMs() > 0 ? " • sparad " + DATE_FORMAT.format(Instant.ofEpochMilli(location.savedAtMs()).atZone(ZoneId.systemDefault())) : "");
     }
 
     private String nextCategoryId(List<ProductionCategory> categories, String currentId) {
@@ -281,7 +384,7 @@ public class MarketWatchTabComponent implements TextInputHandler {
     }
 
     private void saveNote(CompanionSession session) {
-        if (editItemText.isBlank() && editNoteText.isBlank()) {
+        if (editItemText.isBlank() && editNoteText.isBlank() && editLocation == null) {
             cancelEdit();
             return;
         }
@@ -292,20 +395,54 @@ public class MarketWatchTabComponent implements TextInputHandler {
         String displayName = itemId == null ? editItemText.trim() : null;
 
         if (editingNoteId == null) {
-            notes.addNote(contextKey, itemId, displayName, editCategoryId, editNoteText, System.currentTimeMillis());
+            String newId = notes.addNote(contextKey, itemId, displayName, editCategoryId, editNoteText, System.currentTimeMillis());
+            if (newId != null && editLocation != null) {
+                notes.setLocation(contextKey, newId, editLocation);
+            }
         } else {
             MarketWatchNote existing = notes.getNotes(contextKey).stream().filter(n -> n.id().equals(editingNoteId)).findFirst().orElse(null);
             if (existing != null) {
                 MarketWatchNote updated = new MarketWatchNote(existing.id(), itemId, editItemText.trim(),
-                        editCategoryId, editNoteText, existing.lastObservedAtMs(), existing.favorite());
-                notes.updateNote(contextKey, updated);
+                        editCategoryId, editNoteText, existing.lastObservedAtMs(), existing.favorite(), editLocation);
+                if (notes.updateNote(contextKey, updated)) {
+                    syncActiveNavigation(session.getKistorRuntime().navigation(), contextKey, updated);
+                }
             }
         }
         cancelEdit();
     }
 
-    private static int calculateMaxScroll(int rowH, int rowCount, int visibleH) {
-        return Math.max(0, (rowCount * rowH) - Math.max(1, visibleH));
+    /**
+     * If {@code note} is the active navigation target, keep the target in step with the edit: a
+     * moved place or renamed note restarts toward the new point; a removed place stops navigation
+     * (never keeps guiding toward a place the note no longer has).
+     */
+    static void syncActiveNavigation(ChestNavigationManager navigation, String contextKey, MarketWatchNote note) {
+        if (!MarketWatchNavigation.isNavigatingTo(navigation, note)) return;
+        if (!MarketWatchNavigation.startNavigation(navigation, contextKey, note, System.currentTimeMillis())) {
+            MarketWatchNavigation.stopIfNavigatingTo(navigation, note);
+        }
+    }
+
+    private static int calculateMaxScroll(int contentH, int visibleH) {
+        return Math.max(0, contentH - Math.max(1, visibleH));
+    }
+
+    /** Notes without a saved location keep their original height; only located notes grow. */
+    static int rowHeight(MarketWatchNote note) {
+        return note.hasLocation() ? ROW_H_WITH_LOCATION : ROW_H;
+    }
+
+    /**
+     * Text of a located note's extra line. Always starts from "Din sparade plats" / "NAVIGERAR"
+     * so the player knows it is a place THEY saved; distance wording comes from the shared Kistor
+     * navigation copy. {@code reading} is null when there is no live position to measure from.
+     */
+    static String locationLineText(boolean navigating, ChestNavigationReading reading, boolean showStartedFeedback) {
+        if (navigating && showStartedFeedback) return KistorNavigationText.NAVIGATION_STARTED;
+        String summary = reading != null ? KistorNavigationText.bannerSummary(reading) : "";
+        String prefix = navigating ? "● NAVIGERAR HIT" : "Din sparade plats";
+        return summary.isEmpty() ? prefix : prefix + " • " + summary;
     }
 
     /**
@@ -350,8 +487,19 @@ public class MarketWatchTabComponent implements TextInputHandler {
             return;
         }
 
-        int maxScroll = calculateMaxScroll(ROW_H, notes.size(), listRect.bottom() - listTop - 2);
+        int contentH = 0;
+        for (MarketWatchNote note : notes) contentH += rowHeight(note);
+        int maxScroll = calculateMaxScroll(contentH, listRect.bottom() - listTop - 2);
         listScroll = Math.max(0, Math.min(listScroll, maxScroll));
+
+        // Read once per frame and only when a row actually needs a distance.
+        // Same per-frame context validation as the Kistor tab: a target from another world/server
+        // stops here too instead of waiting for the HUD's once-per-second check.
+        ChestNavigationManager navigation = session.getKistorRuntime().navigation();
+        navigation.onContextObserved(contextKey);
+        Optional<PlayerPose> pose = notes.stream().anyMatch(MarketWatchNote::hasLocation)
+                ? MinecraftPlayerPoseReader.read(1.0f) : Optional.empty();
+        UiRect viewport = new UiRect(listRect.x() + 1, listTop, listRect.width() - 2, listRect.bottom() - 1 - listTop);
 
         extractor.enableScissor(listRect.x() + 1, listTop, listRect.right() - 1, listRect.bottom() - 1);
         int currentY = listTop + 1 - listScroll;
@@ -360,17 +508,21 @@ public class MarketWatchTabComponent implements TextInputHandler {
 
         long now = System.currentTimeMillis();
         for (MarketWatchNote note : notes) {
-            if (currentY + ROW_H >= listTop && currentY <= listRect.bottom()) {
+            int rowH = rowHeight(note);
+            if (currentY + rowH >= listTop && currentY <= listRect.bottom()) {
                 renderNoteRow(extractor, font, x, currentY, maxW, note, notesManager, contextKey, mouseX, mouseY, now);
+                if (note.hasLocation()) {
+                    renderLocationLine(extractor, font, x, currentY + ROW_H - 2, maxW, note, navigation, contextKey, pose, viewport, mouseX, mouseY, now);
+                }
             }
-            currentY += ROW_H;
+            currentY += rowH;
         }
         extractor.disableScissor();
     }
 
     private void renderNoteRow(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, MarketWatchNote note,
                                 MarketWatchNotesManager notesManager, String contextKey, int mouseX, int mouseY, long now) {
-        GZTheme.drawCard(extractor, new UiRect(x, y, maxW, ROW_H - 2), GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
+        GZTheme.drawCard(extractor, new UiRect(x, y, maxW, rowHeight(note) - 2), GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
         int iconOffset = 0;
 
         if (note.itemId() != null) {
@@ -422,23 +574,63 @@ public class MarketWatchTabComponent implements TextInputHandler {
         GZTheme.drawButton(extractor, font, editBtn, "Ändra", false, editBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
         GZTheme.drawButton(extractor, font, deleteBtn, deleteLabel, false, deleteBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
 
-        hitTargets.add(new ListRowHit(editBtn, () -> {
-            editing = true;
-            editingNoteId = noteId;
-            editItemText = note.itemId() != null ? note.itemId() : note.displayName();
-            editNoteText = note.note();
-            editCategoryId = note.categoryId();
-            focusedField = null;
-        }));
+        hitTargets.add(new ListRowHit(editBtn, () -> beginEditNote(note)));
         hitTargets.add(new ListRowHit(deleteBtn, () -> {
             if (noteId.equals(pendingDeleteId) && (System.currentTimeMillis() - pendingDeleteAtMs) < 3000L) {
-                notesManager.deleteNote(contextKey, noteId);
+                if (notesManager.deleteNote(contextKey, noteId)) {
+                    MarketWatchNavigation.stopIfNavigatingTo(CompanionSession.getInstance().getKistorRuntime().navigation(), note);
+                }
                 pendingDeleteId = null;
             } else {
                 pendingDeleteId = noteId;
                 pendingDeleteAtMs = System.currentTimeMillis();
             }
         }));
+    }
+
+    /**
+     * The extra line of a note with a saved location: where it is relative to the player (shared
+     * Kistor distance wording) and Hitta/Stoppa. Hitta is only drawn when the note's location
+     * resolves to a valid navigation point for the CURRENT context.
+     */
+    private void renderLocationLine(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, MarketWatchNote note,
+                                    ChestNavigationManager navigation, String contextKey, Optional<PlayerPose> pose,
+                                    UiRect viewport, int mouseX, int mouseY, long now) {
+        Optional<NavigationPoint> point = MarketWatchNavigation.toNavigationPoint(contextKey, note);
+        if (point.isEmpty()) return;
+
+        boolean navigating = MarketWatchNavigation.isNavigatingTo(navigation, note);
+        ToIntFunction<String> measure = s -> TextUtil.scaledWidth(font, s, TypographyScale.META.getScale());
+        int btnW = Math.max(34, widestButtonWidth(measure, 8, "Hitta", "Stoppa"));
+        UiRect navBtn = new UiRect(x + maxW - btnW, y, btnW, 10);
+
+        ChestNavigationReading reading = pose.map(p -> ChestNavigationMath.evaluate(p, NavigationDestination.of(point.get()))).orElse(null);
+        boolean feedback = note.id().equals(navFeedbackNoteId) && now < navFeedbackExpiry;
+        String text = locationLineText(navigating, reading, feedback);
+        int textX = x + 2;
+        TextUtil.drawScaledEllipsizedText(extractor, font, text, textX, y + 1, Math.max(10, navBtn.x() - 2 - textX),
+                TypographyScale.META.getScale(), navigating ? GZTheme.COLOR_MINT : GZTheme.COLOR_TEXT_SECONDARY, false);
+
+        GZTheme.drawButton(extractor, font, navBtn, navigating ? "Stoppa" : "Hitta", !navigating, navBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+        // Clipped to the scrolled viewport so a half-hidden row is never clickable outside the list.
+        int top = Math.max(navBtn.y(), viewport.y());
+        int bottom = Math.min(navBtn.bottom(), viewport.bottom());
+        if (bottom > top) {
+            hitTargets.add(new ListRowHit(new UiRect(navBtn.x(), top, navBtn.width(), bottom - top),
+                    () -> toggleNavigation(navigation, contextKey, note)));
+        }
+    }
+
+    private void toggleNavigation(ChestNavigationManager navigation, String contextKey, MarketWatchNote note) {
+        if (MarketWatchNavigation.isNavigatingTo(navigation, note)) {
+            navigation.stop(ChestNavigationManager.StopReason.USER);
+            navFeedbackNoteId = null;
+            return;
+        }
+        if (MarketWatchNavigation.startNavigation(navigation, contextKey, note, System.currentTimeMillis())) {
+            navFeedbackNoteId = note.id();
+            navFeedbackExpiry = System.currentTimeMillis() + FEEDBACK_MS;
+        }
     }
 
     private void copyToClipboard(String text) {

@@ -109,4 +109,121 @@ class JsonMarketWatchNotesStoreTest {
         assertEquals(1, result.data().getNotes("ctx").size());
         assertEquals("good", result.data().getNotes("ctx").get(0).id());
     }
+
+    @Test
+    @DisplayName("A player-saved location round-trips exactly")
+    void savedLocationRoundTrips() {
+        JsonMarketWatchNotesStore store = new JsonMarketWatchNotesStore(storeFile());
+        MarketWatchSavedLocation loc = MarketWatchSavedLocation.of("minecraft:overworld", -847, 70, 12, 5000L).orElseThrow();
+        MarketWatchNote note = new MarketWatchNote("n1", "minecraft:beef", "Raw Beef", null, "Olivres Shop", 1L, false, loc);
+        store.save(MarketWatchNotesData.empty().withNoteAdded("ctx", note));
+
+        MarketWatchNote loaded = store.load().data().getNotes("ctx").get(0);
+        assertEquals(loc, loaded.location());
+        assertEquals(note, loaded);
+    }
+
+    @Test
+    @DisplayName("Notes without a location are written exactly as before - no location key at all")
+    void noLocationWritesNoLocationKey() throws Exception {
+        JsonMarketWatchNotesStore store = new JsonMarketWatchNotesStore(storeFile());
+        store.save(MarketWatchNotesData.empty().withNoteAdded("ctx", new MarketWatchNote("n1", null, "A", null, "x", 0L, false)));
+        String json = Files.readString(storeFile());
+        assertFalse(json.contains("location"), json);
+        assertTrue(json.contains("\"schemaVersion\": 1"), "Additive field - no schema bump");
+    }
+
+    @Test
+    @DisplayName("A legacy file written before locations existed loads unchanged, with no location")
+    void legacyFileLoadsWithoutLocation() throws Exception {
+        Files.writeString(storeFile(), "{\"schemaVersion\": 1, \"notesByContext\": {\"ctx\": ["
+                + "{\"id\":\"old\",\"itemId\":\"minecraft:diamond\",\"displayName\":\"Diamond\",\"categoryId\":\"gruvdrift\","
+                + "\"note\":\"1400 coins\",\"lastObservedAtMs\":42,\"favorite\":true}"
+                + "]}}");
+        MarketWatchNotesLoadResult result = new JsonMarketWatchNotesStore(storeFile()).load();
+        assertEquals(MarketWatchNotesLoadResult.Outcome.LOADED, result.outcome());
+        MarketWatchNote note = result.data().getNotes("ctx").get(0);
+        assertEquals(new MarketWatchNote("old", "minecraft:diamond", "Diamond", "gruvdrift", "1400 coins", 42L, true), note);
+        assertFalse(note.hasLocation());
+    }
+
+    @Test
+    @DisplayName("An incomplete or invalid location is dropped on its own - the note still loads, never with a guessed position")
+    void invalidLocationIsDroppedNotRepaired() throws Exception {
+        String[] badLocations = {
+            "null",
+            "\"minecraft:overworld 1 2 3\"",
+            "{}",
+            "{\"dimension\":\"minecraft:overworld\",\"x\":1,\"z\":3}",
+            "{\"dimension\":\"minecraft:overworld\",\"x\":1.5,\"y\":64,\"z\":3}",
+            "{\"dimension\":\"minecraft:overworld\",\"x\":\"abc\",\"y\":64,\"z\":3}",
+            "{\"dimension\":\"overworld\",\"x\":1,\"y\":64,\"z\":3}",
+            "{\"x\":1,\"y\":64,\"z\":3}",
+            "{\"dimension\":\"minecraft:overworld\",\"x\":1,\"y\":99999,\"z\":3}",
+            "{\"dimension\":\"minecraft:overworld\",\"x\":1,\"y\":64,\"z\":99999999999}"
+        };
+        for (String bad : badLocations) {
+            Files.writeString(storeFile(), "{\"schemaVersion\": 1, \"notesByContext\": {\"ctx\": ["
+                    + "{\"id\":\"n\",\"displayName\":\"Raw Beef\",\"note\":\"keep me\",\"lastObservedAtMs\":0,\"favorite\":false,"
+                    + "\"location\":" + bad + "}]}}");
+            MarketWatchNotesLoadResult result = new JsonMarketWatchNotesStore(storeFile()).load();
+            assertEquals(MarketWatchNotesLoadResult.Outcome.LOADED, result.outcome(), bad);
+            List<MarketWatchNote> notes = result.data().getNotes("ctx");
+            assertEquals(1, notes.size(), bad);
+            assertEquals("keep me", notes.get(0).note(), bad);
+            assertNull(notes.get(0).location(), bad);
+        }
+    }
+
+    @Test
+    @DisplayName("A note without a location is written with exactly the pre-feature keys")
+    void noLocationKeySetIsUnchanged() throws Exception {
+        JsonMarketWatchNotesStore store = new JsonMarketWatchNotesStore(storeFile());
+        store.save(MarketWatchNotesData.empty().withNoteAdded("ctx",
+                new MarketWatchNote("n1", "minecraft:beef", "Raw Beef", "boskap", "20 st", 7L, true)));
+        com.google.gson.JsonObject note = com.google.gson.JsonParser.parseString(Files.readString(storeFile())).getAsJsonObject()
+                .getAsJsonObject("notesByContext").getAsJsonArray("ctx").get(0).getAsJsonObject();
+        assertEquals(java.util.Set.of("id", "itemId", "displayName", "categoryId", "note", "lastObservedAtMs", "favorite"), note.keySet());
+    }
+
+    @Test
+    @DisplayName("Unknown JSON fields (root, note, location) never break loading")
+    void unknownFieldsAreIgnored() throws Exception {
+        Files.writeString(storeFile(), "{\"schemaVersion\": 1, \"futureRoot\": {\"a\": [1,2]}, \"notesByContext\": {\"ctx\": ["
+                + "{\"id\":\"n\",\"displayName\":\"Raw Beef\",\"note\":\"x\",\"lastObservedAtMs\":0,\"favorite\":false,"
+                + "\"shopName\":\"Olivres Shop\",\"tags\":[\"a\"],"
+                + "\"location\":{\"dimension\":\"gamezone:resource_world\",\"x\":-847,\"y\":70,\"z\":12,\"savedAtMs\":5,\"yaw\":90,\"extra\":{}}}"
+                + "]}}");
+        MarketWatchNotesLoadResult result = new JsonMarketWatchNotesStore(storeFile()).load();
+        assertEquals(MarketWatchNotesLoadResult.Outcome.LOADED, result.outcome());
+        MarketWatchNote note = result.data().getNotes("ctx").get(0);
+        assertEquals(MarketWatchSavedLocation.of("gamezone:resource_world", -847, 70, 12, 5L).orElseThrow(), note.location());
+    }
+
+    @Test
+    @DisplayName("More malformed location shapes: the note is always kept and no position is ever made up")
+    void moreMalformedLocationsKeepNote() throws Exception {
+        String[] badLocations = {
+            "[1, 64, 3]",
+            "42",
+            "{\"dimension\":7,\"x\":1,\"y\":64,\"z\":3}",
+            "{\"dimension\":\"minecraft:overworld\",\"x\":null,\"y\":64,\"z\":3}",
+            "{\"dimension\":\"minecraft:overworld\",\"x\":true,\"y\":64,\"z\":3}",
+            "{\"dimension\":\"minecraft:overworld\",\"x\":{},\"y\":64,\"z\":3}",
+            "{\"dimension\":\"minecraft:overworld\",\"x\":1,\"y\":64,\"z\":3,\"savedAtMs\":\"soon\"}",
+            "{\"dimension\":\"minecraft:overworld\",\"x\":1e300,\"y\":64,\"z\":3}"
+        };
+        for (String bad : badLocations) {
+            Files.writeString(storeFile(), "{\"schemaVersion\": 1, \"notesByContext\": {\"ctx\": ["
+                    + "{\"id\":\"n\",\"displayName\":\"Raw Beef\",\"note\":\"keep me\",\"lastObservedAtMs\":0,\"favorite\":false,"
+                    + "\"location\":" + bad + "},"
+                    + "{\"id\":\"m\",\"displayName\":\"Other\",\"note\":\"\",\"lastObservedAtMs\":0,\"favorite\":false}]}}");
+            MarketWatchNotesLoadResult result = new JsonMarketWatchNotesStore(storeFile()).load();
+            assertEquals(MarketWatchNotesLoadResult.Outcome.LOADED, result.outcome(), bad);
+            List<MarketWatchNote> notes = result.data().getNotes("ctx");
+            assertEquals(2, notes.size(), bad);
+            assertEquals("keep me", notes.get(0).note(), bad);
+            assertNull(notes.get(0).location(), bad);
+        }
+    }
 }

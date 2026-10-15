@@ -590,6 +590,18 @@ not). Then it stops and shows "✓ Materiallager hittad".
 - the client disconnects / leaves the world (`ClientPlayConnectionEvents.DISCONNECT`).
 While the player/level is unavailable (e.g. loading), the HUD simply draws nothing.
 
+**Known non-storage coordinates (`NavigationPoint`).** Other features can reuse this exact
+navigation without knowing the HUD or the math: they build a validated
+`chest.nav.NavigationPoint` (source key, context, dimension, block position, label - `of(...)`
+rejects anything incomplete or outside the world, and there is no default position) and call
+`ChestNavigationManager.startPoint(currentContext, point, now)`. The manager still holds exactly
+ONE target: starting a point replaces a storage target and vice versa (`REPLACED`). A point obeys
+the same Stoppa / context-change / disconnect rules, but never depends on the Kistor index or the
+Chest Manager status. The HUD and the Kistor NAVIGERAR banner draw whatever
+`resolveDestination(...)` returns (`NavigationDestination`); for storage targets the math and
+wording are identical to before. Today the only caller is a place the player saved themselves on
+a MarketWatch note (see `docs/MARKETWATCH.md`).
+
 ## 21. Planner integration: "Hitta material i kistor" and Hämtningslista
 
 **Settlement → Material** and **Byggplaner → building detail** get a **Hitta material i kistor**

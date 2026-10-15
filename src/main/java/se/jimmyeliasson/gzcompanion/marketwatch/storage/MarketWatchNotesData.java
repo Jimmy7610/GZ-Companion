@@ -10,6 +10,11 @@ import java.util.Map;
  * GameZone-server-vs-singleplayer context, exactly like Settlement/Building planner state.
  */
 public record MarketWatchNotesData(int schemaVersion, Map<String, List<MarketWatchNote>> notesByContext) {
+    /**
+     * A note's optional {@code "location"} object was added within schema 1 on purpose: it is
+     * purely additive, so bumping the version would make older builds refuse the WHOLE file
+     * (fail-closed on a future schema) just to protect one optional field.
+     */
     public static final int CURRENT_SCHEMA = 1;
 
     public MarketWatchNotesData {

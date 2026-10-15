@@ -36,6 +36,9 @@ public final class KistorNavigationText {
         return "Du är i " + DimensionNames.shortName(reading.playerDimensionKey());
     }
 
+    /** Shown right after navigation starts from any tab - the HUD arrow only appears once the Companion is closed. */
+    public static final String NAVIGATION_STARTED = "Navigering startad • stäng med G för att se pilen";
+
     public static String arrived() {
         return "DU ÄR FRAMME";
     }

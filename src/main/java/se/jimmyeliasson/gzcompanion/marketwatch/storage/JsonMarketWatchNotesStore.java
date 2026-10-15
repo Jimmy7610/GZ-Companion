@@ -102,12 +102,46 @@ public class JsonMarketWatchNotesStore implements MarketWatchNotesStore {
                 long lastObservedAtMs = obj.has("lastObservedAtMs") && obj.get("lastObservedAtMs").isJsonPrimitive() ? obj.get("lastObservedAtMs").getAsLong() : 0L;
                 boolean favorite = obj.has("favorite") && obj.get("favorite").isJsonPrimitive() && obj.get("favorite").getAsBoolean();
 
-                result.add(new MarketWatchNote(id, itemId, displayName, categoryId, note, lastObservedAtMs, favorite));
+                MarketWatchSavedLocation location = parseLocation(obj, contextKey, id);
+
+                result.add(new MarketWatchNote(id, itemId, displayName, categoryId, note, lastObservedAtMs, favorite, location));
             } catch (Exception ex) {
                 LOGGER.warn("Skipping malformed MarketWatch note entry in context '{}': {}", contextKey, ex.getMessage());
             }
         }
         return result;
+    }
+
+    /**
+     * The optional, additive {@code "location"} object (absent on every note written before it
+     * existed). An incomplete or invalid location is dropped on its own - the note itself still
+     * loads, just without "Hitta" - and is never repaired into a guessed position.
+     */
+    private MarketWatchSavedLocation parseLocation(JsonObject noteObj, String contextKey, String noteId) {
+        if (!noteObj.has("location") || !noteObj.get("location").isJsonObject()) return null;
+        JsonObject loc = noteObj.getAsJsonObject("location");
+        try {
+            String dimension = loc.has("dimension") && loc.get("dimension").isJsonPrimitive() ? loc.get("dimension").getAsString() : null;
+            Integer x = intOrNull(loc, "x");
+            Integer y = intOrNull(loc, "y");
+            Integer z = intOrNull(loc, "z");
+            long savedAtMs = loc.has("savedAtMs") && loc.get("savedAtMs").isJsonPrimitive() ? loc.get("savedAtMs").getAsLong() : 0L;
+            if (dimension != null && x != null && y != null && z != null) {
+                var parsed = MarketWatchSavedLocation.of(dimension, x, y, z, savedAtMs);
+                if (parsed.isPresent()) return parsed.get();
+            }
+        } catch (Exception ignored) {
+            // Fall through to the warning below.
+        }
+        LOGGER.warn("Ignoring invalid saved location on MarketWatch note '{}' in context '{}'.", noteId, contextKey);
+        return null;
+    }
+
+    private static Integer intOrNull(JsonObject obj, String key) {
+        if (!obj.has(key) || !obj.get(key).isJsonPrimitive() || !obj.get(key).getAsJsonPrimitive().isNumber()) return null;
+        double value = obj.get(key).getAsDouble();
+        if (value != Math.rint(value) || value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) return null;
+        return (int) value;
     }
 
     @Override
@@ -157,6 +191,16 @@ public class JsonMarketWatchNotesStore implements MarketWatchNotesStore {
         obj.addProperty("note", note.note());
         obj.addProperty("lastObservedAtMs", note.lastObservedAtMs());
         obj.addProperty("favorite", note.favorite());
+        MarketWatchSavedLocation location = note.location();
+        if (location != null) {
+            JsonObject loc = new JsonObject();
+            loc.addProperty("dimension", location.dimensionKey());
+            loc.addProperty("x", location.x());
+            loc.addProperty("y", location.y());
+            loc.addProperty("z", location.z());
+            loc.addProperty("savedAtMs", location.savedAtMs());
+            obj.add("location", loc);
+        }
         return obj;
     }
 

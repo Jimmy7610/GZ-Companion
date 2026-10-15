@@ -10,11 +10,11 @@ import se.jimmyeliasson.gzcompanion.chest.KistorRuntime;
 import se.jimmyeliasson.gzcompanion.chest.bridge.MinecraftPlayerPoseReader;
 import se.jimmyeliasson.gzcompanion.chest.material.ChestMaterialRequest;
 import se.jimmyeliasson.gzcompanion.chest.model.ChestManagerStatus;
-import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainerId;
 import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationMath;
 import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationReading;
 import se.jimmyeliasson.gzcompanion.chest.nav.KistorNavigationText;
+import se.jimmyeliasson.gzcompanion.chest.nav.NavigationDestination;
 import se.jimmyeliasson.gzcompanion.chest.nav.PlayerPose;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.settings.CompanionSettings;
@@ -114,14 +114,17 @@ public class KistorTabComponent implements TextInputHandler {
 
         // Validate navigation against the CURRENT index/context (stops safely if forgotten/reset).
         runtime.navigation().onContextObserved(contextKey);
-        Optional<StoredContainer> navTarget = runtime.navigation().resolveTarget(manager);
+        // The target may also be a saved point from another tab (MarketWatch) - shown and stoppable
+        // here too, so there is only ever one NAVIGERAR state to reason about.
+        Optional<NavigationDestination> navTarget = runtime.navigation().resolveDestination(manager);
         boolean materialAvailable = runtime.materialRequest(contextKey).isPresent();
+        boolean available = manager != null && manager.getStatus().isAvailable();
+        boolean navigating = navTarget.isPresent() && available;
 
-        this.layout = computeLayout(bounds, navTarget.isPresent(), materialAvailable);
-        this.lastNavigating = navTarget.isPresent();
+        this.layout = computeLayout(bounds, navigating, materialAvailable);
+        this.lastNavigating = navigating;
         this.lastMaterialAvailable = materialAvailable;
 
-        boolean available = manager != null && manager.getStatus().isAvailable();
         renderHeader(extractor, font, manager, contextKey, mouseX, mouseY, available, materialAvailable);
         if (!available) {
             drawUnavailableState(extractor, font, new UiRect(bounds.x(), layout.searchRect().y(), bounds.width(), bounds.bottom() - layout.searchRect().y()),
@@ -174,7 +177,7 @@ public class KistorTabComponent implements TextInputHandler {
                 TypographyScale.META.getScale(), active ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_SECONDARY, active);
     }
 
-    private void renderNavigationBanner(KistorRenderContext ctx, StoredContainer target) {
+    private void renderNavigationBanner(KistorRenderContext ctx, NavigationDestination target) {
         GuiGraphicsExtractor g = ctx.extractor();
         Font font = ctx.font();
         UiRect banner = layout.navBannerRect();
@@ -189,7 +192,7 @@ public class KistorTabComponent implements TextInputHandler {
         }
         UiRect titleRect = layout.navTitleTextRect();
         UiRect detailRect = layout.navDetailTextRect();
-        String title = "NAVIGERAR: " + target.displayTitle();
+        String title = "NAVIGERAR: " + target.title();
         TextUtil.drawScaledEllipsizedText(g, font, title, titleRect.x(), titleRect.y() + 2, titleRect.width(),
                 TypographyScale.META.getScale(), GZTheme.COLOR_MINT, false);
         if (!detail.isEmpty()) {
@@ -202,9 +205,8 @@ public class KistorTabComponent implements TextInputHandler {
         // Stoppa is inside the full-width banner, so it MUST be registered before the banner hit.
         ctx.addHit(stop, () -> KistorActions.stopNavigation(ctx));
 
-        StoredContainerId id = target.id();
         UiRect openRect = new UiRect(banner.x(), banner.y(), banner.width(), banner.height());
-        ctx.addHit(openRect, () -> state.openStorage(id));
+        target.container().ifPresent(id -> ctx.addHit(openRect, () -> state.openStorage(id)));
     }
 
     private void renderSearch(KistorRenderContext ctx) {

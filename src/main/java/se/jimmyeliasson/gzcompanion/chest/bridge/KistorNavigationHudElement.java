@@ -10,12 +10,12 @@ import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.resources.Identifier;
 import se.jimmyeliasson.gzcompanion.chest.ChestManager;
 import se.jimmyeliasson.gzcompanion.chest.KistorRuntime;
-import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationManager;
 import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationMath;
 import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationReading;
 import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationStatus;
 import se.jimmyeliasson.gzcompanion.chest.nav.KistorNavigationText;
+import se.jimmyeliasson.gzcompanion.chest.nav.NavigationDestination;
 import se.jimmyeliasson.gzcompanion.chest.nav.PlayerPose;
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
@@ -37,7 +37,8 @@ import java.util.Optional;
  * inactive path is a single boolean check).
  *
  * <p>While active it only compares the local player's own position and camera yaw with the saved
- * coordinates of the ONE explicitly selected, previously legitimately opened storage location.
+ * coordinates of the ONE explicitly selected target: a previously legitimately opened storage
+ * location, or a location the player saved themselves (e.g. on a MarketWatch note).
  * It never reads blocks, block entities, chunks or entities, never raytraces, never outlines
  * anything, and never moves or turns the player.
  */
@@ -81,7 +82,7 @@ public final class KistorNavigationHudElement implements HudElement {
             }
 
             ChestManager manager = kistor.chestManager();
-            Optional<StoredContainer> target = navigation.resolveTarget(manager);
+            Optional<NavigationDestination> target = navigation.resolveDestination(manager);
             if (target.isEmpty()) return;
 
             float partialTick = deltaTracker.getGameTimeDeltaPartialTick(true);
@@ -94,7 +95,7 @@ public final class KistorNavigationHudElement implements HudElement {
         }
     }
 
-    private void draw(GuiGraphicsExtractor graphics, Minecraft client, StoredContainer target, ChestNavigationReading reading, long now) {
+    private void draw(GuiGraphicsExtractor graphics, Minecraft client, NavigationDestination target, ChestNavigationReading reading, long now) {
         Font font = client.font;
         int screenW = client.getWindow().getGuiScaledWidth();
         int screenH = client.getWindow().getGuiScaledHeight();
@@ -138,7 +139,7 @@ public final class KistorNavigationHudElement implements HudElement {
 
         int cx = layout.card().x() + layout.card().width() / 2;
         int maxW = layout.card().width() - 8;
-        TextUtil.drawScaledCenteredText(graphics, font, target.displayTitle().toUpperCase(Locale.ROOT), cx, layout.line1Y(), maxW,
+        TextUtil.drawScaledCenteredText(graphics, font, target.title().toUpperCase(Locale.ROOT), cx, layout.line1Y(), maxW,
                 TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, true);
         TextUtil.drawScaledCenteredText(graphics, font, line2, cx, layout.line2Y(), maxW,
                 TypographyScale.META.getScale(), line2Color, true);
