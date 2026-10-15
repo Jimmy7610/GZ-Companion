@@ -115,6 +115,11 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Clipboard-Only Command**: An optional "Kopiera /bounty info \<namn>" button copies the documented command to the clipboard — never sent automatically.
 - **Shared Live-Data Runtime**: Reuses the exact same lazily-created executor/`HttpClient` as Leaderboards — Bounty Board adds zero new threads or network clients.
 
+### Events *(Implemented, human gameplay QA complete — unreleased)*
+- **GameZone Event Schedule**: The next event with a countdown and the coming week grouped by day ("Idag", "Imorgon", "Lördag 17 oktober"), from GameZoneEngine's public schedule API — the same source as the in-game hologram. See [Events](docs/EVENTS.md).
+- **Correct Time Zone**: Times are Europe/Stockholm with proper DST handling, whatever the player's own time zone is.
+- **Read-Only, Cached**: Fetched only while the tab is open (at most every 5 minutes) on the shared live-data runtime; the last schedule stays visible if the API is down.
+
 ---
 
 ## 🚀 Building from Source
@@ -146,6 +151,7 @@ The compiled mod JAR will be located at:
 - [Product Bible](docs/PRODUCT-BIBLE.md): Vision, user personas, and design boundaries.
 - [Architecture](docs/ARCHITECTURE.md): Structural layout and layer isolation.
 - [Chest Manager](docs/CHEST-MANAGER.md): Fair-play boundary, capture lifecycle, and persistence for the Kistor module.
+- [Events](docs/EVENTS.md): Public event-schedule source, caching, time-zone rules, and failure behaviour.
 - [Design System](docs/design/DESIGN-SYSTEM.md): Authoritative UI palette, components, and styling.
 - [GameZone Rule Pack](docs/GAMEZONE-RULE-PACK.md): Data schema, versioning, and verification specification.
 - [Roadmap](docs/ROADMAP.md): Milestones M1 through M11 with Definitions of Done.
