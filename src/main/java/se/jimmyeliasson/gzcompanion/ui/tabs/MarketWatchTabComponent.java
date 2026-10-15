@@ -21,6 +21,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeModuleStatus;
 import se.jimmyeliasson.gzcompanion.knowledge.crafting.bridge.MinecraftRecipeDisplayAdapter;
 import se.jimmyeliasson.gzcompanion.knowledge.economy.MarketWatchInfo;
 import se.jimmyeliasson.gzcompanion.knowledge.settlement.ProductionCategory;
+import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchLocationInput;
 import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNavigation;
 import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNotesManager;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNote;
@@ -32,6 +33,7 @@ import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
 import se.jimmyeliasson.gzcompanion.ui.TextInputHandler;
 import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
+import se.jimmyeliasson.gzcompanion.ui.layout.MarketWatchEditFormLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.MarketWatchLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
@@ -50,20 +52,23 @@ import java.util.function.ToIntFunction;
  * plus a purely local "Mina anteckningar" watchlist. Never runs {@code /marketwatch}
  * automatically and never presents a local note as GameZone's actual live market state.
  *
- * <p>A note can carry a place the player saved themselves ("Spara plats" in the edit form, from
- * their own current position). Only such notes show "Hitta", which hands the place to the shared
+ * <p>A note can carry a place the player saved themselves: typed as X/Y/Z in the edit form, or
+ * filled from their own current position with "Använd min plats". Only such notes show "Hitta",
+ * which hands the place to the shared
  * Kistor navigation through {@link MarketWatchNavigation} - this tab draws no arrow and does no
  * navigation math of its own beyond reusing {@link ChestNavigationMath} for the row's distance.
  */
 public class MarketWatchTabComponent implements TextInputHandler {
     private static final int MAX_FIELD_LENGTH = 48;
+    /** Enough for any in-world coordinate ("-30000000") plus a little slack for stray spaces. */
+    private static final int MAX_COORD_LENGTH = 12;
     private static final int ROW_H = 34;
     /** A note with a saved location gets one extra line: "Din sparade plats • ..." + Hitta/Stoppa. */
     private static final int ROW_H_WITH_LOCATION = 45;
     private static final long FEEDBACK_MS = 4000L;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    private enum EditField { ITEM, NOTE }
+    enum EditField { ITEM, NOTE, X, Y, Z }
 
     private record ListRowHit(UiRect rect, Runnable action) {}
 
@@ -76,9 +81,17 @@ public class MarketWatchTabComponent implements TextInputHandler {
     private String editItemText = "";
     private String editNoteText = "";
     private String editCategoryId = null;
-    private MarketWatchSavedLocation editLocation = null;
+    /** The X/Y/Z texts exactly as typed - kept on a validation error, never reset to 0. */
+    private final String[] editCoords = {"", "", ""};
+    /** Dimension to save with: the edited location's, or the one "Använd min plats" captured. */
+    private String editLocationDimension = null;
+    /** The note's saved location when editing began (kept as-is if nothing about it changes). */
+    private MarketWatchSavedLocation editLocationOriginal = null;
     private String editLocationError = null;
     private EditField focusedField = null;
+    private int editScroll = 0;
+    private boolean revealFocusedField = false;
+    private MarketWatchEditFormLayout formLayout;
 
     private String navFeedbackNoteId = null;
     private long navFeedbackExpiry = 0L;
@@ -232,9 +245,10 @@ public class MarketWatchTabComponent implements TextInputHandler {
         editItemText = "";
         editNoteText = "";
         editCategoryId = null;
-        editLocation = null;
-        editLocationError = null;
+        setEditLocation(null);
+        editLocationOriginal = null;
         focusedField = EditField.ITEM;
+        editScroll = 0;
     }
 
     private void beginEditNote(MarketWatchNote note) {
@@ -243,120 +257,161 @@ public class MarketWatchTabComponent implements TextInputHandler {
         editItemText = note.itemId() != null ? note.itemId() : note.displayName();
         editNoteText = note.note();
         editCategoryId = note.categoryId();
-        editLocation = note.location();
-        editLocationError = null;
+        setEditLocation(note.location());
+        editLocationOriginal = note.location();
         focusedField = null;
+        editScroll = 0;
     }
 
     private void cancelEdit() {
         editing = false;
         editingNoteId = null;
-        editLocation = null;
-        editLocationError = null;
+        setEditLocation(null);
+        editLocationOriginal = null;
         focusedField = null;
+        editScroll = 0;
+    }
+
+    /** Fills (or with null, clears) the form's X/Y/Z fields and the dimension they will be saved in. */
+    private void setEditLocation(MarketWatchSavedLocation location) {
+        String[] fields = MarketWatchLocationInput.fieldsFor(location);
+        System.arraycopy(fields, 0, editCoords, 0, 3);
+        editLocationDimension = location != null ? location.dimensionKey() : null;
+        editLocationError = null;
     }
 
     /**
-     * "Spara plats": records the player's OWN current position into the open form (persisted on
-     * "Spara", discarded on "Avbryt"). Without a live position nothing is recorded.
+     * "Använd min plats": fills X/Y/Z and the dimension from the player's OWN current position
+     * (persisted on "Spara", discarded on "Avbryt"). Without a live position nothing changes.
      */
-    private void captureEditLocation() {
+    private void useMyPosition() {
         Optional<MarketWatchSavedLocation> captured = MarketWatchNavigation.locationFromPose(
                 MinecraftPlayerPoseReader.read(1.0f), System.currentTimeMillis());
         if (captured.isPresent()) {
-            editLocation = captured.get();
-            editLocationError = null;
+            setEditLocation(captured.get());
         } else {
-            editLocationError = "Kunde inte läsa din position - ingen plats sparades.";
+            editLocationError = "Kunde inte läsa din position just nu.";
         }
+    }
+
+    private boolean hasAnyCoordinate() {
+        return !(editCoords[0].isBlank() && editCoords[1].isBlank() && editCoords[2].isBlank());
     }
 
     private void renderEditForm(GuiGraphicsExtractor extractor, Font font, CompanionSession session, int mouseX, int mouseY) {
         UiRect area = layout.listRect();
         GZTheme.drawCard(extractor, area, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
 
-        int x = area.x() + 4;
-        int maxW = area.width() - 8;
-        int y = area.y() + 4;
+        ToIntFunction<String> measure = s -> TextUtil.scaledWidth(font, s, TypographyScale.META.getScale());
+        int useMyPosW = widestButtonWidth(measure, 10, "Använd min plats");
+        int removeW = hasAnyCoordinate() ? widestButtonWidth(measure, 10, "Ta bort plats") : 0;
+        MarketWatchEditFormLayout f = MarketWatchEditFormLayout.calculate(area, editScroll, useMyPosW, removeW);
+        if (revealFocusedField && focusedField != null) {
+            editScroll = f.scrollToReveal(fieldRect(f, focusedField));
+            f = MarketWatchEditFormLayout.calculate(area, editScroll, useMyPosW, removeW);
+        }
+        revealFocusedField = false;
+        editScroll = f.scroll();
+        formLayout = f;
 
-        TextUtil.drawScaledText(extractor, font, editingNoteId == null ? "Ny anteckning" : "Redigera anteckning", x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
-        y += 12;
+        UiRect vp = f.viewport();
+        extractor.enableScissor(vp.x(), vp.y(), vp.right(), vp.bottom());
 
-        UiRect itemRect = new UiRect(x, y, maxW, 11);
-        drawTextField(extractor, font, itemRect, "Föremål (namn eller minecraft:id)...", editItemText, focusedField == EditField.ITEM);
-        hitTargets.add(new ListRowHit(itemRect, () -> focusedField = EditField.ITEM));
-        y += 13;
+        TextUtil.drawScaledText(extractor, font, editingNoteId == null ? "Ny anteckning" : "Redigera anteckning", f.titleRect().x(), f.titleRect().y(),
+                TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
+
+        drawTextField(extractor, font, f.itemRect(), "Föremål (namn eller minecraft:id)...", editItemText, focusedField == EditField.ITEM);
+        addFormHit(f.itemRect(), () -> focusedField = EditField.ITEM);
 
         List<ProductionCategory> categories = session.getSettlementCatalogStatus().isAvailable()
                 ? session.getSettlementCatalog().productionCategories() : List.of();
         String categoryLabel = editCategoryId == null ? "Ingen kategori"
                 : categories.stream().filter(c -> c.id().equals(editCategoryId)).findFirst().map(ProductionCategory::displayName).orElse(editCategoryId);
-        UiRect categoryBtn = new UiRect(x, y, maxW, 11);
-        GZTheme.drawButton(extractor, font, categoryBtn, "Kategori: " + categoryLabel, false, categoryBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
-        hitTargets.add(new ListRowHit(categoryBtn, () -> editCategoryId = nextCategoryId(categories, editCategoryId)));
-        y += 14;
+        GZTheme.drawButton(extractor, font, f.categoryRect(), "Kategori: " + categoryLabel, false, f.categoryRect().contains(mouseX, mouseY), TypographyScale.META.getScale());
+        addFormHit(f.categoryRect(), () -> editCategoryId = nextCategoryId(categories, editCategoryId));
 
-        UiRect noteRect = new UiRect(x, y, maxW, 11);
-        drawTextField(extractor, font, noteRect, "Anteckning (pris, efterfrågan, mängd, fritext)...", editNoteText, focusedField == EditField.NOTE);
-        hitTargets.add(new ListRowHit(noteRect, () -> focusedField = EditField.NOTE));
-        y += 14;
+        drawTextField(extractor, font, f.noteRect(), "Anteckning (pris, efterfrågan, mängd, fritext)...", editNoteText, focusedField == EditField.NOTE);
+        addFormHit(f.noteRect(), () -> focusedField = EditField.NOTE);
 
-        y = renderEditLocation(extractor, font, x, y, maxW, mouseX, mouseY);
+        renderEditLocation(extractor, font, f, mouseX, mouseY);
 
-        int btnW = Math.max(40, (maxW - 4) / 2);
-        UiRect saveBtn = new UiRect(x, y, btnW, 11);
-        UiRect cancelBtn = new UiRect(x + btnW + 4, y, btnW, 11);
-        GZTheme.drawButton(extractor, font, saveBtn, "Spara", true, saveBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
-        GZTheme.drawButton(extractor, font, cancelBtn, "Avbryt", false, cancelBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
-        hitTargets.add(new ListRowHit(saveBtn, () -> saveNote(session)));
-        hitTargets.add(new ListRowHit(cancelBtn, this::cancelEdit));
+        GZTheme.drawButton(extractor, font, f.saveBtnRect(), "Spara", true, f.saveBtnRect().contains(mouseX, mouseY), TypographyScale.META.getScale());
+        GZTheme.drawButton(extractor, font, f.cancelBtnRect(), "Avbryt", false, f.cancelBtnRect().contains(mouseX, mouseY), TypographyScale.META.getScale());
+        addFormHit(f.saveBtnRect(), () -> saveNote(session));
+        addFormHit(f.cancelBtnRect(), this::cancelEdit);
+
+        extractor.disableScissor();
+    }
+
+    /** Registers a form control's click target, clipped to the visible part of the (possibly scrolled) form. */
+    private void addFormHit(UiRect rect, Runnable action) {
+        UiRect visible = formLayout.visiblePart(rect);
+        if (visible != null) hitTargets.add(new ListRowHit(visible, action));
+    }
+
+    private static UiRect fieldRect(MarketWatchEditFormLayout f, EditField field) {
+        return switch (field) {
+            case ITEM -> f.itemRect();
+            case NOTE -> f.noteRect();
+            case X -> f.xFieldRect();
+            case Y -> f.yFieldRect();
+            case Z -> f.zFieldRect();
+        };
     }
 
     /**
-     * The optional "Plats" section of the edit form. The wording always says the place is the
-     * player's OWN saved position, so it can never be mistaken for shop data from MarketWatch.
+     * The optional location section: {@code X [..] Y [..] Z [..] [Använd min plats]}, then a status
+     * line. The wording always says the place is the player's OWN, so it can never be mistaken for
+     * shop data from MarketWatch.
      */
-    private int renderEditLocation(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, int mouseX, int mouseY) {
+    private void renderEditLocation(GuiGraphicsExtractor extractor, Font font, MarketWatchEditFormLayout f, int mouseX, int mouseY) {
+        UiRect[] labels = {f.xLabelRect(), f.yLabelRect(), f.zLabelRect()};
+        UiRect[] fields = {f.xFieldRect(), f.yFieldRect(), f.zFieldRect()};
+        EditField[] ids = {EditField.X, EditField.Y, EditField.Z};
+        String[] names = {"X", "Y", "Z"};
+        for (int i = 0; i < 3; i++) {
+            TextUtil.drawScaledCenteredText(extractor, font, names[i], labels[i].x() + labels[i].width() / 2, labels[i].y() + 2, labels[i].width() + 2,
+                    TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+            drawCoordinateField(extractor, font, fields[i], editCoords[i], focusedField == ids[i]);
+            EditField id = ids[i];
+            addFormHit(fields[i], () -> focusedField = id);
+        }
+        GZTheme.drawButton(extractor, font, f.useMyPositionBtnRect(), "Använd min plats", false, f.useMyPositionBtnRect().contains(mouseX, mouseY), TypographyScale.META.getScale());
+        addFormHit(f.useMyPositionBtnRect(), this::useMyPosition);
+
         String status;
         int statusColor;
         if (editLocationError != null) {
             status = editLocationError;
             statusColor = GZTheme.COLOR_STATUS_YELLOW;
         } else {
-            status = editLocationStatusText(editLocation);
-            statusColor = editLocation != null ? GZTheme.COLOR_TEXT_SECONDARY : GZTheme.COLOR_TEXT_MUTED;
+            status = editLocationStatusText(editCoords, editLocationDimension, editLocationOriginal);
+            statusColor = hasAnyCoordinate() ? GZTheme.COLOR_TEXT_SECONDARY : GZTheme.COLOR_TEXT_MUTED;
         }
-        // One ellipsized line keeps the whole form inside the list card even in the COMPACT layout.
-        TextUtil.drawScaledEllipsizedText(extractor, font, status, x, y, maxW, TypographyScale.META.getScale(), statusColor, false);
-        y += 11;
+        UiRect st = f.statusRect();
+        TextUtil.drawScaledEllipsizedText(extractor, font, status, st.x(), st.y() + 2, st.width(), TypographyScale.META.getScale(), statusColor, false);
 
-        String saveLabel = editLocation != null ? "Uppdatera plats" : "Spara plats";
-        if (editLocation != null) {
-            int btnW = Math.max(40, (maxW - 4) / 2);
-            UiRect saveLocBtn = new UiRect(x, y, btnW, 11);
-            UiRect clearLocBtn = new UiRect(x + btnW + 4, y, btnW, 11);
-            GZTheme.drawButton(extractor, font, saveLocBtn, saveLabel, false, saveLocBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
-            GZTheme.drawButton(extractor, font, clearLocBtn, "Ta bort plats", false, clearLocBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
-            hitTargets.add(new ListRowHit(saveLocBtn, this::captureEditLocation));
-            hitTargets.add(new ListRowHit(clearLocBtn, () -> {
-                editLocation = null;
-                editLocationError = null;
-            }));
-        } else {
-            UiRect saveLocBtn = new UiRect(x, y, maxW, 11);
-            GZTheme.drawButton(extractor, font, saveLocBtn, saveLabel, false, saveLocBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
-            hitTargets.add(new ListRowHit(saveLocBtn, this::captureEditLocation));
+        if (f.removeLocationBtnRect().width() > 0) {
+            GZTheme.drawButton(extractor, font, f.removeLocationBtnRect(), "Ta bort plats", false, f.removeLocationBtnRect().contains(mouseX, mouseY), TypographyScale.META.getScale());
+            addFormHit(f.removeLocationBtnRect(), () -> setEditLocation(null));
         }
-        return y + 14;
     }
 
-    /** Edit-form status line for the optional saved place. */
-    static String editLocationStatusText(MarketWatchSavedLocation location) {
-        if (location == null) {
-            return "Ingen plats sparad. Stå på platsen och tryck Spara plats.";
+    /**
+     * Edit-form status line for the location fields. {@code dimension} is the one the location
+     * will be saved in, or null when it will be the player's current dimension at save time.
+     */
+    static String editLocationStatusText(String[] coords, String dimension, MarketWatchSavedLocation original) {
+        boolean blank = coords[0].isBlank() && coords[1].isBlank() && coords[2].isBlank();
+        if (blank) return "Ingen plats. Skriv X, Y, Z eller tryck Använd min plats.";
+        if (dimension == null) return "Din plats sparas i din nuvarande dimension.";
+        String text = "Din plats i " + DimensionNames.shortName(dimension);
+        boolean unchanged = original != null && original.dimensionKey().equals(dimension)
+                && java.util.Arrays.equals(MarketWatchLocationInput.fieldsFor(original), new String[]{coords[0].strip(), coords[1].strip(), coords[2].strip()});
+        if (unchanged && original.savedAtMs() > 0) {
+            text += " • sparad " + DATE_FORMAT.format(Instant.ofEpochMilli(original.savedAtMs()).atZone(ZoneId.systemDefault()));
         }
-        return "Din sparade plats: " + location.position().toDisplayString() + " • " + DimensionNames.shortName(location.dimensionKey())
-                + (location.savedAtMs() > 0 ? " • sparad " + DATE_FORMAT.format(Instant.ofEpochMilli(location.savedAtMs()).atZone(ZoneId.systemDefault())) : "");
+        return text;
     }
 
     private String nextCategoryId(List<ProductionCategory> categories, String currentId) {
@@ -383,7 +438,31 @@ public class MarketWatchTabComponent implements TextInputHandler {
         }
     }
 
+    /** A small coordinate field: while the text is wider than the field, its END stays visible so typing can be followed. */
+    private void drawCoordinateField(GuiGraphicsExtractor extractor, Font font, UiRect rect, String value, boolean focused) {
+        int bg = focused ? GZTheme.COLOR_CARD_HOVER : GZTheme.COLOR_CARD_INNER;
+        int border = focused ? GZTheme.COLOR_BORDER_EMERALD : GZTheme.COLOR_BORDER_SUBTLE;
+        GZTheme.drawCard(extractor, rect, bg, border);
+        String shown = value + (focused && ((System.currentTimeMillis() / 500) % 2 == 0) ? "_" : "");
+        int maxW = rect.width() - 4;
+        float scale = TypographyScale.META.getScale();
+        while (shown.length() > 1 && TextUtil.scaledWidth(font, shown, scale) > maxW) {
+            shown = shown.substring(1);
+        }
+        TextUtil.drawScaledText(extractor, font, shown, rect.x() + 2, rect.y() + 2, scale, GZTheme.COLOR_TEXT_PRIMARY, false);
+    }
+
     private void saveNote(CompanionSession session) {
+        // Resolve the location first: an invalid or incomplete location keeps the form open with the
+        // typed values intact and saves nothing - never a note with a guessed or dropped location.
+        MarketWatchLocationInput.Outcome location = MarketWatchLocationInput.resolve(editCoords[0], editCoords[1], editCoords[2],
+                editLocationDimension, editLocationDimension == null ? MinecraftPlayerPoseReader.read(1.0f) : Optional.empty(),
+                editLocationOriginal, System.currentTimeMillis());
+        if (!location.isValid()) {
+            editLocationError = location.error();
+            return;
+        }
+        MarketWatchSavedLocation editLocation = location.location();
         if (editItemText.isBlank() && editNoteText.isBlank() && editLocation == null) {
             cancelEdit();
             return;
@@ -676,12 +755,28 @@ public class MarketWatchTabComponent implements TextInputHandler {
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (layout == null || editing) return false;
+        if (layout == null) return false;
+        if (editing) {
+            // Only the smallest Companion sizes need it: the form is taller than the card there.
+            if (!layout.listRect().contains(mouseX, mouseY)) return false;
+            editScroll = Math.max(0, editScroll - (int) (scrollY * 14));
+            return true;
+        }
         if (layout.listRect().contains(mouseX, mouseY)) {
             listScroll = Math.max(0, listScroll - (int) (scrollY * 14));
             return true;
         }
         return false;
+    }
+
+    private static int coordIndex(EditField field) {
+        return field == EditField.X ? 0 : field == EditField.Y ? 1 : field == EditField.Z ? 2 : -1;
+    }
+
+    /** Tab order through the form's text fields: item, note, X, Y, Z, then back to item. */
+    static EditField nextField(EditField current) {
+        EditField[] order = EditField.values();
+        return current == null ? EditField.ITEM : order[(current.ordinal() + 1) % order.length];
     }
 
     @Override
@@ -695,6 +790,12 @@ public class MarketWatchTabComponent implements TextInputHandler {
                 editItemText += s;
             } else if (focusedField == EditField.NOTE && editNoteText.length() < 96) {
                 editNoteText += s;
+            } else {
+                int i = coordIndex(focusedField);
+                if (i >= 0 && editCoords[i].length() < MAX_COORD_LENGTH) {
+                    editCoords[i] += s;
+                    editLocationError = null;
+                }
             }
             return true;
         }
@@ -716,11 +817,18 @@ public class MarketWatchTabComponent implements TextInputHandler {
                     editItemText = editItemText.substring(0, editItemText.length() - 1);
                 } else if (focusedField == EditField.NOTE && !editNoteText.isEmpty()) {
                     editNoteText = editNoteText.substring(0, editNoteText.length() - 1);
+                } else {
+                    int i = coordIndex(focusedField);
+                    if (i >= 0 && !editCoords[i].isEmpty()) {
+                        editCoords[i] = editCoords[i].substring(0, editCoords[i].length() - 1);
+                        editLocationError = null;
+                    }
                 }
                 return true;
             }
             if (key == GLFW.GLFW_KEY_TAB) {
-                focusedField = (focusedField == EditField.ITEM) ? EditField.NOTE : EditField.ITEM;
+                focusedField = nextField(focusedField);
+                revealFocusedField = true;
                 return true;
             }
             if (key == GLFW.GLFW_KEY_ESCAPE) {

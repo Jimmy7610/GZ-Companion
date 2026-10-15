@@ -9,6 +9,7 @@ import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationReading;
 import se.jimmyeliasson.gzcompanion.chest.nav.KistorNavigationText;
 import se.jimmyeliasson.gzcompanion.chest.nav.NavigationDestination;
 import se.jimmyeliasson.gzcompanion.chest.nav.PlayerPose;
+import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchLocationInput;
 import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNavigation;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNote;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchSavedLocation;
@@ -88,9 +89,21 @@ class MarketWatchTabComponentTest {
     @Test
     @DisplayName("The edit form explains the place is saved by the player, and shows exactly what was saved")
     void editLocationStatusText() {
-        assertTrue(MarketWatchTabComponent.editLocationStatusText(null).startsWith("Ingen plats sparad"));
+        String[] blank = {"", " ", ""};
+        assertEquals("Ingen plats. Skriv X, Y, Z eller tryck Använd min plats.", MarketWatchTabComponent.editLocationStatusText(blank, null, null));
+
         MarketWatchSavedLocation loc = MarketWatchSavedLocation.of("minecraft:the_nether", -5, 70, 9, 0L).orElseThrow();
-        assertEquals("Din sparade plats: X -5  Y 70  Z 9 • Nether", MarketWatchTabComponent.editLocationStatusText(loc));
+        assertEquals("Din plats i Nether", MarketWatchTabComponent.editLocationStatusText(new String[]{"-5", "70", "9"}, loc.dimensionKey(), loc),
+                "The coordinates themselves are in the X/Y/Z fields; the status names the dimension they will be saved in");
+        assertEquals("Din plats i Nether", MarketWatchTabComponent.editLocationStatusText(new String[]{"100", "70", "9"}, loc.dimensionKey(), loc),
+                "Edited coordinates keep the saved location's dimension");
+        assertEquals("Din plats sparas i din nuvarande dimension.", MarketWatchTabComponent.editLocationStatusText(new String[]{"1", "2", "3"}, null, null),
+                "A new typed location says it will use the current dimension - never a guessed Overworld");
+
+        MarketWatchSavedLocation dated = MarketWatchSavedLocation.of("minecraft:overworld", 1, 2, 3, 1_789_000_000_000L).orElseThrow();
+        assertTrue(MarketWatchTabComponent.editLocationStatusText(new String[]{" 1", "2", "3 "}, dated.dimensionKey(), dated).startsWith("Din plats i Overworld • sparad "),
+                "An unchanged saved location still shows when it was saved");
+        assertEquals("Din plats i Overworld", MarketWatchTabComponent.editLocationStatusText(new String[]{"9", "2", "3"}, dated.dimensionKey(), dated));
     }
 
     @Test
@@ -115,5 +128,47 @@ class MarketWatchTabComponentTest {
         ChestNavigationManager nav = new ChestNavigationManager();
         MarketWatchTabComponent.syncActiveNavigation(nav, CTX, located());
         assertFalse(nav.isActive(), "Saving a located note never auto-starts navigation");
+    }
+
+    @Test
+    @DisplayName("Tab walks item -> note -> X -> Y -> Z -> item, so coordinates are keyboard-editable like the other fields")
+    void tabOrderIncludesCoordinates() {
+        Object first = MarketWatchTabComponent.nextField(null);
+        StringBuilder order = new StringBuilder(first.toString());
+        Object f = first;
+        for (int i = 0; i < 5; i++) {
+            f = MarketWatchTabComponent.nextField((MarketWatchTabComponent.EditField) f);
+            order.append(">").append(f);
+        }
+        assertEquals("ITEM>NOTE>X>Y>Z>ITEM", order.toString());
+    }
+
+    @Test
+    @DisplayName("Clearing all three fields (or Ta bort plats) saves no location and stops active navigation to that note")
+    void clearingLocationStopsNavigation() {
+        ChestNavigationManager nav = new ChestNavigationManager();
+        MarketWatchNote note = located();
+        MarketWatchNavigation.startNavigation(nav, CTX, note, 1L);
+
+        MarketWatchLocationInput.Outcome cleared = MarketWatchLocationInput.resolve("", "", "", null, java.util.Optional.empty(), note.location(), 2L);
+        assertTrue(cleared.isValid());
+        assertNull(cleared.location());
+        MarketWatchTabComponent.syncActiveNavigation(nav, CTX, note.withLocation(cleared.location()));
+        assertFalse(nav.isActive());
+        assertEquals(ChestNavigationManager.StopReason.TARGET_MISSING, nav.lastStopReason().orElseThrow());
+    }
+
+    @Test
+    @DisplayName("Saving manually edited coordinates while navigating re-targets Hitta to exactly the new place")
+    void manualEditRetargetsNavigation() {
+        ChestNavigationManager nav = new ChestNavigationManager();
+        MarketWatchNote note = located();
+        MarketWatchNavigation.startNavigation(nav, CTX, note, 1L);
+
+        MarketWatchSavedLocation moved = MarketWatchLocationInput.resolve("-250", "-12", "4000", note.location().dimensionKey(),
+                java.util.Optional.empty(), note.location(), 2L).location();
+        MarketWatchTabComponent.syncActiveNavigation(nav, CTX, note.withLocation(moved));
+        assertEquals(new StoragePosition(-250, -12, 4000), nav.pointTarget().orElseThrow().position());
+        assertEquals("minecraft:overworld", nav.pointTarget().orElseThrow().dimensionKey());
     }
 }

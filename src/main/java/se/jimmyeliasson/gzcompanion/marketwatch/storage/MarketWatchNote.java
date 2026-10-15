@@ -12,7 +12,7 @@ import java.util.Objects;
  * applied to Settlement Companion's member organizer - the player can write whatever structure
  * they like into it.
  *
- * @param location optional place the player saved themselves ("Spara plats"); {@code null} for
+ * @param location optional place the player saved themselves (typed X/Y/Z or "Använd min plats"); {@code null} for
  *                 every note that never had one, including all notes written before this field existed.
  */
 public record MarketWatchNote(String id, String itemId, String displayName, String categoryId, String note,

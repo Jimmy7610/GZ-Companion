@@ -103,8 +103,8 @@ public class MarketWatchNotesManager {
     }
 
     /**
-     * Saves (or with {@code null}, removes) the place the player recorded on one note with
-     * "Spara plats". The location always comes from the player's own position - never a guess.
+     * Saves (or with {@code null}, removes) the place the player recorded on one note - typed as
+     * X/Y/Z or filled by "Använd min plats", always validated first, never a guess.
      */
     public boolean setLocation(String contextKey, String noteId, MarketWatchSavedLocation location) {
         if (!requireLoaded() || contextKey == null || noteId == null) return false;
