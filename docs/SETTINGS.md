@@ -33,6 +33,7 @@ the exact behavior that was already shipping and human-QA-approved before this m
 | Visa tekniska Minecraft-ID | På | Shows/hides the raw `minecraft:...` id line in Crafting's recipe detail panes (the only place M1-M4 already displayed a raw id). |
 | Visa overifierad kunskap | På | Filters non-VERIFIED entries out of Settlement's Progression list and Byggplaner's building list when off. Crafting/Kommandon (M4, already human-QA-approved) are intentionally left untouched — their verification badge already communicates trust per-entry, and this milestone's instructions were explicit about not touching M1-M4 behavior without a genuine need. |
 | Använd senast kända kistodata i planerare | På | Shows/hides the "Beräkna från sparade kistor" button in Settlement's Material view. |
+| Dölj varningen om overifierad chatt | Av | Hides ONLY Minecraft's vanilla "Chat messages can't be verified" toast (see below). |
 
 Every toggle above defaults to **on**, because that is exactly the behavior each of those tabs
 already had before this setting existed. Turning a toggle off is the only way to see different
@@ -50,6 +51,18 @@ no tab's search text or list selection is currently persisted across closing and
 Companion (each tab component is a fresh in-memory object every time `GZCompanionMainScreen` is
 constructed), so a toggle controlling that would have no real effect. Per this project's "no
 meaningless toggles" rule, it was left out rather than shipped as a no-op.
+
+### "Dölj varningen om overifierad chatt"
+
+Optional, default **off** (vanilla behavior). In Minecraft 26.1.2 the warning is one
+`SystemToast` created in exactly one place, `ClientPacketListener.handleLogin`, with the token
+`SystemToast.SystemToastId.UNSECURE_SERVER_WARNING` - an id no other client code uses. When the
+setting is on, `mixin.ToastManagerMixin` cancels `ToastManager.addToast` for that one token only
+(decided by the pure `minecraft.VanillaToastFilter`); every other toast, including every other
+`SystemToast`, passes through untouched, and nothing is matched by text. It is purely visual:
+chat content, message signing, chat reporting, commands and all networking are unaffected, and
+vanilla still records the warning as seen, exactly as before. Stored as
+`hideUnverifiedChatWarning` in `settings.json` (a missing key loads as off; no schema bump).
 
 ## Privacy & Fair Play
 

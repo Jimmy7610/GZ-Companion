@@ -120,8 +120,16 @@ public class SettingsTabComponent {
                 mouseX, mouseY, settingsManager::setShowUnverifiedKnowledge);
         y = renderToggleRow(extractor, font, x, y, maxW, "Använd senast kända kistodata i planerare", settings.useLastKnownChestDataInPlanners(),
                 mouseX, mouseY, settingsManager::setUseLastKnownChestDataInPlanners);
+        y = renderToggleRow(extractor, font, x, y, maxW, "Dölj varningen om overifierad chatt", settings.hideUnverifiedChatWarning(),
+                mouseX, mouseY, settingsManager::setHideUnverifiedChatWarning);
+        y += TextUtil.drawScaledWrappedText(extractor, font, UNVERIFIED_CHAT_HINT, x + 4, y - 2, maxW - 4,
+                TypographyScale.META.getScale(), 3, 1, GZTheme.COLOR_TEXT_MUTED, false) + 2;
         return y;
     }
+
+    /** Shown under the toggle so the exact scope of what gets hidden is never ambiguous. */
+    static final String UNVERIFIED_CHAT_HINT = "Döljer bara Minecrafts notis \"Chat messages can't be verified\". "
+            + "Chatten, signering, rapportering och kommandon påverkas inte.";
 
     private int renderToggleRow(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, String label, boolean value,
                                  int mouseX, int mouseY, java.util.function.Predicate<Boolean> setter) {

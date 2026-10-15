@@ -21,7 +21,8 @@ public record CompanionSettings(
     boolean showTechnicalIds,
     boolean showUnverifiedKnowledge,
     boolean useLastKnownChestDataInPlanners,
-    List<String> favoritePlayers
+    List<String> favoritePlayers,
+    boolean hideUnverifiedChatWarning
 ) {
     public static final int CURRENT_SCHEMA = 1;
 
@@ -29,7 +30,23 @@ public record CompanionSettings(
         favoritePlayers = favoritePlayers != null ? List.copyOf(favoritePlayers) : List.of();
     }
 
+    /**
+     * Pre-existing six-value shape; {@code hideUnverifiedChatWarning} defaults to {@code false}
+     * (vanilla behavior). Like {@code favoritePlayers} before it, the new key needed no schema bump:
+     * a settings.json without it simply loads with the default.
+     */
+    public CompanionSettings(boolean companionNotificationsEnabled, boolean gameZoneToastsEnabled, boolean showTechnicalIds,
+                             boolean showUnverifiedKnowledge, boolean useLastKnownChestDataInPlanners, List<String> favoritePlayers) {
+        this(companionNotificationsEnabled, gameZoneToastsEnabled, showTechnicalIds, showUnverifiedKnowledge,
+                useLastKnownChestDataInPlanners, favoritePlayers, false);
+    }
+
     public static CompanionSettings defaults() {
-        return new CompanionSettings(true, true, true, true, true, List.of());
+        return new CompanionSettings(true, true, true, true, true, List.of(), false);
+    }
+
+    public CompanionSettings withHideUnverifiedChatWarning(boolean hide) {
+        return new CompanionSettings(companionNotificationsEnabled, gameZoneToastsEnabled, showTechnicalIds, showUnverifiedKnowledge,
+                useLastKnownChestDataInPlanners, favoritePlayers, hide);
     }
 }

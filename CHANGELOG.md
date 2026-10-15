@@ -10,6 +10,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **MarketWatch: "Spara plats" + "Hitta"** - a MarketWatch note can store a place the player saved
+  themselves (their own current position, from the note's edit form); such notes get **Hitta**,
+  which guides there with the existing Kistor HITTA navigation (HUD arrow, distance, Stoppa).
+  MarketWatch still knows no shop coordinates. The optional `location` field is additive -
+  existing notes are untouched. Other features can navigate to a known coordinate through the new
+  `chest.nav.NavigationPoint` / `ChestNavigationManager.startPoint`. See `docs/MARKETWATCH.md`.
+
+### Changed
+- **Kistor navigation banner**: the NAVIGERAR banner is two clear lines - the target name beside
+  **Stoppa**, then distance and height difference across the full width. **Stoppa** has its own
+  click area and never also opens the target. Clicking the rest of the banner opens the storage
+  detail only for a chest/storage target; a MarketWatch saved place has no storage to open, so
+  its banner only offers Stoppa.
+- Navigation text uses one separator everywhere, e.g. "Nära • 11 block fågelvägen" and
+  "284 block fågelvägen • 12 block lägre". See `docs/CHEST-MANAGER.md` §20.
+
+## [0.1.0-alpha.8] - 2026-09-24
+
+### Changed
+- **Update panel ("UPPDATERA GZ COMPANION")**: the action buttons now sit in a fixed row directly
+  under the title - [Ladda ner] [Senare], [Stäng och uppdatera] [Senare] or [Försök igen]
+  [Senare] - with a thin separator, and only the information below it (versions, size, release
+  notes, error text) scrolls. Long release notes can no longer push the buttons out of view, and
+  release notes are no longer cut to two lines each. While the panel is open, only its own
+  buttons are clickable (previously a click could also reach Home content drawn underneath).
+
+### Added
+- Optional setting **"Dölj varningen om overifierad chatt"** (Inställningar, default AV): hides
+  only Minecraft's vanilla "Chat messages can't be verified" toast, identified by its exact
+  `SystemToastId.UNSECURE_SERVER_WARNING`. Visual only - chat content, signing, reporting,
+  commands and networking are untouched, and every other toast still shows. See
+  `docs/SETTINGS.md`.
+
+## [0.1.0-alpha.7] - 2026-09-24
+
+### Added
 - **Kistor 2.0** - the Kistor tab is rebuilt around "where are my things?", still built only on
   storage the player has legitimately opened (the M3 capture system is unchanged). See
   `docs/CHEST-MANAGER.md`.
@@ -43,12 +79,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     rendering, player automation, chat/commands/packets and networking in all Kistor 2.0 code.
   - Diagnostics now include the Kistor index schema/count and whether navigation is active (never
     the target or any coordinates).
-- **MarketWatch: "Spara plats" + "Hitta"** - a MarketWatch note can store a place the player saved
-  themselves (their own current position, from the note's edit form); such notes get **Hitta**,
-  which guides there with the existing Kistor HITTA navigation (HUD arrow, distance, Stoppa).
-  MarketWatch still knows no shop coordinates. The optional `location` field is additive -
-  existing notes are untouched. Other features can navigate to a known coordinate through the new
-  `chest.nav.NavigationPoint` / `ChestNavigationManager.startPoint`. See `docs/MARKETWATCH.md`.
 
 ### Changed
 - `chest-index.json` schema **v1 → v2** (optional `favorite`, `group`, `locationNote`, `previous`

@@ -28,7 +28,9 @@ import se.jimmyeliasson.gzcompanion.ui.layout.HomeTabLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.LiveGameZoneCardLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
+import se.jimmyeliasson.gzcompanion.ui.layout.UpdatePanelLayout;
 import se.jimmyeliasson.gzcompanion.update.UpdateManager;
+import se.jimmyeliasson.gzcompanion.update.UpdatePanelActions;
 import se.jimmyeliasson.gzcompanion.update.UpdateState;
 
 import java.util.ArrayList;
@@ -66,6 +68,12 @@ public class HomeTabComponent {
     private record HomeHit(UiRect rect, Runnable action) {}
     private final List<HomeHit> homeHitTargets = new ArrayList<>();
     private boolean showUpdatePanel = false;
+    /** The update panel's OWN click targets. While the modal panel is open ONLY these are active -
+     * never the Home content drawn underneath it. */
+    private final List<HomeHit> updatePanelHits = new ArrayList<>();
+    private UpdatePanelLayout updatePanelLayout;
+    private int updatePanelScroll = 0;
+    private int updatePanelContentHeight = 0;
 
     public HomeTabLayout getLayout() {
         return layout;
@@ -301,6 +309,11 @@ public class HomeTabComponent {
 
     private static final int UPDATE_BANNER_H = 22;
 
+    private void openUpdatePanel() {
+        showUpdatePanel = true;
+        updatePanelScroll = 0;
+    }
+
     private static boolean isUpdateBannerState(UpdateState state) {
         return state == UpdateState.UPDATE_AVAILABLE || state == UpdateState.DOWNLOADING
                 || state == UpdateState.VERIFYING || state == UpdateState.READY_TO_INSTALL
@@ -333,47 +346,144 @@ public class HomeTabComponent {
 
         UiRect showBtn = new UiRect(rect.right() - 90, rect.y() + 5, 84, 13);
         GZTheme.drawButton(extractor, font, showBtn, "Visa uppdatering", false, showBtn.contains(mouseX, mouseY), TypographyScale.META.getScale());
-        homeHitTargets.add(new HomeHit(showBtn, () -> showUpdatePanel = true));
+        homeHitTargets.add(new HomeHit(showBtn, this::openUpdatePanel));
         // The whole banner (outside the button) also opens the panel, for a bigger, friendlier click target.
-        homeHitTargets.add(new HomeHit(new UiRect(rect.x(), rect.y(), rect.width() - 90, rect.height()), () -> showUpdatePanel = true));
+        homeHitTargets.add(new HomeHit(new UiRect(rect.x(), rect.y(), rect.width() - 90, rect.height()), this::openUpdatePanel));
     }
 
     private void renderUpdatePanel(GuiGraphicsExtractor extractor, Font font, UiRect bounds, int mouseX, int mouseY,
                                     CompanionSession session, UpdateManager.Snapshot snapshot) {
-        extractor.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), GZTheme.COLOR_BACKDROP);
+        updatePanelHits.clear();
+        UpdateManager manager = session.getUpdateManager();
+        UpdateState state = snapshot.state();
+        if (!isUpdateBannerState(state)) {
+            showUpdatePanel = false; // state moved on (e.g. dismissed elsewhere) - nothing sensible to show
+            return;
+        }
 
-        UiRect card = bounds.inset(6, 4);
+        extractor.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), GZTheme.COLOR_BACKDROP);
+        UpdatePanelLayout panel = UpdatePanelLayout.calculate(bounds);
+        this.updatePanelLayout = panel;
+        UiRect card = panel.card();
         GZTheme.drawCard(extractor, card, GZTheme.COLOR_PANEL_BG, GZTheme.COLOR_BORDER_MODAL);
 
-        int pad = 6;
-        int x = card.x() + pad;
-        int maxW = card.width() - (pad * 2);
-        int y = card.y() + 4;
-
-        TextUtil.drawScaledText(extractor, font, "UPPDATERA GZ COMPANION", x, y, TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
-
-        UiRect closeBtn = new UiRect(card.right() - 16, card.y() + 3, 12, 10);
+        // 1. Title + close.
+        UiRect row = panel.actionRow();
+        TextUtil.drawScaledEllipsizedText(extractor, font, "UPPDATERA GZ COMPANION", row.x(), panel.titleY(), panel.closeBtn().x() - row.x() - 4,
+                TypographyScale.HEADING.getScale(), GZTheme.COLOR_TEXT_PRIMARY, true);
+        UiRect closeBtn = panel.closeBtn();
         boolean closeHov = closeBtn.contains(mouseX, mouseY);
         extractor.fill(closeBtn.x(), closeBtn.y(), closeBtn.right(), closeBtn.bottom(), closeHov ? 0x99EF4444 : 0x221E293B);
         TextUtil.drawCenteredText(extractor, font, "x", closeBtn.x() + (closeBtn.width() / 2), closeBtn.y() + 1,
                 closeBtn.width(), closeHov ? GZTheme.COLOR_TEXT_PRIMARY : GZTheme.COLOR_TEXT_MUTED, false);
-        homeHitTargets.add(new HomeHit(closeBtn, () -> showUpdatePanel = false));
+        updatePanelHits.add(new HomeHit(closeBtn, () -> showUpdatePanel = false));
 
-        y += 14;
+        // 2. FIXED action row - laid out before (and independently of) the content, so it can never
+        //    be scrolled or pushed out of view by long release notes.
+        UpdatePanelActions actions = UpdatePanelActions.forState(state);
+        if (actions.hasActions()) {
+            drawUpdateAction(extractor, font, panel.primaryBtn(), actions.primary(), true, mouseX, mouseY, session, manager, snapshot);
+            if (actions.secondary() != null) {
+                drawUpdateAction(extractor, font, panel.secondaryBtn(), actions.secondary(), false, mouseX, mouseY, session, manager, snapshot);
+            }
+        } else {
+            TextUtil.drawScaledEllipsizedText(extractor, font, updateStatusLine(snapshot), row.x(), row.y() + 3, row.width(),
+                    TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, false);
+        }
 
-        UpdateManager manager = session.getUpdateManager();
-        switch (snapshot.state()) {
-            case UPDATE_AVAILABLE -> renderUpdateAvailablePanel(extractor, font, x, y, maxW, mouseX, mouseY, manager, snapshot);
-            case DOWNLOADING, VERIFYING -> renderDownloadingPanel(extractor, font, x, y, maxW, snapshot);
-            case READY_TO_INSTALL -> renderReadyToInstallPanel(extractor, font, x, y, maxW, mouseX, mouseY, session, manager, snapshot);
-            case STARTING_INSTALLER -> TextUtil.drawScaledText(extractor, font, "Startar uppdateraren...", x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
-            case ERROR -> renderErrorPanel(extractor, font, x, y, maxW, mouseX, mouseY, manager, snapshot);
-            default -> showUpdatePanel = false; // state moved on (e.g. dismissed elsewhere) - nothing sensible to show
+        // 3. Thin separator between the actions and the information.
+        extractor.fill(card.x() + 5, panel.separatorY(), card.right() - 5, panel.separatorY() + 1, GZTheme.COLOR_BORDER_SUBTLE);
+
+        // 4. Information content: the ONLY part that scrolls/clips. Its height is measured while
+        //    drawing and used to clamp the scroll on the next frame.
+        UiRect viewport = panel.contentViewport();
+        int maxScroll = Math.max(0, updatePanelContentHeight - viewport.height());
+        updatePanelScroll = Math.max(0, Math.min(updatePanelScroll, maxScroll));
+        extractor.enableScissor(viewport.x(), viewport.y(), viewport.right(), viewport.bottom());
+        int startY = viewport.y() - updatePanelScroll;
+        int x = viewport.x();
+        int maxW = viewport.width();
+        int endY = switch (state) {
+            case UPDATE_AVAILABLE -> renderUpdateAvailableContent(extractor, font, x, startY, maxW, snapshot);
+            case DOWNLOADING, VERIFYING -> renderDownloadingContent(extractor, font, x, startY, maxW, snapshot);
+            case READY_TO_INSTALL -> renderReadyToInstallContent(extractor, font, x, startY, maxW);
+            case STARTING_INSTALLER -> {
+                TextUtil.drawScaledText(extractor, font, "Startar uppdateraren...", x, startY, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
+                yield startY + 10;
+            }
+            case ERROR -> renderErrorContent(extractor, font, x, startY, maxW, snapshot);
+            default -> startY;
+        };
+        extractor.disableScissor();
+        this.updatePanelContentHeight = endY - startY;
+
+        if (updatePanelContentHeight > viewport.height()) {
+            drawUpdatePanelScrollbar(extractor, viewport, updatePanelScroll, updatePanelContentHeight);
         }
     }
 
-    private void renderUpdateAvailablePanel(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, int mouseX, int mouseY,
-                                             UpdateManager manager, UpdateManager.Snapshot snapshot) {
+    /** The status line shown in the (still reserved) action row when the state has no buttons. */
+    private static String updateStatusLine(UpdateManager.Snapshot snapshot) {
+        return switch (snapshot.state()) {
+            case DOWNLOADING -> "Hämtar uppdatering... " + downloadPercent(snapshot) + " %";
+            case VERIFYING -> "Verifierar uppdateringen...";
+            case STARTING_INSTALLER -> "Startar uppdateraren...";
+            default -> "";
+        };
+    }
+
+    private static int downloadPercent(UpdateManager.Snapshot snapshot) {
+        return snapshot.totalBytes() > 0 ? (int) Math.min(100, (snapshot.downloadedBytes() * 100L) / snapshot.totalBytes()) : 0;
+    }
+
+    /** A thin scroll indicator just right of the content viewport, only when the content overflows. */
+    private static void drawUpdatePanelScrollbar(GuiGraphicsExtractor extractor, UiRect viewport, int scroll, int contentHeight) {
+        int trackX = viewport.right() + 2;
+        int thumbH = Math.max(8, viewport.height() * viewport.height() / Math.max(1, contentHeight));
+        int maxScroll = Math.max(1, contentHeight - viewport.height());
+        int thumbY = viewport.y() + (viewport.height() - thumbH) * scroll / maxScroll;
+        extractor.fill(trackX, viewport.y(), trackX + 2, viewport.bottom(), 0x33475569);
+        extractor.fill(trackX, thumbY, trackX + 2, thumbY + thumbH, GZTheme.COLOR_BORDER_EMERALD);
+    }
+
+    private void drawUpdateAction(GuiGraphicsExtractor extractor, Font font, UiRect btn, UpdatePanelActions.Action action, boolean primary,
+                                  int mouseX, int mouseY, CompanionSession session, UpdateManager manager, UpdateManager.Snapshot snapshot) {
+        GZTheme.drawButton(extractor, font, btn, action.label(), primary, btn.contains(mouseX, mouseY), TypographyScale.SMALL.getScale());
+        updatePanelHits.add(new HomeHit(btn, () -> runUpdateAction(action, session, manager, snapshot)));
+    }
+
+    /** Exactly the same per-state behavior the panel had before; only the button placement changed. */
+    private void runUpdateAction(UpdatePanelActions.Action action, CompanionSession session, UpdateManager manager, UpdateManager.Snapshot snapshot) {
+        switch (action) {
+            case DOWNLOAD -> manager.startDownload();
+            case APPLY -> applyUpdateAndShutdown(session, manager);
+            case RETRY -> {
+                if (snapshot.readyInstallerPath() != null) {
+                    applyUpdateAndShutdown(session, manager);
+                } else {
+                    manager.startDownload();
+                }
+            }
+            case LATER -> {
+                // "Senare" on a ready-to-install update only closes the panel (the update stays
+                // ready); on an available update or an error it also dismisses it - as before.
+                if (snapshot.state() != UpdateState.READY_TO_INSTALL) {
+                    manager.dismiss();
+                }
+                showUpdatePanel = false;
+            }
+        }
+    }
+
+    private static void applyUpdateAndShutdown(CompanionSession session, UpdateManager manager) {
+        long pid = ProcessHandle.current().pid();
+        boolean started = manager.applyUpdate(pid);
+        if (started) {
+            session.getBridge().requestGracefulShutdown();
+        }
+    }
+
+    private int renderUpdateAvailableContent(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, UpdateManager.Snapshot snapshot) {
         String currentVersion = se.jimmyeliasson.gzcompanion.core.CompanionConstants.getModVersion();
         TextUtil.drawScaledText(extractor, font, "Nuvarande", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
         TextUtil.drawScaledText(extractor, font, "v" + currentVersion, x, y + 9, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
@@ -383,43 +493,35 @@ public class HomeTabComponent {
         TextUtil.drawScaledText(extractor, font, "v" + snapshot.availableUpdate().version().toDisplayString(), x, y + 9, TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, true);
         y += 22;
 
-        TextUtil.drawScaledText(extractor, font, "Nytt:", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-        y += 10;
-        for (String note : snapshot.availableUpdate().manifest().notes()) {
-            y += TextUtil.drawScaledWrappedText(extractor, font, "• " + note, x, y, maxW, TypographyScale.SMALL.getScale(), 2, 1, GZTheme.COLOR_TEXT_SECONDARY, false) + 1;
-        }
-        y += 4;
-
         long sizeBytes = snapshot.availableUpdate().manifest().installerSizeBytes();
         TextUtil.drawScaledText(extractor, font, String.format(java.util.Locale.ROOT, "Storlek: %.1f MB", sizeBytes / (1024.0 * 1024.0)),
                 x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
-        y += 14;
-
-        UiRect downloadBtn = new UiRect(x, y, Math.min(110, maxW), 13);
-        GZTheme.drawButton(extractor, font, downloadBtn, "Ladda ner", true, downloadBtn.contains(mouseX, mouseY), TypographyScale.SMALL.getScale());
-        homeHitTargets.add(new HomeHit(downloadBtn, manager::startDownload));
-
-        UiRect laterBtn = new UiRect(downloadBtn.right() + 4, y, Math.min(80, maxW - downloadBtn.width() - 4), 13);
-        GZTheme.drawButton(extractor, font, laterBtn, "Senare", false, laterBtn.contains(mouseX, mouseY), TypographyScale.SMALL.getScale());
-        homeHitTargets.add(new HomeHit(laterBtn, () -> {
-            manager.dismiss();
-            showUpdatePanel = false;
-        }));
-    }
-
-    private void renderDownloadingPanel(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, UpdateManager.Snapshot snapshot) {
-        TextUtil.drawScaledText(extractor, font, "Hämtar uppdatering...", x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_TEXT_PRIMARY, false);
         y += 12;
 
+        TextUtil.drawScaledText(extractor, font, "Nytt:", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        y += 10;
+        // Notes are no longer cut at two lines each: the content viewport scrolls instead, and the
+        // action row above it never moves.
+        for (String note : snapshot.availableUpdate().manifest().notes()) {
+            y += TextUtil.drawScaledWrappedTextUnbounded(extractor, font, "• " + note, x, y, maxW - 4, TypographyScale.SMALL.getScale(), 1, GZTheme.COLOR_TEXT_SECONDARY, false) + 1;
+        }
+        return y + 4;
+    }
+
+    private int renderDownloadingContent(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, UpdateManager.Snapshot snapshot) {
+        if (snapshot.availableUpdate() != null) {
+            TextUtil.drawScaledText(extractor, font, "v" + snapshot.availableUpdate().version().toDisplayString(), x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_MINT, true);
+            y += 12;
+        }
         double downloadedMb = snapshot.downloadedBytes() / (1024.0 * 1024.0);
         double totalMb = Math.max(snapshot.totalBytes(), 1) / (1024.0 * 1024.0);
-        int percent = snapshot.totalBytes() > 0 ? (int) Math.min(100, (snapshot.downloadedBytes() * 100L) / snapshot.totalBytes()) : 0;
+        int percent = downloadPercent(snapshot);
 
         TextUtil.drawScaledText(extractor, font, String.format(java.util.Locale.ROOT, "%.1f MB / %.1f MB", downloadedMb, totalMb),
                 x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
         y += 10;
 
-        UiRect barRect = new UiRect(x, y, maxW, 8);
+        UiRect barRect = new UiRect(x, y, maxW - 4, 8);
         GZTheme.drawCard(extractor, barRect, GZTheme.COLOR_CARD_INNER, GZTheme.COLOR_BORDER_SUBTLE);
         int filledW = Math.max(0, Math.min(barRect.width() - 2, (int) ((barRect.width() - 2) * (percent / 100.0))));
         if (filledW > 0) {
@@ -427,55 +529,21 @@ public class HomeTabComponent {
         }
         y += 11;
         TextUtil.drawScaledText(extractor, font, percent + " %", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        return y + 10;
     }
 
-    private void renderReadyToInstallPanel(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, int mouseX, int mouseY,
-                                            CompanionSession session, UpdateManager manager, UpdateManager.Snapshot snapshot) {
+    private int renderReadyToInstallContent(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW) {
         TextUtil.drawScaledText(extractor, font, "✓ Uppdateringen är redo", x, y, TypographyScale.SMALL.getScale(), GZTheme.COLOR_STATUS_GREEN, true);
         y += 12;
-        y += TextUtil.drawScaledWrappedText(extractor, font, "Minecraft behöver startas om för att installera den.", x, y, maxW,
-                TypographyScale.SMALL.getScale(), 2, 1, GZTheme.COLOR_TEXT_SECONDARY, false) + 6;
-
-        UiRect applyBtn = new UiRect(x, y, Math.min(140, maxW), 13);
-        GZTheme.drawButton(extractor, font, applyBtn, "Stäng och uppdatera", true, applyBtn.contains(mouseX, mouseY), TypographyScale.SMALL.getScale());
-        homeHitTargets.add(new HomeHit(applyBtn, () -> {
-            long pid = ProcessHandle.current().pid();
-            boolean started = manager.applyUpdate(pid);
-            if (started) {
-                session.getBridge().requestGracefulShutdown();
-            }
-        }));
-
-        UiRect laterBtn = new UiRect(applyBtn.right() + 4, y, Math.min(80, maxW - applyBtn.width() - 4), 13);
-        GZTheme.drawButton(extractor, font, laterBtn, "Senare", false, laterBtn.contains(mouseX, mouseY), TypographyScale.SMALL.getScale());
-        homeHitTargets.add(new HomeHit(laterBtn, () -> showUpdatePanel = false));
+        y += TextUtil.drawScaledWrappedTextUnbounded(extractor, font, "Minecraft behöver startas om för att installera den.", x, y, maxW - 4,
+                TypographyScale.SMALL.getScale(), 1, GZTheme.COLOR_TEXT_SECONDARY, false);
+        return y + 4;
     }
 
-    private void renderErrorPanel(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, int mouseX, int mouseY,
-                                   UpdateManager manager, UpdateManager.Snapshot snapshot) {
+    private int renderErrorContent(GuiGraphicsExtractor extractor, Font font, int x, int y, int maxW, UpdateManager.Snapshot snapshot) {
         String message = snapshot.errorMessage() != null ? snapshot.errorMessage() : "Ett okänt fel uppstod.";
-        y += TextUtil.drawScaledWrappedText(extractor, font, message, x, y, maxW, TypographyScale.SMALL.getScale(), 3, 1, GZTheme.COLOR_STATUS_RED, false) + 8;
-
-        UiRect retryBtn = new UiRect(x, y, Math.min(110, maxW), 13);
-        GZTheme.drawButton(extractor, font, retryBtn, "Försök igen", false, retryBtn.contains(mouseX, mouseY), TypographyScale.SMALL.getScale());
-        homeHitTargets.add(new HomeHit(retryBtn, () -> {
-            if (snapshot.readyInstallerPath() != null) {
-                long pid = ProcessHandle.current().pid();
-                boolean started = manager.applyUpdate(pid);
-                if (started) {
-                    CompanionSession.getInstance().getBridge().requestGracefulShutdown();
-                }
-            } else {
-                manager.startDownload();
-            }
-        }));
-
-        UiRect laterBtn = new UiRect(retryBtn.right() + 4, y, Math.min(80, maxW - retryBtn.width() - 4), 13);
-        GZTheme.drawButton(extractor, font, laterBtn, "Senare", false, laterBtn.contains(mouseX, mouseY), TypographyScale.SMALL.getScale());
-        homeHitTargets.add(new HomeHit(laterBtn, () -> {
-            manager.dismiss();
-            showUpdatePanel = false;
-        }));
+        y += TextUtil.drawScaledWrappedTextUnbounded(extractor, font, message, x, y, maxW - 4, TypographyScale.SMALL.getScale(), 1, GZTheme.COLOR_STATUS_RED, false);
+        return y + 4;
     }
 
     // ------------------------------------------------------------------
@@ -703,7 +771,7 @@ public class HomeTabComponent {
         }
 
         if (showUpdatePanel) {
-            for (HomeHit hit : homeHitTargets) {
+            for (HomeHit hit : updatePanelHits) {
                 if (hit.rect().contains(mouseX, mouseY)) {
                     hit.action().run();
                     return true;
@@ -756,7 +824,14 @@ public class HomeTabComponent {
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (showAdvisor || showUpdatePanel) return false;
+        if (showUpdatePanel) {
+            // Only the information content scrolls; the action row is fixed.
+            if (updatePanelLayout == null || !updatePanelLayout.contentViewport().contains(mouseX, mouseY)) return false;
+            int maxScroll = Math.max(0, updatePanelContentHeight - updatePanelLayout.contentViewport().height());
+            updatePanelScroll = Math.max(0, Math.min(maxScroll, updatePanelScroll - (int) (scrollY * 14)));
+            return true;
+        }
+        if (showAdvisor) return false;
         homeScrollOffset = Math.max(0, Math.min(homeMaxScroll, homeScrollOffset - (int) (scrollY * 14)));
         return true;
     }

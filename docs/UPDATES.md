@@ -26,6 +26,17 @@ The manual download (e.g. via Google Drive) remains available indefinitely as a 
 path for a brand new player or a reinstall. The in-app updater itself never uses that fallback
 location - it only ever talks to GitHub Releases (see below).
 
+### Panel layout
+
+The "UPPDATERA GZ COMPANION" panel (`ui.layout.UpdatePanelLayout`, actions from
+`update.UpdatePanelActions`) is, top to bottom: the title with the "x" close button, a **fixed
+action row** that is never scrolled or pushed away - [Ladda ner] [Senare] when an update is
+available, [Stäng och uppdatera] [Senare] when it is ready, [Försök igen] [Senare] on error, and
+a status line instead of buttons while downloading/verifying - then a thin separator, then the
+information (current/new version, size, release notes, error text). Only that information area
+scrolls (mouse wheel, with a small scroll indicator when it overflows). While the panel is open
+only its own buttons are clickable.
+
 ## 3. Where updates come from
 
 The public GitHub repository **`Jimmy7610/GZ-Companion`**, via its public Releases API

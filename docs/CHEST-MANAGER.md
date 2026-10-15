@@ -540,8 +540,11 @@ the local index can be a target (`ChestNavigationManager.start` refuses anything
 target by its stable `StoredContainerId`. It is memory-only and never persisted, so it cannot
 survive a restart. Starting navigation shows "Navigering startad • stäng med G för att se pilen". At the top of
 Kistor, the active target uses a two-line banner: **NAVIGERAR: Materiallager** with **Stoppa** on
-line 1, then distance + height difference across the full width on line 2 (clicking the banner
-outside Stoppa opens the target's detail).
+line 1, then distance + height difference across the full width on line 2. **Stoppa** has its
+own click area inside the banner and is always matched first, so it only stops navigation. For a
+storage target, clicking the rest of the banner opens that storage's detail; a generic point
+target (e.g. a MarketWatch saved place, see below) has no storage, so its banner does nothing
+outside Stoppa.
 
 **HUD** (`KistorNavigationHudElement`, registered with `HudElementRegistry` exactly like
 `GameZoneToastHudElement`):

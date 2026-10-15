@@ -60,23 +60,28 @@ public class SettingsManager {
     }
 
     public boolean setCompanionNotificationsEnabled(boolean enabled) {
-        return mutate(s -> new CompanionSettings(enabled, s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers()));
+        return mutate(s -> new CompanionSettings(enabled, s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning()));
     }
 
     public boolean setGameZoneToastsEnabled(boolean enabled) {
-        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), enabled, s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers()));
+        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), enabled, s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning()));
     }
 
     public boolean setShowTechnicalIds(boolean enabled) {
-        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), enabled, s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers()));
+        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), enabled, s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning()));
     }
 
     public boolean setShowUnverifiedKnowledge(boolean enabled) {
-        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), enabled, s.useLastKnownChestDataInPlanners(), s.favoritePlayers()));
+        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), enabled, s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning()));
     }
 
     public boolean setUseLastKnownChestDataInPlanners(boolean enabled) {
-        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), enabled, s.favoritePlayers()));
+        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), enabled, s.favoritePlayers(), s.hideUnverifiedChatWarning()));
+    }
+
+    /** Hides ONLY Minecraft's vanilla "Chat messages can't be verified" toast. Default off. */
+    public boolean setHideUnverifiedChatWarning(boolean enabled) {
+        return mutate(s -> s.withHideUnverifiedChatWarning(enabled));
     }
 
     /** Case-insensitive lookup, preserving whatever casing was originally stored for display elsewhere. */
@@ -94,7 +99,7 @@ public class SettingsManager {
         return mutate(s -> {
             List<String> updated = new ArrayList<>(s.favoritePlayers());
             updated.add(trimmed);
-            return new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), updated);
+            return new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), updated, s.hideUnverifiedChatWarning());
         });
     }
 
@@ -103,7 +108,7 @@ public class SettingsManager {
         String needle = username.toLowerCase(Locale.ROOT);
         return mutate(s -> {
             List<String> updated = s.favoritePlayers().stream().filter(f -> !f.toLowerCase(Locale.ROOT).equals(needle)).toList();
-            return new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), updated);
+            return new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), updated, s.hideUnverifiedChatWarning());
         });
     }
 
