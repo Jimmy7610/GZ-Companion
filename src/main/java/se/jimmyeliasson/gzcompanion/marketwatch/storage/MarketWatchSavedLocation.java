@@ -6,8 +6,9 @@ import se.jimmyeliasson.gzcompanion.chest.nav.NavigationPoint;
 import java.util.Optional;
 
 /**
- * A place the player saved on a MarketWatch note THEMSELVES by pressing "Spara plats" while
- * standing there - never a shop location discovered from MarketWatch or {@code /market}, which the
+ * A place the player saved on a MarketWatch note THEMSELVES - typed as X/Y/Z, or filled from their
+ * own position with "Använd min plats" - never a shop location discovered from MarketWatch or
+ * {@code /market}, which the
  * Companion does not read. The world/server context is implied by the context bucket the note is
  * stored in, so only the dimension and block position are kept here.
  *

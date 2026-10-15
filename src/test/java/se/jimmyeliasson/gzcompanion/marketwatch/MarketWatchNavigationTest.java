@@ -116,7 +116,7 @@ class MarketWatchNavigationTest {
     }
 
     @Test
-    @DisplayName("Spara plats records the player's own block position, floored, with dimension and time")
+    @DisplayName("Använd min plats records the player's own block position, floored, with dimension and time")
     void locationFromPoseFloorsCoordinates() {
         MarketWatchSavedLocation loc = MarketWatchNavigation.locationFromPose(
                 Optional.of(new PlayerPose("minecraft:the_nether", -12.3, 64.99, 7.8, 90f)), 1234L).orElseThrow();
@@ -140,7 +140,7 @@ class MarketWatchNavigationTest {
     }
 
     @Test
-    @DisplayName("Spara plats works in any dimension Minecraft can name, and Hitta navigates there")
+    @DisplayName("Använd min plats works in any dimension Minecraft can name, and Hitta navigates there")
     void anyDimensionCanBeSavedAndNavigated() {
         for (String dim : List.of("minecraft:the_end", "gamezone:resource_world", "my_mod:deep/caves")) {
             MarketWatchSavedLocation loc = MarketWatchNavigation.locationFromPose(
@@ -162,5 +162,19 @@ class MarketWatchNavigationTest {
         MarketWatchNavigation.stopIfNavigatingTo(nav, located("a"));
         assertFalse(nav.isActive());
         assertEquals(ChestNavigationManager.StopReason.TARGET_MISSING, nav.lastStopReason().orElseThrow());
+    }
+
+    @Test
+    @DisplayName("Hitta receives exactly the manually entered coordinates (negatives included) and the retained dimension")
+    void hittaUsesManualCoordinates() {
+        MarketWatchSavedLocation typed = MarketWatchLocationInput.resolve(" -1234 ", "-59", "98765", null,
+                Optional.of(new PlayerPose("minecraft:the_end", 0, 64, 0, 0f)), null, 5L).location();
+        MarketWatchNote note = plain("manual").withLocation(typed);
+        ChestNavigationManager nav = new ChestNavigationManager();
+        assertTrue(MarketWatchNavigation.startNavigation(nav, CTX, note, 6L));
+        NavigationPoint point = nav.pointTarget().orElseThrow();
+        assertEquals(new StoragePosition(-1234, -59, 98765), point.position());
+        assertEquals("minecraft:the_end", point.dimensionKey());
+        assertEquals(new StoragePosition(-1234, -59, 98765).y() + 0.5, nav.resolveDestination(null).orElseThrow().y());
     }
 }

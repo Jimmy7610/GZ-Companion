@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **MarketWatch: type coordinates for a saved place** - the note's edit form now has
+  `X [..] Y [..] Z [..]` fields, so a shop's coordinates can be entered by hand and then used with
+  **Hitta**. **Använd min plats** (formerly "Spara plats") still fills them from your own
+  position. Whole numbers only (negatives fine); incomplete, fractional, non-numeric or
+  out-of-world values are rejected with a Swedish message and nothing is saved - never a `0,0,0`
+  fallback. Edited coordinates keep the saved dimension; a new typed place uses your current
+  dimension when saving, and saving is refused if none is known. Same `location` format as
+  alpha.9 - existing notes are untouched.
+
+### Changed
+- The MarketWatch edit form scrolls on the smallest Companion size instead of running past the
+  bottom of the list card.
+
 ## [0.1.0-alpha.9] - 2026-10-15
 
 ### Added

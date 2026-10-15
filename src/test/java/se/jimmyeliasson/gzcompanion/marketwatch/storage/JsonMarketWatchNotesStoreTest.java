@@ -226,4 +226,34 @@ class JsonMarketWatchNotesStoreTest {
             assertNull(notes.get(0).location(), bad);
         }
     }
+
+    @Test
+    @DisplayName("Manually entered coordinates (negatives, dimension kept) persist and round-trip in the unchanged location object")
+    void manualCoordinatesRoundTrip() throws Exception {
+        MarketWatchSavedLocation manual = se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchLocationInput.resolve(
+                "-29999999", "-2048", "2047", "gamezone:resource_world", java.util.Optional.empty(), null, 77L).location();
+        assertNotNull(manual);
+        JsonMarketWatchNotesStore store = new JsonMarketWatchNotesStore(storeFile());
+        store.save(MarketWatchNotesData.empty().withNoteAdded("ctx", new MarketWatchNote("m", null, "Butik", null, "", 0L, false, manual)));
+
+        com.google.gson.JsonObject loc = com.google.gson.JsonParser.parseString(Files.readString(storeFile())).getAsJsonObject()
+                .getAsJsonObject("notesByContext").getAsJsonArray("ctx").get(0).getAsJsonObject().getAsJsonObject("location");
+        assertEquals(java.util.Set.of("dimension", "x", "y", "z", "savedAtMs"), loc.keySet(), "Same location object as alpha.9 - no schema change");
+        assertEquals(manual, store.load().data().getNotes("ctx").get(0).location());
+    }
+
+    @Test
+    @DisplayName("An alpha.9 note file with a saved location loads unchanged")
+    void alpha9NoteWithLocationLoadsUnchanged() throws Exception {
+        Files.writeString(storeFile(), "{\"schemaVersion\": 1, \"notesByContext\": {\"ctx\": ["
+                + "{\"id\":\"a9\",\"itemId\":\"minecraft:beef\",\"displayName\":\"Raw Beef\",\"note\":\"Olivres Shop\","
+                + "\"lastObservedAtMs\":42,\"favorite\":true,"
+                + "\"location\":{\"dimension\":\"minecraft:overworld\",\"x\":-847,\"y\":70,\"z\":12,\"savedAtMs\":1789000000000}}"
+                + "]}}");
+        MarketWatchNotesLoadResult result = new JsonMarketWatchNotesStore(storeFile()).load();
+        assertEquals(MarketWatchNotesLoadResult.Outcome.LOADED, result.outcome());
+        assertEquals(new MarketWatchNote("a9", "minecraft:beef", "Raw Beef", null, "Olivres Shop", 42L, true,
+                MarketWatchSavedLocation.of("minecraft:overworld", -847, 70, 12, 1789000000000L).orElseThrow()),
+                result.data().getNotes("ctx").get(0));
+    }
 }

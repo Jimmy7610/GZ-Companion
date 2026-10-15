@@ -46,19 +46,35 @@ MarketWatch here, to avoid conflating "settlement resource demand" with "shop pr
   local-notes list with inline add/edit/delete (delete requires a second confirming click,
   mirroring Settlement's member organizer) and a favorite star toggle.
 
-## Saved location on a note ("Spara plats" / "Hitta")
+## Saved location on a note (X/Y/Z, "Använd min plats", "Hitta")
 
 MarketWatch does **not** know any shop coordinates - the Companion never reads `/market` or the
 `/marketwatch` GUI. What a note can carry instead is a place the player saved **themselves**:
 
-1. Stand at the shop/place, open the note's edit form ("+ Ny" or "Ändra").
-2. Press **Spara plats** - the player's own current block position and dimension are recorded
-   (`MarketWatchNavigation.locationFromPose`). Without a live position nothing is recorded; the
-   form says so. **Uppdatera plats** / **Ta bort plats** change it; **Spara** persists it,
-   **Avbryt** discards it.
-3. The note row gets one extra line - "Din sparade plats • 847 block fågelvägen" - and **Hitta**.
+1. Open the note's edit form ("+ Ny" or "Ändra"). The location row is
+   `X [..] Y [..] Z [..] [Använd min plats]` (on the narrowest Companion size the two location
+   buttons sit on their own row and the form scrolls). Either:
+   - **type the coordinates** - whole block numbers, negatives allowed, surrounding spaces
+     ignored; or
+   - stand at the place and press **Använd min plats** - X/Y/Z and the dimension are filled from
+     the player's own current position (`MarketWatchNavigation.locationFromPose`). Without a live
+     position the fields are left as they are and the form says so.
+2. **Spara** persists it, **Avbryt** discards it, **Ta bort plats** (or emptying all three fields)
+   removes it. Validation (`MarketWatchLocationInput`) runs on Spara and keeps the typed values on
+   any error, saving nothing:
+   - some but not all fields filled → "Fyll i X, Y och Z (eller töm alla tre)." - never treated as
+     "no location";
+   - not a whole number → "X/Y/Z måste vara ett heltal.";
+   - outside the world limits (X/Z ±30 000 000, Y -2048..2047) → "Platsen ligger utanför världens
+     gränser." There is no default coordinate - nothing ever becomes `0,0,0`.
+3. **Dimension**: coordinates edited on an existing location keep that location's dimension;
+   "Använd min plats" takes the current one; a new typed location uses the player's dimension at
+   the moment of saving. If none can be determined, saving is refused ("Okänd dimension - stå i
+   världen och spara igen.") - never a guessed Overworld. The status line under the fields says
+   which dimension will be used.
+4. The note row gets one extra line - "Din sparade plats • 847 block fågelvägen" - and **Hitta**.
    Notes without a saved location look and behave exactly as before.
-4. **Hitta** hands the place to the shared Kistor navigation (`ChestNavigationManager.startPoint`,
+5. **Hitta** hands the place to the shared Kistor navigation (`ChestNavigationManager.startPoint`,
    see `docs/CHEST-MANAGER.md` §20): same HUD arrow, distance, vertical and wrong-dimension states,
    same NAVIGERAR banner/Stoppa in Kistor. The row shows "● NAVIGERAR HIT" and **Stoppa**.
    Moving or removing the place, or deleting the note, while it is the target restarts or stops
@@ -68,7 +84,8 @@ Storage: an optional, additive `"location": {"dimension", "x", "y", "z", "savedA
 note, still schema 1 (bumping it would make older builds refuse the whole file). The world/server
 context is the note's own context bucket. An incomplete or out-of-world location is dropped on
 load (the note itself is kept) and never repaired into a guessed position. An older build that
-re-saves the file drops the field.
+re-saves the file drops the field. Typed and "Använd min plats" locations use the same object -
+there is no separate manual-location format.
 
 A future, verified `/market` shop-coordinate source would build its own `NavigationPoint` and call
 the same `startPoint` - no navigation redesign needed.
