@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **MarketWatch: "Spara plats" + "Hitta"** - a MarketWatch note can store a place the player saved
+  themselves (their own current position, from the note's edit form); such notes get **Hitta**,
+  which guides there with the existing Kistor HITTA navigation (HUD arrow, distance, Stoppa).
+  MarketWatch still knows no shop coordinates. The optional `location` field is additive -
+  existing notes are untouched. Other features can navigate to a known coordinate through the new
+  `chest.nav.NavigationPoint` / `ChestNavigationManager.startPoint`. See `docs/MARKETWATCH.md`.
+
+### Changed
+- **Kistor navigation banner**: the NAVIGERAR banner is two clear lines - the target name beside
+  **Stoppa**, then distance and height difference across the full width. **Stoppa** has its own
+  click area and never also opens the target. Clicking the rest of the banner opens the storage
+  detail only for a chest/storage target; a MarketWatch saved place has no storage to open, so
+  its banner only offers Stoppa.
+- Navigation text uses one separator everywhere, e.g. "Nära • 11 block fågelvägen" and
+  "284 block fågelvägen • 12 block lägre". See `docs/CHEST-MANAGER.md` §20.
+
 ## [0.1.0-alpha.8] - 2026-09-24
 
 ### Changed

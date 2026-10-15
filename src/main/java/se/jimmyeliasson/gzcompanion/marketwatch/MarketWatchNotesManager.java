@@ -4,6 +4,7 @@ import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNote;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNotesData;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNotesStatus;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNotesStore;
+import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchSavedLocation;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -97,6 +98,19 @@ public class MarketWatchNotesManager {
         MarketWatchNote existing = getNotes(contextKey).stream().filter(n -> n.id().equals(noteId)).findFirst().orElse(null);
         if (existing == null) return false;
         data = data.withNoteReplaced(contextKey, existing.withLastObservedAtMs(nowMs));
+        store.save(data);
+        return true;
+    }
+
+    /**
+     * Saves (or with {@code null}, removes) the place the player recorded on one note with
+     * "Spara plats". The location always comes from the player's own position - never a guess.
+     */
+    public boolean setLocation(String contextKey, String noteId, MarketWatchSavedLocation location) {
+        if (!requireLoaded() || contextKey == null || noteId == null) return false;
+        MarketWatchNote existing = getNotes(contextKey).stream().filter(n -> n.id().equals(noteId)).findFirst().orElse(null);
+        if (existing == null) return false;
+        data = data.withNoteReplaced(contextKey, existing.withLocation(location));
         store.save(data);
         return true;
     }

@@ -7,6 +7,7 @@ import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNotesData;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNotesLoadResult;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNotesStatus;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNotesStore;
+import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchSavedLocation;
 
 import java.util.List;
 
@@ -124,5 +125,28 @@ class MarketWatchNotesManagerTest {
         assertEquals(1, manager.getNotes("server:a").size());
         assertEquals(1, manager.getNotes("singleplayer:b").size());
         assertTrue(manager.getNotes("server:other").isEmpty());
+    }
+
+    @Test
+    @DisplayName("setLocation saves and clears a player-saved location; other edits keep it")
+    void setLocationSavesAndClears() {
+        InMemoryStore store = new InMemoryStore();
+        MarketWatchNotesManager manager = new MarketWatchNotesManager(store);
+        manager.initialize();
+        String id = manager.addNote("ctx", null, "Raw Beef", null, "", 0L);
+        assertFalse(manager.getNotes("ctx").get(0).hasLocation(), "New notes have no location by default");
+
+        MarketWatchSavedLocation loc = MarketWatchSavedLocation.of("minecraft:overworld", 1, 64, 2, 10L).orElseThrow();
+        assertTrue(manager.setLocation("ctx", id, loc));
+        assertEquals(loc, store.data.getNotes("ctx").get(0).location(), "Persisted");
+
+        manager.toggleFavorite("ctx", id);
+        manager.markObservedNow("ctx", id, 99L);
+        assertEquals(loc, manager.getNotes("ctx").get(0).location(), "Favorite/observed edits keep the location");
+
+        assertTrue(manager.setLocation("ctx", id, null));
+        assertFalse(manager.getNotes("ctx").get(0).hasLocation());
+        assertFalse(manager.setLocation("ctx", "missing", loc));
+        assertFalse(manager.setLocation(null, id, loc));
     }
 }

@@ -21,6 +21,11 @@ import java.util.Optional;
  * <p>Fails safe: whenever the target can no longer be resolved (forgotten, context cleared, Chest
  * Manager unavailable/incompatible) or the world/server context changes, navigation STOPS rather
  * than risk presenting one context's storage in another.
+ *
+ * <p>Besides storage, the same single target slot can hold a {@link NavigationPoint}: a known
+ * coordinate from another feature (e.g. a location saved on a MarketWatch note). Exactly one target
+ * of either kind is active at a time - starting one replaces the other - and a point target obeys
+ * the same context/disconnect rules but never depends on the Chest Manager or the Kistor index.
  */
 public final class ChestNavigationManager {
 
@@ -42,6 +47,7 @@ public final class ChestNavigationManager {
     }
 
     private StoredContainerId target;
+    private NavigationPoint pointTarget;
     private long startedAtMs;
     private StopReason lastStopReason;
 
@@ -55,17 +61,45 @@ public final class ChestNavigationManager {
         if (manager.getStatus() != ChestManagerStatus.LOADED) return false;
         if (!Objects.equals(id.contextStorageKey(), currentContextKey)) return false;
         if (manager.getContainer(currentContextKey, id).isEmpty()) return false;
-        if (target != null && !target.equals(id)) {
+        if (pointTarget != null || (target != null && !target.equals(id))) {
             lastStopReason = StopReason.REPLACED;
         }
+        this.pointTarget = null;
         this.target = id;
         this.startedAtMs = nowMs;
         return true;
     }
 
-    /** O(1) fast path for the HUD: true while a target is set. */
+    /**
+     * Starts navigating toward a known non-storage coordinate, replacing any previous target
+     * (storage or point). Refused (returns false) unless the point belongs to
+     * {@code currentContextKey} - a coordinate from one world/server is never guided to in another.
+     */
+    public boolean startPoint(String currentContextKey, NavigationPoint point, long nowMs) {
+        if (point == null || currentContextKey == null) return false;
+        if (!Objects.equals(point.contextStorageKey(), currentContextKey)) return false;
+        if (target != null || (pointTarget != null && !pointTarget.equals(point))) {
+            lastStopReason = StopReason.REPLACED;
+        }
+        this.target = null;
+        this.pointTarget = point;
+        this.startedAtMs = nowMs;
+        return true;
+    }
+
+    /** O(1) fast path for the HUD: true while a target (storage or point) is set. */
     public boolean isActive() {
-        return target != null;
+        return target != null || pointTarget != null;
+    }
+
+    /** The active point target, if the current target is a {@link NavigationPoint} rather than storage. */
+    public Optional<NavigationPoint> pointTarget() {
+        return Optional.ofNullable(pointTarget);
+    }
+
+    /** True while the active target is a point started by {@code sourceKey}. */
+    public boolean isPointTarget(String sourceKey) {
+        return pointTarget != null && pointTarget.sourceKey().equals(sourceKey);
     }
 
     public Optional<StoredContainerId> target() {
@@ -85,14 +119,16 @@ public final class ChestNavigationManager {
     }
 
     public void stop(StopReason reason) {
-        if (target == null) return;
+        if (!isActive()) return;
         target = null;
+        pointTarget = null;
         lastStopReason = reason != null ? reason : StopReason.USER;
     }
 
     /**
-     * Resolves the active target against the CURRENT local index, stopping navigation if it can no
-     * longer be resolved safely. O(1): one hash lookup by stable key.
+     * Resolves the active STORAGE target against the CURRENT local index, stopping navigation if it
+     * can no longer be resolved safely. O(1): one hash lookup by stable key. Empty (without
+     * stopping anything) while the active target is a point.
      */
     public Optional<StoredContainer> resolveTarget(ChestManager manager) {
         if (target == null) return Optional.empty();
@@ -108,12 +144,22 @@ public final class ChestNavigationManager {
     }
 
     /**
+     * Resolves whatever is being navigated to - storage (with the same safety stops as
+     * {@link #resolveTarget}) or a point - into what the HUD and banner draw.
+     */
+    public Optional<NavigationDestination> resolveDestination(ChestManager manager) {
+        if (pointTarget != null) return Optional.of(NavigationDestination.of(pointTarget));
+        return resolveTarget(manager).map(NavigationDestination::of);
+    }
+
+    /**
      * Stops navigation if the player's current world/server context is not the target's own
      * context. A target from one server/world is never presented as belonging to another.
      */
     public void onContextObserved(String currentContextKey) {
-        if (target == null) return;
-        if (!Objects.equals(target.contextStorageKey(), currentContextKey)) {
+        if (!isActive()) return;
+        String targetContext = target != null ? target.contextStorageKey() : pointTarget.contextStorageKey();
+        if (!Objects.equals(targetContext, currentContextKey)) {
             stop(StopReason.CONTEXT_CHANGED);
         }
     }

@@ -540,8 +540,11 @@ the local index can be a target (`ChestNavigationManager.start` refuses anything
 target by its stable `StoredContainerId`. It is memory-only and never persisted, so it cannot
 survive a restart. Starting navigation shows "Navigering startad • stäng med G för att se pilen". At the top of
 Kistor, the active target uses a two-line banner: **NAVIGERAR: Materiallager** with **Stoppa** on
-line 1, then distance + height difference across the full width on line 2 (clicking the banner
-outside Stoppa opens the target's detail).
+line 1, then distance + height difference across the full width on line 2. **Stoppa** has its
+own click area inside the banner and is always matched first, so it only stops navigation. For a
+storage target, clicking the rest of the banner opens that storage's detail; a generic point
+target (e.g. a MarketWatch saved place, see below) has no storage, so its banner does nothing
+outside Stoppa.
 
 **HUD** (`KistorNavigationHudElement`, registered with `HudElementRegistry` exactly like
 `GameZoneToastHudElement`):
@@ -561,7 +564,7 @@ outside Stoppa opens the target's detail).
 - Title, **"284 block fågelvägen"** (straight-line horizontal distance — the wording can't be
   confused with a route distance), and **"↓ 12"** / **"↑ 17"** vertical difference (hidden when
   under 2 blocks).
-- **Nära** (< 15 blocks 3D): emphasized card, "Nära · 11 block fågelvägen".
+- **Nära** (< 15 blocks 3D): emphasized card, "Nära • 11 block fågelvägen".
 - **DU ÄR FRAMME** (≤ 4.5 blocks 3D, roughly reach distance): arrow removed. Coordinate proximity
   only — nothing is highlighted, outlined or raytraced.
 - **Wrong dimension**: no arrow at all; "⚠ Finns i Nether" / "Du är i Overworld". Saved
@@ -589,6 +592,18 @@ not). Then it stops and shows "✓ Materiallager hittad".
   frame),
 - the client disconnects / leaves the world (`ClientPlayConnectionEvents.DISCONNECT`).
 While the player/level is unavailable (e.g. loading), the HUD simply draws nothing.
+
+**Known non-storage coordinates (`NavigationPoint`).** Other features can reuse this exact
+navigation without knowing the HUD or the math: they build a validated
+`chest.nav.NavigationPoint` (source key, context, dimension, block position, label - `of(...)`
+rejects anything incomplete or outside the world, and there is no default position) and call
+`ChestNavigationManager.startPoint(currentContext, point, now)`. The manager still holds exactly
+ONE target: starting a point replaces a storage target and vice versa (`REPLACED`). A point obeys
+the same Stoppa / context-change / disconnect rules, but never depends on the Kistor index or the
+Chest Manager status. The HUD and the Kistor NAVIGERAR banner draw whatever
+`resolveDestination(...)` returns (`NavigationDestination`); for storage targets the math and
+wording are identical to before. Today the only caller is a place the player saved themselves on
+a MarketWatch note (see `docs/MARKETWATCH.md`).
 
 ## 21. Planner integration: "Hitta material i kistor" and Hämtningslista
 

@@ -44,7 +44,15 @@ public record KistorLayout(
 
     public static final int COMPACT_WIDTH_THRESHOLD = 300;
     static final int HEADER_H = 13;
-    static final int BANNER_H = 23;
+    /**
+     * Two-line NAVIGERAR banner: line 1 = "NAVIGERAR: <name>" beside the Stoppa button, line 2 =
+     * distance + vertical difference across the FULL banner width (the button only occupies line 1),
+     * so the important numbers never have to share a line with the name.
+     */
+    public static final int BANNER_H = 23;
+    private static final int BANNER_LINE1_OFFSET = 3;
+    private static final int BANNER_LINE2_OFFSET = 13;
+    static final int STOP_BTN_H = 11;
     static final int SEARCH_H = 13;
     static final int CONTROLS_H = 11;
     static final int ACTION_BTN_H = 11;
@@ -94,10 +102,8 @@ public record KistorLayout(
         UiRect banner = NONE;
         UiRect stopBtn = NONE;
         if (navigating) {
-            // The banner spans the full width. Stoppa only occupies line 1, leaving line 2
-            // completely free for distance + height information.
             banner = new UiRect(x, rowY, width, BANNER_H);
-            stopBtn = new UiRect(x + width - STOP_BTN_W - 1, rowY + 1, STOP_BTN_W, 11);
+            stopBtn = new UiRect(x + width - STOP_BTN_W - 2, rowY + 2, STOP_BTN_W, STOP_BTN_H);
             rowY = banner.bottom() + 2;
         }
 
@@ -178,19 +184,17 @@ public record KistorLayout(
                 primary, rename, favorite, copy, note, groupAssign, forget, back);
     }
 
-    /** Text area for line 1 of the active-navigation banner, excluding the Stoppa button. */
+    /** Text area of banner line 1 (target name), left of the Stoppa button. */
     public UiRect navTitleTextRect() {
         if (navBannerRect.width() <= 0) return NONE;
         int left = navBannerRect.x() + 4;
-        int right = Math.max(left + 1, navStopBtnRect.x() - 3);
-        return new UiRect(left, navBannerRect.y() + 1, Math.max(1, right - left), 10);
+        return new UiRect(left, navBannerRect.y() + BANNER_LINE1_OFFSET, Math.max(1, navStopBtnRect.x() - 4 - left), 9);
     }
 
-    /** Full-width text area for line 2 of the active-navigation banner. */
+    /** Text area of banner line 2 (distance + vertical difference): the full banner width. */
     public UiRect navDetailTextRect() {
         if (navBannerRect.width() <= 0) return NONE;
-        return new UiRect(navBannerRect.x() + 4, navBannerRect.y() + 12,
-                Math.max(1, navBannerRect.width() - 8), 10);
+        return new UiRect(navBannerRect.x() + 4, navBannerRect.y() + BANNER_LINE2_OFFSET, Math.max(1, navBannerRect.width() - 8), 8);
     }
 
     /** The scrollable content area of the detail pane (below the compact back strip, if any). */

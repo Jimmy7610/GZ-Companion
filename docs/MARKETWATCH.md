@@ -46,6 +46,33 @@ MarketWatch here, to avoid conflating "settlement resource demand" with "shop pr
   local-notes list with inline add/edit/delete (delete requires a second confirming click,
   mirroring Settlement's member organizer) and a favorite star toggle.
 
+## Saved location on a note ("Spara plats" / "Hitta")
+
+MarketWatch does **not** know any shop coordinates - the Companion never reads `/market` or the
+`/marketwatch` GUI. What a note can carry instead is a place the player saved **themselves**:
+
+1. Stand at the shop/place, open the note's edit form ("+ Ny" or "Ändra").
+2. Press **Spara plats** - the player's own current block position and dimension are recorded
+   (`MarketWatchNavigation.locationFromPose`). Without a live position nothing is recorded; the
+   form says so. **Uppdatera plats** / **Ta bort plats** change it; **Spara** persists it,
+   **Avbryt** discards it.
+3. The note row gets one extra line - "Din sparade plats • 847 block fågelvägen" - and **Hitta**.
+   Notes without a saved location look and behave exactly as before.
+4. **Hitta** hands the place to the shared Kistor navigation (`ChestNavigationManager.startPoint`,
+   see `docs/CHEST-MANAGER.md` §20): same HUD arrow, distance, vertical and wrong-dimension states,
+   same NAVIGERAR banner/Stoppa in Kistor. The row shows "● NAVIGERAR HIT" and **Stoppa**.
+   Moving or removing the place, or deleting the note, while it is the target restarts or stops
+   navigation accordingly.
+
+Storage: an optional, additive `"location": {"dimension", "x", "y", "z", "savedAtMs"}` object on a
+note, still schema 1 (bumping it would make older builds refuse the whole file). The world/server
+context is the note's own context bucket. An incomplete or out-of-world location is dropped on
+load (the note itself is kept) and never repaired into a guessed position. An older build that
+re-saves the file drops the field.
+
+A future, verified `/market` shop-coordinate source would build its own `NavigationPoint` and call
+the same `startPoint` - no navigation redesign needed.
+
 ## Why price/demand/quantity notes are one combined field
 
 Per the same simplification already applied and documented for Settlement Companion's member
