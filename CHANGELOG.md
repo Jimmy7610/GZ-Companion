@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9] - 2026-10-15
+
 ### Added
 - **MarketWatch: "Spara plats" + "Hitta"** - a MarketWatch note can store a place the player saved
   themselves (their own current position, from the note's edit form); such notes get **Hitta**,
