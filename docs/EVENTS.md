@@ -1,6 +1,6 @@
 # Events
 
-**Status: implemented; human in-game QA complete. Not yet part of a release (unreleased after `v0.1.0-alpha.10`).**
+**Status: released in `v0.1.0-alpha.11`.** Implementation and human in-game QA are both complete.
 
 ## 1. Purpose
 

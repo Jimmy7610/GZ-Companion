@@ -115,7 +115,7 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Clipboard-Only Command**: An optional "Kopiera /bounty info \<namn>" button copies the documented command to the clipboard — never sent automatically.
 - **Shared Live-Data Runtime**: Reuses the exact same lazily-created executor/`HttpClient` as Leaderboards — Bounty Board adds zero new threads or network clients.
 
-### Events *(Implemented, human gameplay QA complete — unreleased)*
+### Events *(Completed — released in v0.1.0-alpha.11)*
 - **GameZone Event Schedule**: The next event with a countdown and the coming week grouped by day ("Idag", "Imorgon", "Lördag 17 oktober"), from GameZoneEngine's public schedule API — the same source as the in-game hologram. See [Events](docs/EVENTS.md).
 - **Correct Time Zone**: Times are Europe/Stockholm with proper DST handling, whatever the player's own time zone is.
 - **Read-Only, Cached**: Fetched only while the tab is open (at most every 5 minutes) on the shared live-data runtime; the last schedule stays visible if the API is down.

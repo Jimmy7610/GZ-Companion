@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.11] - 2026-10-15
+
 ### Added
 - **Events tab** - GameZone's upcoming events from the public GameZoneEngine schedule API (the same
   source as the in-game hologram): the next event highlighted with a countdown ("Om 42 min",
