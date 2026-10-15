@@ -1,7 +1,7 @@
 package se.jimmyeliasson.gzcompanion.ui;
 
 /**
- * The 12 navigation sections defined for GZ Companion.
+ * The 13 navigation sections defined for GZ Companion.
  * Uses bundled high-definition pixel icons and authentic Swedish localization.
  */
 public enum TabType {
@@ -14,6 +14,7 @@ public enum TabType {
     BYGGPLANER("Byggplaner", IconId.BUILDING, "Byggnads- och materialplanerare"),
     MARKETWATCH("MarketWatch", IconId.MARKET, "Marknads- och ekonomibevakning"),
     BOUNTIES("Bounties", IconId.BOUNTY, "Aktiva jakter från GameZone"),
+    EVENTS("Events", IconId.EVENTS, "Kommande events på GameZone"),
     LEADERBOARDS("Leaderboards", IconId.LEADERBOARDS, "Topplistor för spelare, settlements och företag"),
     KOMMANDON("Kommandon", IconId.COMMANDS, "Serverkommandon och snabbval"),
     INSTALLNINGAR("Inställningar", IconId.SETTINGS, "Inställningar för GZ Companion");

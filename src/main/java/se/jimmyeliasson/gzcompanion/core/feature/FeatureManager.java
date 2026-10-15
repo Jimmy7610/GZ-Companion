@@ -183,6 +183,9 @@ public class FeatureManager {
             // client code; GameZone's bounty endpoint being temporarily unreachable is a live-data
             // concern (see BountyStatus), never a "this module isn't implemented" concern.
             case BOUNTIES -> ModuleStatus.AVAILABLE;
+            // Same reasoning again - the events schedule endpoint being unreachable is a live-data
+            // state (see EventScheduleStatus), never "this module isn't implemented".
+            case EVENTS -> ModuleStatus.AVAILABLE;
             case KOMMANDON -> getCommandCatalogStatus().isAvailable() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
             case INSTALLNINGAR -> getSettingsStatus() ? ModuleStatus.AVAILABLE : ModuleStatus.COMING_SOON;
         };

@@ -20,6 +20,7 @@ public enum IconId {
     SERVER("server"),
     LEADERBOARDS("leaderboards"),
     BOUNTY("bounty"),
+    EVENTS("events"),
     OBJECTIVE("objective"),
     COMPATIBILITY("compatibility");
 

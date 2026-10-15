@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Events tab** - GameZone's upcoming events from the public GameZoneEngine schedule API (the same
+  source as the in-game hologram): the next event highlighted with a countdown ("Om 42 min",
+  "Imorgon 20:00"), then the coming week grouped as "Idag", "Imorgon", "Lördag 17 oktober".
+  Times follow Europe/Stockholm including DST; events that have started are never shown as
+  upcoming. Fetched only while Events is open, at most every 5 minutes (manual Uppdatera with a
+  10 s cooldown), on the shared live-data runtime. If the API is unavailable the last fetched
+  schedule stays visible ("Visar senast hämtade schema"); without one, a Swedish error with
+  "Försök igen". Read-only, no credentials. See `docs/EVENTS.md`.
+
 ## [0.1.0-alpha.10] - 2026-10-15
 
 ### Added

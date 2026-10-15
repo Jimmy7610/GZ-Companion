@@ -1,6 +1,8 @@
 package se.jimmyeliasson.gzcompanion.core;
 
 import se.jimmyeliasson.gzcompanion.bounty.BountyManager;
+import se.jimmyeliasson.gzcompanion.events.EventScheduleManager;
+import se.jimmyeliasson.gzcompanion.events.GameZoneEventScheduleSource;
 import se.jimmyeliasson.gzcompanion.bounty.GameZoneBountySource;
 import se.jimmyeliasson.gzcompanion.chest.ChestManager;
 import se.jimmyeliasson.gzcompanion.chest.KistorRuntime;
@@ -117,6 +119,11 @@ public class CompanionSession {
      * docs/BOUNTY-BOARD.md's "shared GameZone runtime" section. No new executor/HttpClient. */
     private final BountyManager bountyManager = new BountyManager(
             new GameZoneBountySource(gameZoneLiveDataRuntime),
+            gameZoneLiveDataRuntime);
+    /** Events reuses the same shared GameZone runtime - no new executor/HttpClient; nothing is
+     * fetched until the Events tab is opened. See docs/EVENTS.md. */
+    private final EventScheduleManager eventScheduleManager = new EventScheduleManager(
+            new GameZoneEventScheduleSource(gameZoneLiveDataRuntime),
             gameZoneLiveDataRuntime);
 
     /** THE single shared background executor for local-disk persistence work that must not block
@@ -410,6 +417,11 @@ public class CompanionSession {
     /** THE single authoritative Bounty Board cache/fetch manager - see {@link BountyManager}. */
     public BountyManager getBountyManager() {
         return bountyManager;
+    }
+
+    /** THE single Events schedule cache/fetch manager - see {@link EventScheduleManager}. */
+    public EventScheduleManager getEventScheduleManager() {
+        return eventScheduleManager;
     }
 
     public GameZoneParserCatalog getParserCatalog() {

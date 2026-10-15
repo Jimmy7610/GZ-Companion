@@ -17,6 +17,7 @@ import se.jimmyeliasson.gzcompanion.ui.tabs.CraftingTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.HomeTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.BountiesTabComponent;
+import se.jimmyeliasson.gzcompanion.ui.tabs.EventsTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.BuildingsTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.KistorTabComponent;
 import se.jimmyeliasson.gzcompanion.ui.tabs.LeaderboardsTabComponent;
@@ -43,6 +44,7 @@ public class GZCompanionMainScreen extends Screen {
     private final MarketWatchTabComponent marketWatchTab = new MarketWatchTabComponent();
     private final LeaderboardsTabComponent leaderboardsTab = new LeaderboardsTabComponent();
     private final BountiesTabComponent bountiesTab = new BountiesTabComponent();
+    private final EventsTabComponent eventsTab = new EventsTabComponent();
     private final SettingsTabComponent settingsTab = new SettingsTabComponent();
     private final PlaceholderTabComponent placeholderTab = new PlaceholderTabComponent();
 
@@ -178,6 +180,8 @@ public class GZCompanionMainScreen extends Screen {
             leaderboardsTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else if (activeTab == TabType.BOUNTIES) {
             bountiesTab.render(extractor, font, contentRect, mouseX, mouseY, this);
+        } else if (activeTab == TabType.EVENTS) {
+            eventsTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else if (activeTab == TabType.INSTALLNINGAR) {
             settingsTab.render(extractor, font, contentRect, mouseX, mouseY, this);
         } else {
@@ -269,6 +273,10 @@ public class GZCompanionMainScreen extends Screen {
                 if (bountiesTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
                 }
+            } else if (activeTab == TabType.EVENTS) {
+                if (eventsTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
+                    return true;
+                }
             } else if (activeTab == TabType.INSTALLNINGAR) {
                 if (settingsTab.mouseClicked(mouseX, mouseY, button, contentRect, this)) {
                     return true;
@@ -327,6 +335,10 @@ public class GZCompanionMainScreen extends Screen {
             }
         } else if (activeTab == TabType.BOUNTIES) {
             if (bountiesTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY, layout.contentRect())) {
+                return true;
+            }
+        } else if (activeTab == TabType.EVENTS) {
+            if (eventsTab.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
         } else if (activeTab == TabType.INSTALLNINGAR) {
