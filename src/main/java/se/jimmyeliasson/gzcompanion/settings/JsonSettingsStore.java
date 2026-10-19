@@ -9,6 +9,8 @@ import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import se.jimmyeliasson.gzcompanion.ui.theme.UiTheme;
+
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -76,7 +78,9 @@ public class JsonSettingsStore implements SettingsStore {
                     getBool(root, "showUnverifiedKnowledge", defaults.showUnverifiedKnowledge()),
                     getBool(root, "useLastKnownChestDataInPlanners", defaults.useLastKnownChestDataInPlanners()),
                     getStringList(root, "favoritePlayers"),
-                    getBool(root, "hideUnverifiedChatWarning", defaults.hideUnverifiedChatWarning())
+                    getBool(root, "hideUnverifiedChatWarning", defaults.hideUnverifiedChatWarning()),
+                    // Missing (pre-theme files), non-string, unknown or future values all load as the default theme.
+                    UiTheme.fromId(getString(root, "uiTheme"))
             );
             return SettingsLoadResult.loaded(settings);
         } catch (Exception e) {
@@ -84,6 +88,11 @@ public class JsonSettingsStore implements SettingsStore {
             backupCorruptFile();
             return SettingsLoadResult.corruptRecovered();
         }
+    }
+
+    private static String getString(JsonObject obj, String key) {
+        JsonElement el = obj.get(key);
+        return (el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()) ? el.getAsString() : null;
     }
 
     private static boolean getBool(JsonObject obj, String key, boolean fallback) {
@@ -132,6 +141,7 @@ public class JsonSettingsStore implements SettingsStore {
             }
             root.add("favoritePlayers", favoritesArray);
             root.addProperty("hideUnverifiedChatWarning", settings.hideUnverifiedChatWarning());
+            root.addProperty("uiTheme", settings.uiTheme().id());
 
             Path tmpFile = filePath.resolveSibling(filePath.getFileName().toString() + ".tmp");
             try (FileWriter writer = new FileWriter(tmpFile.toFile())) {

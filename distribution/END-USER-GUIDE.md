@@ -40,9 +40,15 @@ moddar påverkas.
 ## Vad installeraren aldrig gör
 
 - Frågar aldrig efter ditt Microsoft-lösenord.
-- Skickar aldrig någon data till oss (ingen telemetri, ingen analys).
+- Skickar aldrig någon data till oss - installeraren har ingen telemetri och ingen analys.
 - Rör aldrig dina befintliga Minecraft-profiler eller moddar.
 - Installerar aldrig något i bakgrunden efter att installationen är klar.
+
+## Integritet i GZ Companion
+
+GZ Companion använder ett slumpmässigt installations-ID och versionsnummer för att räkna anonyma
+aktiva installationer - högst en gång per dygn. Ingen Minecraft-identitet eller speldata skickas,
+och ID:t är inte kopplat till dig, ditt konto eller din dator. Det står även under Inställningar.
 
 ---
 

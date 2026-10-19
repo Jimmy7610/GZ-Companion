@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Utseende (themes)** - Inställningar has two themes: **Minecraft (Standard)**, the unchanged
+  original look and the default, and **Tydlig**, a readability-first theme with a smooth
+  sans-serif font (bundled DejaVu Sans subset), opaque panels, brighter secondary text, stronger
+  borders and no text shadows. Switches instantly without a restart and never changes features or
+  layout. Built as one central theme layer (`ThemeTokens` -> `GZTheme` / `TextUtil`); no tab
+  branches on the theme. Stored as `uiTheme`; older settings files load as Minecraft. See
+  `docs/THEMES.md`.
+- **Anonymous active-installation counter** - at most once a day, on joining a world/server, a
+  background heartbeat with only a random installation ID and the GZ Companion version
+  (`POST https://gzcompanion.taren.se/api/gzcompanion/heartbeat`). No Minecraft identity, gameplay
+  data or device fingerprinting; described openly in Inställningar. Production end-to-end QA
+  passed (one installation per install, stable across restarts). See `docs/PRIVACY.md`.
+- **Usage backend `gzcompanion-usage`** (`usage-server/`) - standalone Node.js 24 + SQLite service
+  with no third-party dependencies: public heartbeat endpoint with strict validation, one table
+  (id, version, first/last seen), no IP/header/body storage or logging, global (not per-IP) abuse
+  limits, and a token-protected aggregate stats API and Swedish dashboard (`/stats`). Includes
+  systemd, Cloudflare Tunnel and backup assets plus the `deploy/server-setup.sh` deployment
+  script. Deployed at `gzcompanion.taren.se`.
+
+### Changed
+- Privacy wording: the absolute "no telemetry" claims in Inställningar, README and the product
+  bible now precisely describe the anonymous installation counter.
+
 ## [0.1.0-alpha.11] - 2026-10-15
 
 ### Added

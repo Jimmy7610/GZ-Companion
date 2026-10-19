@@ -16,6 +16,7 @@ import se.jimmyeliasson.gzcompanion.ui.TypographyScale;
 import se.jimmyeliasson.gzcompanion.ui.layout.SettingsLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
+import se.jimmyeliasson.gzcompanion.ui.theme.UiTheme;
 import se.jimmyeliasson.gzcompanion.update.UpdateManager;
 import se.jimmyeliasson.gzcompanion.update.UpdateState;
 
@@ -65,6 +66,8 @@ public class SettingsTabComponent {
         int maxW = content.width() - 8;
         int y = content.y() + 3 - scroll;
 
+        y = renderAppearanceSection(extractor, font, settingsManager, x, y, maxW, mouseX, mouseY);
+        y += 4;
         y = renderTogglesSection(extractor, font, session, settingsManager, x, y, maxW, mouseX, mouseY);
         y += 4;
         y = renderPrivacySection(extractor, font, x, y, maxW);
@@ -98,6 +101,36 @@ public class SettingsTabComponent {
         int badgeW = TextUtil.scaledWidth(font, badgeLabel, TypographyScale.META.getScale()) + 14;
         int dot = available ? GZTheme.COLOR_STATUS_GREEN : GZTheme.COLOR_STATUS_RED;
         GZTheme.drawBadge(extractor, font, headerRect.right() - badgeW, headerRect.y(), badgeLabel, GZTheme.COLOR_TEXT_SECONDARY, dot);
+    }
+
+    // ------------------------------------------------------------------
+    // Utseende (theme)
+    // ------------------------------------------------------------------
+
+    /** Shown under the theme choice so it is clear that only the look changes. */
+    static final String THEME_HINT = "Detta påverkar bara utseendet – inga funktioner ändras.";
+
+    /**
+     * "Utseende": one button per {@link UiTheme}, the active one highlighted. A click persists the
+     * choice and the theme listener applies it on the next frame - no restart.
+     */
+    private int renderAppearanceSection(GuiGraphicsExtractor extractor, Font font, SettingsManager settingsManager,
+                                        int x, int y, int maxW, int mouseX, int mouseY) {
+        TextUtil.drawScaledText(extractor, font, "UTSEENDE", x, y, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);
+        y += 11;
+        UiTheme current = settingsManager.getSettings().uiTheme();
+        UiTheme[] themes = UiTheme.values();
+        int gap = 4;
+        int btnW = Math.max(20, (maxW - gap * (themes.length - 1)) / themes.length);
+        for (int i = 0; i < themes.length; i++) {
+            UiTheme theme = themes[i];
+            UiRect btn = new UiRect(x + i * (btnW + gap), y, btnW, 11);
+            GZTheme.drawButton(extractor, font, btn, theme.displayName(), theme == current, btn.contains(mouseX, mouseY), TypographyScale.META.getScale());
+            if (theme != current) hitTargets.add(new RowHit(btn, () -> settingsManager.setUiTheme(theme)));
+        }
+        y += 14;
+        y += TextUtil.drawScaledWrappedText(extractor, font, THEME_HINT, x, y, maxW, TypographyScale.META.getScale(), 3, 1, GZTheme.COLOR_TEXT_MUTED, false) + 2;
+        return y;
     }
 
     // ------------------------------------------------------------------
@@ -155,7 +188,6 @@ public class SettingsTabComponent {
         y += 11;
         String[] lines = {
                 "Endast lokalt - all data sparas på din egen dator.",
-                "Ingen telemetri skickas någonsin.",
                 "Ingen molnsynkronisering.",
                 "Inga automatiska kommandon körs åt dig.",
                 "Ingen container-scanning av världen.",
@@ -165,8 +197,16 @@ public class SettingsTabComponent {
             TextUtil.drawScaledEllipsizedText(extractor, font, "- " + line, x, y, maxW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_SECONDARY, false);
             y += 9;
         }
+        // Read-only, always shown: what the anonymous installation counter sends. Wrapped in full,
+        // never cut off - this is the transparency statement for the counter (there is no toggle).
+        y += TextUtil.drawScaledWrappedText(extractor, font, "- " + ANONYMOUS_USAGE_INFO, x, y, maxW, TypographyScale.META.getScale(),
+                6, 1, GZTheme.COLOR_TEXT_SECONDARY, false) + 2;
         return y;
     }
+
+    /** The anonymous installation counter, described exactly as it behaves (see docs/PRIVACY.md). */
+    static final String ANONYMOUS_USAGE_INFO = "GZ Companion använder ett slumpmässigt installations-ID och versionsnummer för att "
+            + "räkna anonyma aktiva installationer. Ingen Minecraft-identitet eller speldata skickas.";
 
     // ------------------------------------------------------------------
     // Local Data Management

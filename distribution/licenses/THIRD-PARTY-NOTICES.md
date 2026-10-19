@@ -39,6 +39,16 @@ MIT License. Copyright (c) .NET Foundation and Contributors.
 Source: https://github.com/dotnet/winforms
 Used for the installer's own user interface only - never bundled into the Minecraft mod itself.
 
+## DejaVu Sans (font, "Tydlig" theme)
+
+Bitstream Vera Fonts license (with DejaVu changes in the public domain). Copyright (c) 2003 by
+Bitstream, Inc.; DejaVu changes by the DejaVu fonts team; Arev glyphs copyright (c) Tavmjong Bah.
+Source: https://dejavu-fonts.github.io/
+A subset of `DejaVuSans.ttf` (Latin/Swedish, punctuation, arrows, shapes and UI symbols) is bundled
+inside the mod jar at `assets/gzcompanion/font/tydlig/dejavu_sans_subset.ttf`, unmodified apart from
+subsetting and keeping its original "DejaVu Sans" name (the license forbids only the names
+"Bitstream" and "Vera"). The full license text ships next to it as `LICENSE_DEJAVU.txt`.
+
 ## What is never bundled or redistributed
 
 - Minecraft Java Edition itself, or any Mojang/Microsoft copyrighted game asset.

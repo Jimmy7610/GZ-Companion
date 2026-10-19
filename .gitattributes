@@ -1,0 +1,4 @@
+# Server-side files must keep LF line endings on every checkout (shell scripts, systemd unit).
+usage-server/** text=auto eol=lf
+*.ttf binary
+*.png binary

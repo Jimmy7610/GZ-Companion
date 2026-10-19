@@ -1,0 +1,52 @@
+# /etc/systemd/system/gzcompanion-usage.service
+# Anonymous active-installation counter for GZ Companion. Standalone - unrelated to TarenAgent.
+[Unit]
+Description=GZ Companion anonymous usage counter (gzcompanion-usage)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gzcompanion-usage
+Group=gzcompanion-usage
+WorkingDirectory=/srv/gzcompanion-usage
+EnvironmentFile=/etc/gzcompanion-usage/env
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning src/index.js
+Restart=on-failure
+RestartSec=5
+# Database lives in /var/lib/gzcompanion-usage (created by systemd, owned by the service user).
+StateDirectory=gzcompanion-usage
+StateDirectoryMode=0750
+UMask=0027
+
+# Logs go to journald; the app logs only operational lines (never ids, IPs, headers or bodies).
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gzcompanion-usage
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/gzcompanion-usage
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

@@ -30,7 +30,7 @@ public class PlaceholderTabComponent {
 
         int pad = 8;
         GZTheme.drawIcon(extractor, tab.getIcon(), bounds.x() + pad + 2, bounds.y() + 6, 12, GZTheme.COLOR_MINT);
-        extractor.text(font, tab.getDisplayName(), bounds.x() + pad + 18, bounds.y() + 7, GZTheme.COLOR_TEXT_PRIMARY, true);
+        TextUtil.draw(extractor, font, tab.getDisplayName(), bounds.x() + pad + 18, bounds.y() + 7, GZTheme.COLOR_TEXT_PRIMARY, true);
         TextUtil.drawEllipsizedText(extractor, font, tab.getDescription(), bounds.x() + pad + 18, bounds.y() + 18, bounds.width() - 36, GZTheme.COLOR_TEXT_SECONDARY, false);
 
         int boxY = bounds.y() + 32;

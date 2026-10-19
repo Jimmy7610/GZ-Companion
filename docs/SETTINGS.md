@@ -64,11 +64,21 @@ chat content, message signing, chat reporting, commands and all networking are u
 vanilla still records the warning as seen, exactly as before. Stored as
 `hideUnverifiedChatWarning` in `settings.json` (a missing key loads as off; no schema bump).
 
+## Utseende
+
+Two themes, "Minecraft (Standard)" (default) and "Tydlig", shown as two buttons with the active
+one highlighted, plus "Detta påverkar bara utseendet – inga funktioner ändras." A click takes effect
+immediately (no restart). Stored as `uiTheme` in `settings.json`; a missing, unknown or future
+value loads as Minecraft (no schema bump). See [Themes](THEMES.md).
+
 ## Privacy & Fair Play
 
-A static information block, not a settings control: Local-only, No telemetry, No cloud sync, No
-automatic commands, No container scanning, No hidden server data - restating the guarantees
-already true of every milestone in this mod.
+A static information block, not a settings control: Local-only, No cloud sync, No automatic
+commands, No container scanning, No hidden server data - plus, read-only and always shown, the
+anonymous active-installation counter: "GZ Companion använder ett slumpmässigt installations-ID och
+versionsnummer för att räkna anonyma aktiva installationer. Ingen Minecraft-identitet eller
+speldata skickas." There is deliberately no on/off switch for the counter; it is described here
+instead. See [Privacy](PRIVACY.md).
 
 ## Local Data Management
 

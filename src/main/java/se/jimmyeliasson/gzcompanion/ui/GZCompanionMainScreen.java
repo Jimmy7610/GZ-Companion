@@ -108,10 +108,10 @@ public class GZCompanionMainScreen extends Screen {
         // Header Section
         int headerY = modalRect.y() + 4;
         GZTheme.drawIcon(extractor, IconId.LOGO, modalRect.x() + 8, headerY + 2, 12, GZTheme.COLOR_EMERALD);
-        extractor.text(font, CompanionConstants.MOD_NAME.toUpperCase(), modalRect.x() + 24, headerY + 3, GZTheme.COLOR_MINT, true);
+        TextUtil.draw(extractor, font, CompanionConstants.MOD_NAME.toUpperCase(), modalRect.x() + 24, headerY + 3, GZTheme.COLOR_MINT, true);
 
         String subtitle = "- Inofficiellt Alpha";
-        int titleW = font.width(CompanionConstants.MOD_NAME.toUpperCase());
+        int titleW = TextUtil.width(font, CompanionConstants.MOD_NAME.toUpperCase());
         int availHeaderW = closeBtnRect.x() - (modalRect.x() + 28 + titleW) - 8;
         if (availHeaderW > 40) {
             TextUtil.drawScaledEllipsizedText(extractor, font, subtitle, modalRect.x() + 28 + titleW, headerY + 4, availHeaderW, TypographyScale.META.getScale(), GZTheme.COLOR_TEXT_MUTED, false);

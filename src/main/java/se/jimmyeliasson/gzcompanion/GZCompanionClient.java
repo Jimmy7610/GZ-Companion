@@ -3,6 +3,7 @@ package se.jimmyeliasson.gzcompanion;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import se.jimmyeliasson.gzcompanion.chest.bridge.ChestCaptureController;
@@ -81,6 +82,9 @@ public class GZCompanionClient implements ClientModInitializer {
         // Kistor 2.0 "HITTA" navigation HUD - draws nothing unless the player explicitly started
         // navigation toward one already-known storage location (or a place saved on a MarketWatch note).
         new KistorNavigationHudElement(session.getKistorRuntime(), session.getToastManager()).register();
+        // Anonymous active-installation counter: on joining a world/server, at most one heartbeat per
+        // day on the shared worker (never this thread). A no-op until a backend endpoint exists.
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> session.getUsageHeartbeatService().onClientActive());
         LOGGER.info("GameZone-händelsemotor: {} ({} verifierade parsrar)",
                 session.getParserCatalogStatus().getDisplayName(),
                 session.getParserCatalog().activeCount());

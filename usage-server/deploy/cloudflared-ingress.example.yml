@@ -1,0 +1,28 @@
+# EXAMPLE ONLY - merge into the server's existing cloudflared config (do not replace it).
+# Adds the hostname gzcompanion.taren.se in front of gzcompanion-usage on localhost:8787.
+#
+#   PUBLIC   https://gzcompanion.taren.se/api/gzcompanion/heartbeat   (POST, no auth)
+#   PRIVATE  https://gzcompanion.taren.se/stats                       (dashboard, STATS_TOKEN)
+#   PRIVATE  https://gzcompanion.taren.se/api/gzcompanion/stats       (JSON, STATS_TOKEN)
+#
+# Only these three paths are routed; everything else on the hostname gets 404 from cloudflared,
+# so the service is never reachable at any other path. Keep the existing catch-all rule LAST.
+
+ingress:
+  # ... existing rules for other hostnames stay above ...
+  - hostname: gzcompanion.taren.se
+    path: ^/api/gzcompanion/heartbeat$
+    service: http://127.0.0.1:8787
+  - hostname: gzcompanion.taren.se
+    path: ^/(stats|api/gzcompanion/stats)$
+    service: http://127.0.0.1:8787
+  - hostname: gzcompanion.taren.se
+    service: http_status:404
+  # ... existing catch-all (e.g. - service: http_status:404) stays last ...
+
+# DNS (once, on the server):  cloudflared tunnel route dns <TUNNEL-NAME> gzcompanion.taren.se
+#
+# Recommended extra layer for the PRIVATE paths (in the Cloudflare dashboard, Zero Trust -> Access):
+# a self-hosted Access application for gzcompanion.taren.se/stats and
+# gzcompanion.taren.se/api/gzcompanion/stats allowing only your own login. STATS_TOKEN still
+# protects them if Access is ever misconfigured. Do NOT put Access on the heartbeat path.

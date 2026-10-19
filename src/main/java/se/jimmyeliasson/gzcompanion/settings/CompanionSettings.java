@@ -1,5 +1,7 @@
 package se.jimmyeliasson.gzcompanion.settings;
 
+import se.jimmyeliasson.gzcompanion.ui.theme.UiTheme;
+
 import java.util.List;
 
 /**
@@ -22,12 +24,26 @@ public record CompanionSettings(
     boolean showUnverifiedKnowledge,
     boolean useLastKnownChestDataInPlanners,
     List<String> favoritePlayers,
-    boolean hideUnverifiedChatWarning
+    boolean hideUnverifiedChatWarning,
+    UiTheme uiTheme
 ) {
     public static final int CURRENT_SCHEMA = 1;
 
     public CompanionSettings {
         favoritePlayers = favoritePlayers != null ? List.copyOf(favoritePlayers) : List.of();
+        uiTheme = uiTheme != null ? uiTheme : UiTheme.DEFAULT;
+    }
+
+    /**
+     * Pre-theme seven-value shape; {@code uiTheme} defaults to {@link UiTheme#DEFAULT} (Minecraft),
+     * so settings saved before themes existed look exactly as before. No schema bump: a missing
+     * {@code uiTheme} key simply loads as the default.
+     */
+    public CompanionSettings(boolean companionNotificationsEnabled, boolean gameZoneToastsEnabled, boolean showTechnicalIds,
+                             boolean showUnverifiedKnowledge, boolean useLastKnownChestDataInPlanners, List<String> favoritePlayers,
+                             boolean hideUnverifiedChatWarning) {
+        this(companionNotificationsEnabled, gameZoneToastsEnabled, showTechnicalIds, showUnverifiedKnowledge,
+                useLastKnownChestDataInPlanners, favoritePlayers, hideUnverifiedChatWarning, UiTheme.DEFAULT);
     }
 
     /**
@@ -42,11 +58,16 @@ public record CompanionSettings(
     }
 
     public static CompanionSettings defaults() {
-        return new CompanionSettings(true, true, true, true, true, List.of(), false);
+        return new CompanionSettings(true, true, true, true, true, List.of(), false, UiTheme.DEFAULT);
     }
 
     public CompanionSettings withHideUnverifiedChatWarning(boolean hide) {
         return new CompanionSettings(companionNotificationsEnabled, gameZoneToastsEnabled, showTechnicalIds, showUnverifiedKnowledge,
-                useLastKnownChestDataInPlanners, favoritePlayers, hide);
+                useLastKnownChestDataInPlanners, favoritePlayers, hide, uiTheme);
+    }
+
+    public CompanionSettings withUiTheme(UiTheme theme) {
+        return new CompanionSettings(companionNotificationsEnabled, gameZoneToastsEnabled, showTechnicalIds, showUnverifiedKnowledge,
+                useLastKnownChestDataInPlanners, favoritePlayers, hideUnverifiedChatWarning, theme);
     }
 }
