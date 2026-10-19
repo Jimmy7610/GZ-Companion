@@ -28,7 +28,9 @@ Minecraft servers with custom economies, claims, rules, and commands can be over
 2. **Fair Play Above All**
    - Never provide an unfair competitive advantage. No X-ray, no ESP, no botting, no packet exploits.
 3. **Local-First & Private**
-   - No telemetry, no external accounts, no cloud sync. All data belongs strictly to the player.
+   - No player tracking, no gameplay analytics, no external accounts, no cloud sync. All data belongs strictly to the player.
+     The single exception is an anonymous active-installation counter (a random installation ID + version, at most daily,
+     never any Minecraft identity or game data) - see [Privacy](PRIVACY.md).
 4. **Swedish Accessibility**
    - All player-facing content uses natural, clear, welcoming Swedish.
 5. **Graceful Degradation**

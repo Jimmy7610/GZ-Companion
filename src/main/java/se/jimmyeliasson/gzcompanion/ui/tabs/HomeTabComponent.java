@@ -284,13 +284,13 @@ public class HomeTabComponent {
 
         // Toast Notification
         if (feedbackMessage != null && System.currentTimeMillis() < feedbackExpiry) {
-            int msgW = font.width(feedbackMessage) + 14;
+            int msgW = TextUtil.width(font, feedbackMessage) + 14;
             int toastX = bounds.x() + (bounds.width() - msgW) / 2;
             int toastY = bounds.bottom() - 20;
             extractor.fill(toastX, toastY, toastX + msgW, toastY + 14, 0xF00B1318);
             extractor.fill(toastX, toastY, toastX + msgW, toastY + 1, GZTheme.COLOR_EMERALD);
             extractor.fill(toastX, toastY + 13, toastX + msgW, toastY + 14, GZTheme.COLOR_EMERALD);
-            extractor.text(font, feedbackMessage, toastX + 7, toastY + 3, GZTheme.COLOR_MINT, false);
+            TextUtil.draw(extractor, font, feedbackMessage, toastX + 7, toastY + 3, GZTheme.COLOR_MINT, false);
         }
 
         if (showAdvisor) {

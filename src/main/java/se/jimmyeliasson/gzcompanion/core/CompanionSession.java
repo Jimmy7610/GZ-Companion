@@ -3,6 +3,7 @@ package se.jimmyeliasson.gzcompanion.core;
 import se.jimmyeliasson.gzcompanion.bounty.BountyManager;
 import se.jimmyeliasson.gzcompanion.events.EventScheduleManager;
 import se.jimmyeliasson.gzcompanion.events.GameZoneEventScheduleSource;
+import se.jimmyeliasson.gzcompanion.usage.UsageHeartbeatService;
 import se.jimmyeliasson.gzcompanion.bounty.GameZoneBountySource;
 import se.jimmyeliasson.gzcompanion.chest.ChestManager;
 import se.jimmyeliasson.gzcompanion.chest.KistorRuntime;
@@ -125,6 +126,11 @@ public class CompanionSession {
     private final EventScheduleManager eventScheduleManager = new EventScheduleManager(
             new GameZoneEventScheduleSource(gameZoneLiveDataRuntime),
             gameZoneLiveDataRuntime);
+    /** Anonymous active-installation counter (random id + version only; inactive until a backend
+     * endpoint is configured). Shares the GameZone runtime - no executor/HttpClient of its own.
+     * See docs/PRIVACY.md. */
+    private final UsageHeartbeatService usageHeartbeatService =
+            UsageHeartbeatService.createDefault(gameZoneLiveDataRuntime, CompanionConstants::getModVersion);
 
     /** THE single shared background executor for local-disk persistence work that must not block
      * the tick/render/main thread - see {@link LocalPersistenceRuntime}'s own doc comment. */
@@ -185,6 +191,8 @@ public class CompanionSession {
         buildingPlanManager.initialize();
         marketWatchNotesManager.initialize();
         settingsManager.initialize();
+        // Apply the persisted "Utseende" theme now and on every later change (immediate, no restart).
+        settingsManager.setThemeListener(se.jimmyeliasson.gzcompanion.ui.GZTheme::applyTheme);
         featureManager.setSettingsStatusSupplier(() -> settingsManager.getStatus().isAvailable());
         toastManager.setNotificationsEnabledSupplier(() -> settingsManager.getSettings().companionNotificationsEnabled());
         toastManager.setGameZoneToastsEnabledSupplier(() -> settingsManager.getSettings().gameZoneToastsEnabled());
@@ -422,6 +430,10 @@ public class CompanionSession {
     /** THE single Events schedule cache/fetch manager - see {@link EventScheduleManager}. */
     public EventScheduleManager getEventScheduleManager() {
         return eventScheduleManager;
+    }
+
+    public UsageHeartbeatService getUsageHeartbeatService() {
+        return usageHeartbeatService;
     }
 
     public GameZoneParserCatalog getParserCatalog() {

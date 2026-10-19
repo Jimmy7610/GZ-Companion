@@ -27,7 +27,7 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **NO Chest / Container Scanning**: Only tracks containers the player manually and legitimately opens.
 - **NO Automation**: No botting, auto-mining, auto-combat, auto-farming, or automated movement.
 - **NO Packet Exploits**: Uses standard client interactions only.
-- **NO Telemetry / Cloud Accounts**: Zero tracking, zero remote analytics, zero external API keys.
+- **NO Tracking / Cloud Accounts**: No player tracking, no gameplay analytics, no accounts, no API keys. The only outgoing usage data is an anonymous active-installation counter: a random installation ID and the GZ Companion version, at most once a day - never any Minecraft identity or game data (see [Privacy](docs/PRIVACY.md)).
 
 ---
 
@@ -104,6 +104,14 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Redacted Diagnostics**: A copy-only technical summary (versions, module statuses) that never includes chat text, coordinates, or personal notes.
 - **Dynamic Keybind Display**: Shows the Companion's actual current key binding, not a hardcoded "G".
 
+### Utseende (Themes) *(Implemented, human gameplay QA complete — unreleased)*
+- **Two Themes**: "Minecraft (Standard)" keeps the original look unchanged; "Tydlig" is a readability-first theme with a smooth sans-serif font, opaque panels and higher-contrast text. See [Themes](docs/THEMES.md).
+- **Instant, Look-Only**: Switches immediately without a restart and never changes any feature or layout.
+
+### Anonymous Installation Counter *(Implemented, production QA complete — unreleased)*
+- **How Many, Not Who**: At most once a day, a random installation ID and the GZ Companion version — nothing else. No Minecraft identity, no gameplay data, no device fingerprinting. Described openly in Inställningar. See [Privacy](docs/PRIVACY.md).
+- **Own Minimal Backend**: `gzcompanion-usage` ([usage-server](usage-server/README.md)) stores only ID, version, first and last seen — never IP addresses or request data — and shows only aggregate counts.
+
 
 ### Leaderboards
 - **GameZone Topplistor**: Se topplistor för spelare, settlements och företag direkt i Companion när den publika GameZone-datan är tillgänglig.
@@ -151,6 +159,9 @@ The compiled mod JAR will be located at:
 - [Product Bible](docs/PRODUCT-BIBLE.md): Vision, user personas, and design boundaries.
 - [Architecture](docs/ARCHITECTURE.md): Structural layout and layer isolation.
 - [Chest Manager](docs/CHEST-MANAGER.md): Fair-play boundary, capture lifecycle, and persistence for the Kistor module.
+- [Privacy](docs/PRIVACY.md): The anonymous active-installation counter - what is sent, when, and how the backend handles it.
+- [Usage backend](usage-server/README.md): The `gzcompanion-usage` service - routes, schema, privacy, deployment.
+- [Themes](docs/THEMES.md): The "Utseende" theme system and the Tydlig font.
 - [Events](docs/EVENTS.md): Public event-schedule source, caching, time-zone rules, and failure behaviour.
 - [Design System](docs/design/DESIGN-SYSTEM.md): Authoritative UI palette, components, and styling.
 - [GameZone Rule Pack](docs/GAMEZONE-RULE-PACK.md): Data schema, versioning, and verification specification.

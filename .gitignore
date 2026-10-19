@@ -37,3 +37,11 @@ obj/
 distribution/installer/GZCompanion.Installer.App/Assets/gzcompanion.jar
 distribution/dist/
 distribution/release/
+
+# gzcompanion-usage backend: local databases, secrets and dependencies are never committed.
+usage-server/data/
+usage-server/node_modules/
+usage-server/.env
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

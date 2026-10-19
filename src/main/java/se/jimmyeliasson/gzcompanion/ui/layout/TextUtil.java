@@ -2,23 +2,62 @@ package se.jimmyeliasson.gzcompanion.ui.layout;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
+import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 
 import java.util.List;
 
 /**
  * Robust typography measurement, wrapping, ellipsizing, and alignment utilities
  * with support for typography scaling tokens.
+ *
+ * <p><b>Themes.</b> This is the one place Companion text meets the font: every measurement, wrap
+ * and draw goes through {@link #width}, {@link #styled} and {@link #draw}, which apply the active
+ * theme's font ({@link GZTheme#textStyle()}) and shadow policy ({@link GZTheme#textShadows()}).
+ * Measuring and drawing always use the same font, so ellipsizing and wrapping stay exact under
+ * every theme.
  */
 public final class TextUtil {
     private TextUtil() {}
+
+    /** Unscaled width of {@code text} in the active theme's font. */
+    public static int width(Font font, String text) {
+        if (text == null || text.isEmpty()) return 0;
+        Style style = GZTheme.textStyle();
+        return style == null ? font.width(text) : font.width(Component.literal(text).withStyle(style));
+    }
+
+    /** {@code text} as a component in the active theme's font. */
+    public static Component styled(String text) {
+        Style style = GZTheme.textStyle();
+        Component c = Component.literal(text == null ? "" : text);
+        return style == null ? c : c.copy().withStyle(style);
+    }
+
+    /** Draws one unscaled line in the active theme's font; the shadow only if the theme allows it. */
+    public static void draw(GuiGraphicsExtractor extractor, Font font, String text, int x, int y, int colorArgb, boolean dropShadow) {
+        if (text == null || text.isEmpty()) return;
+        boolean shadow = dropShadow && GZTheme.textShadows();
+        if (GZTheme.textStyle() == null) {
+            extractor.text(font, text, x, y, colorArgb, shadow);
+        } else {
+            extractor.text(font, styled(text), x, y, colorArgb, shadow);
+        }
+    }
+
+    /** Draws an already-wrapped line (styled by {@link #splitLines}); the shadow only if the theme allows it. */
+    private static void drawLine(GuiGraphicsExtractor extractor, Font font, FormattedCharSequence line, int x, int y, int colorArgb, boolean dropShadow) {
+        extractor.text(font, line, x, y, colorArgb, dropShadow && GZTheme.textShadows());
+    }
 
     /**
      * Computes the scaled pixel width of a string.
      */
     public static int scaledWidth(Font font, String text, float scale) {
         if (text == null || text.isEmpty()) return 0;
-        return (int) Math.ceil(font.width(text) * scale);
+        return (int) Math.ceil(width(font, text) * scale);
     }
 
     /**
@@ -26,10 +65,10 @@ public final class TextUtil {
      */
     public static String ellipsize(Font font, String text, int maxPixelWidth) {
         if (text == null) return "";
-        if (font.width(text) <= maxPixelWidth) {
+        if (width(font, text) <= maxPixelWidth) {
             return text;
         }
-        int dotsW = font.width("...");
+        int dotsW = width(font, "...");
         if (maxPixelWidth <= dotsW) {
             return ".";
         }
@@ -37,7 +76,7 @@ public final class TextUtil {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (font.width(sb.toString() + c) > avail) {
+            if (width(font, sb.toString() + c) > avail) {
                 break;
             }
             sb.append(c);
@@ -71,13 +110,13 @@ public final class TextUtil {
                                       int x, int y, float scale, int colorArgb, boolean dropShadow) {
         if (text == null || text.isEmpty()) return;
         if (Math.abs(scale - 1.0f) < 0.001f) {
-            extractor.text(font, text, x, y, colorArgb, dropShadow);
+            draw(extractor, font, text, x, y, colorArgb, dropShadow);
             return;
         }
         extractor.pose().pushMatrix();
         extractor.pose().translate(x, y);
         extractor.pose().scale(scale, scale);
-        extractor.text(font, text, 0, 0, colorArgb, dropShadow);
+        draw(extractor, font, text, 0, 0, colorArgb, dropShadow);
         extractor.pose().popMatrix();
     }
 
@@ -87,7 +126,7 @@ public final class TextUtil {
     public static List<FormattedCharSequence> splitLines(Font font, String text, int maxPixelWidth, float scale) {
         if (text == null || text.isEmpty() || maxPixelWidth <= 0 || font == null) return List.of();
         int unscaledMaxW = (scale >= 0.999f) ? maxPixelWidth : (int) (maxPixelWidth / scale);
-        return font.split(net.minecraft.network.chat.Component.literal(text), unscaledMaxW);
+        return font.split(styled(text), unscaledMaxW);
     }
 
     /**
@@ -140,12 +179,12 @@ public final class TextUtil {
         int renderedLines = 0;
         for (int i = 0; i < lines.size() && i < maxLines; i++) {
             if (Math.abs(scale - 1.0f) < 0.001f) {
-                extractor.text(font, lines.get(i), x, currentY, colorArgb, dropShadow);
+                drawLine(extractor, font, lines.get(i), x, currentY, colorArgb, dropShadow);
             } else {
                 extractor.pose().pushMatrix();
                 extractor.pose().translate(x, currentY);
                 extractor.pose().scale(scale, scale);
-                extractor.text(font, lines.get(i), 0, 0, colorArgb, dropShadow);
+                drawLine(extractor, font, lines.get(i), 0, 0, colorArgb, dropShadow);
                 extractor.pose().popMatrix();
             }
             currentY += scaledLineH + lineSpacing;
@@ -173,12 +212,12 @@ public final class TextUtil {
         int currentY = y;
         for (FormattedCharSequence line : lines) {
             if (Math.abs(scale - 1.0f) < 0.001f) {
-                extractor.text(font, line, x, currentY, colorArgb, dropShadow);
+                drawLine(extractor, font, line, x, currentY, colorArgb, dropShadow);
             } else {
                 extractor.pose().pushMatrix();
                 extractor.pose().translate(x, currentY);
                 extractor.pose().scale(scale, scale);
-                extractor.text(font, line, 0, 0, colorArgb, dropShadow);
+                drawLine(extractor, font, line, 0, 0, colorArgb, dropShadow);
                 extractor.pose().popMatrix();
             }
             currentY += scaledLineH + lineSpacing;

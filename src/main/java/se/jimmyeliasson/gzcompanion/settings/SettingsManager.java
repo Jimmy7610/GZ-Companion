@@ -1,8 +1,11 @@
 package se.jimmyeliasson.gzcompanion.settings;
 
+import se.jimmyeliasson.gzcompanion.ui.theme.UiTheme;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
 /**
@@ -12,6 +15,7 @@ import java.util.function.UnaryOperator;
  */
 public class SettingsManager {
     private final SettingsStore store;
+    private volatile Consumer<UiTheme> themeListener;
     private CompanionSettings settings = CompanionSettings.defaults();
     private SettingsStatus status = SettingsStatus.UNAVAILABLE;
 
@@ -60,23 +64,46 @@ public class SettingsManager {
     }
 
     public boolean setCompanionNotificationsEnabled(boolean enabled) {
-        return mutate(s -> new CompanionSettings(enabled, s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning()));
+        return mutate(s -> new CompanionSettings(enabled, s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning(), s.uiTheme()));
     }
 
     public boolean setGameZoneToastsEnabled(boolean enabled) {
-        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), enabled, s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning()));
+        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), enabled, s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning(), s.uiTheme()));
     }
 
     public boolean setShowTechnicalIds(boolean enabled) {
-        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), enabled, s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning()));
+        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), enabled, s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning(), s.uiTheme()));
     }
 
     public boolean setShowUnverifiedKnowledge(boolean enabled) {
-        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), enabled, s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning()));
+        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), enabled, s.useLastKnownChestDataInPlanners(), s.favoritePlayers(), s.hideUnverifiedChatWarning(), s.uiTheme()));
     }
 
     public boolean setUseLastKnownChestDataInPlanners(boolean enabled) {
-        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), enabled, s.favoritePlayers(), s.hideUnverifiedChatWarning()));
+        return mutate(s -> new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), enabled, s.favoritePlayers(), s.hideUnverifiedChatWarning(), s.uiTheme()));
+    }
+
+    /**
+     * "Utseende": switches the visual theme. Only the look changes - never any feature. The theme
+     * listener applies it immediately (no restart).
+     */
+    public boolean setUiTheme(UiTheme theme) {
+        return mutate(s -> s.withUiTheme(theme));
+    }
+
+    /**
+     * Called with the current theme after settings load, after every change and after a reset, so
+     * the UI always shows the persisted theme. Kept as a plain listener so this class stays free of
+     * UI code.
+     */
+    public void setThemeListener(Consumer<UiTheme> listener) {
+        this.themeListener = listener;
+        notifyTheme();
+    }
+
+    private void notifyTheme() {
+        Consumer<UiTheme> listener = themeListener;
+        if (listener != null && settings != null) listener.accept(settings.uiTheme());
     }
 
     /** Hides ONLY Minecraft's vanilla "Chat messages can't be verified" toast. Default off. */
@@ -99,7 +126,7 @@ public class SettingsManager {
         return mutate(s -> {
             List<String> updated = new ArrayList<>(s.favoritePlayers());
             updated.add(trimmed);
-            return new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), updated, s.hideUnverifiedChatWarning());
+            return new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), updated, s.hideUnverifiedChatWarning(), s.uiTheme());
         });
     }
 
@@ -108,7 +135,7 @@ public class SettingsManager {
         String needle = username.toLowerCase(Locale.ROOT);
         return mutate(s -> {
             List<String> updated = s.favoritePlayers().stream().filter(f -> !f.toLowerCase(Locale.ROOT).equals(needle)).toList();
-            return new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), updated, s.hideUnverifiedChatWarning());
+            return new CompanionSettings(s.companionNotificationsEnabled(), s.gameZoneToastsEnabled(), s.showTechnicalIds(), s.showUnverifiedKnowledge(), s.useLastKnownChestDataInPlanners(), updated, s.hideUnverifiedChatWarning(), s.uiTheme());
         });
     }
 
@@ -120,6 +147,7 @@ public class SettingsManager {
         if (!requireLoaded()) return false;
         settings = CompanionSettings.defaults();
         store.save(settings);
+        notifyTheme();
         return true;
     }
 
@@ -127,6 +155,7 @@ public class SettingsManager {
         if (!requireLoaded()) return false;
         settings = mutator.apply(settings);
         store.save(settings);
+        notifyTheme();
         return true;
     }
 }
