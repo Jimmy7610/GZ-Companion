@@ -4,10 +4,10 @@ Anonymous active-installation counter for **GZ Companion** - "how many installat
 never "who". A small standalone Node.js service, unrelated to TarenAgent. See also the client-side
 description in [`docs/PRIVACY.md`](../docs/PRIVACY.md).
 
-**Status: deployed at `https://gzcompanion.taren.se` (Ubuntu, systemd, Cloudflare Tunnel); production
-end-to-end QA passed.** `deploy/server-setup.sh` is the stop-on-anything-unexpected script that was
-used for the deployment (inspect, deploy, local test, tunnel route with backup/rollback, external
-test, reset to zero, log check, backup).
+**Status: deployed at `https://gzcompanion.taren.se` (Ubuntu, systemd, remotely managed Cloudflare Tunnel); production
+end-to-end QA passed.** The production deployment was performed manually after server inspection because the existing
+Cloudflare Tunnel is token-based/remotely managed and has no local ingress YAML. `deploy/server-setup.sh` remains a
+prepared helper for locally managed tunnel setups; it intentionally stops when token-based remote management is detected.
 
 ## Architecture
 
@@ -129,7 +129,7 @@ npm test                                   # 26 tests, temporary SQLite database
 STATS_TOKEN=<32+ random chars> npm start   # http://127.0.0.1:8787, DB in ./data/
 ```
 
-## Deployment (prepared - not executed)
+## Deployment
 
 Target: Ubuntu 24.04, Node.js 24 (`/usr/bin/node`), Cloudflare Tunnel already running.
 
