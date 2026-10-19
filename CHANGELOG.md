@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.12] - 2026-10-19
+
+### Highlights
+- **New look:** choose between **Minecraft (Standard)** and the new readability-first **Tydlig**
+  theme, with a smooth bundled font (DejaVu Sans subset) for clearly improved readability.
+- **Anonymous active-installation counter:** only a random installation ID and the GZ Companion
+  version, at most once a day - no gameplay tracking, and no Minecraft identity, game data or
+  device information is ever sent.
+- **Standalone, privacy-safe usage backend** (`gzcompanion-usage`): stores only ID, version and
+  first/last seen - never IP addresses or request data.
+- **Private aggregate usage dashboard:** KPI cards, a 30-day new-installation chart, version
+  distribution and activity buckets - aggregates only.
+
 ### Added
 - **Utseende (themes)** - Inställningar has two themes: **Minecraft (Standard)**, the unchanged
   original look and the default, and **Tydlig**, a readability-first theme with a smooth

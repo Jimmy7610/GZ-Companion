@@ -1,6 +1,6 @@
 # Privacy: anonymous active-installation counter
 
-**Status (Unreleased): implemented, deployed and human-QA-complete.** The client sends to
+**Status: released in `v0.1.0-alpha.12`; implemented, deployed and human-QA-complete.** The client sends to
 `https://gzcompanion.taren.se/api/gzcompanion/heartbeat`, served by the `gzcompanion-usage` backend
 (`usage-server/`). Production end-to-end QA passed: a real GZ Companion launch and world join
 created exactly one installation (0 -> 1), restarting Minecraft and reconnecting kept it at exactly

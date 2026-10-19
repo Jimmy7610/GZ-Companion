@@ -1,6 +1,6 @@
 # Themes ("Utseende")
 
-**Status: implemented; human in-game QA complete (Minecraft unchanged, Tydlig incl. Å/Ä/Ö, alignment, long Swedish text, minimum/normal sizes, instant switching, persistence and reset all verified). Unreleased.**
+**Status: implemented; human in-game QA complete (Minecraft unchanged, Tydlig incl. Å/Ä/Ö, alignment, long Swedish text, minimum/normal sizes, instant switching, persistence and reset all verified). Released in `v0.1.0-alpha.12`.**
 
 ## 1. What it is
 

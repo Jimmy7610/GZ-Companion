@@ -104,11 +104,11 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 - **Redacted Diagnostics**: A copy-only technical summary (versions, module statuses) that never includes chat text, coordinates, or personal notes.
 - **Dynamic Keybind Display**: Shows the Companion's actual current key binding, not a hardcoded "G".
 
-### Utseende (Themes) *(Implemented, human gameplay QA complete — unreleased)*
+### Utseende (Themes) *(Completed — released in v0.1.0-alpha.12)*
 - **Two Themes**: "Minecraft (Standard)" keeps the original look unchanged; "Tydlig" is a readability-first theme with a smooth sans-serif font, opaque panels and higher-contrast text. See [Themes](docs/THEMES.md).
 - **Instant, Look-Only**: Switches immediately without a restart and never changes any feature or layout.
 
-### Anonymous Installation Counter *(Implemented, production QA complete — unreleased)*
+### Anonymous Installation Counter *(Completed — released in v0.1.0-alpha.12)*
 - **How Many, Not Who**: At most once a day, a random installation ID and the GZ Companion version — nothing else. No Minecraft identity, no gameplay data, no device fingerprinting. Described openly in Inställningar. See [Privacy](docs/PRIVACY.md).
 - **Own Minimal Backend**: `gzcompanion-usage` ([usage-server](usage-server/README.md)) stores only ID, version, first and last seen — never IP addresses or request data — and shows only aggregate counts.
 
