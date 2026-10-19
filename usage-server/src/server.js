@@ -3,22 +3,29 @@
  *
  * PUBLIC   POST /api/gzcompanion/heartbeat   {installationId, version} -> {ok:true}
  * PRIVATE  GET  /api/gzcompanion/stats       aggregate JSON (STATS_TOKEN)
- * PRIVATE  GET  /stats                       aggregate HTML dashboard (STATS_TOKEN)
+ * PRIVATE  GET  /stats                       aggregate HTML dashboard (STATS_TOKEN); its script
+ *                                             refreshes from the stats API with the browser's own
+ *                                             Basic credentials (the token is never in the page)
  *
  * The application never reads the client address, never stores or logs headers, bodies or ids,
- * and never sends stack traces. No redirects, no CORS (nothing is called from browsers cross-origin).
+ * and never sends stack traces. No redirects, no CORS (the dashboard only calls its own origin).
  */
 import { createServer as createHttpServer } from 'node:http';
 import { parseHeartbeat, ValidationError } from './validation.js';
 import { computeStats, HOUR_MS } from './stats.js';
 import { isAuthorized } from './auth.js';
 import { TokenBucket } from './limits.js';
-import { renderDashboard } from './dashboard.js';
+import { renderDashboard, DASHBOARD_CSP } from './dashboard.js';
 
 export const MAX_BODY_BYTES = 1024;
 const HEARTBEAT_PATH = '/api/gzcompanion/heartbeat';
 const STATS_PATH = '/api/gzcompanion/stats';
 const DASHBOARD_PATH = '/stats';
+const REALM = 'realm="gzcompanion-usage"';
+// The dashboard page asks for Basic; the API offers Basic too, so a browser re-sends the dashboard
+// login for its same-origin refresh calls, and Bearer for scripts.
+const DASHBOARD_CHALLENGE = `Basic ${REALM}, charset="UTF-8"`;
+const API_CHALLENGES = [DASHBOARD_CHALLENGE, `Bearer ${REALM}`];
 
 const BASE_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -119,8 +126,8 @@ export function createServer({ db, config, logger, clock = Date.now }) {
     if (!isAuthorized(req.headers.authorization, config.statsToken)) {
       return html
           ? send(res, 401, '<!doctype html><title>401</title><p>Inloggning krävs.</p>',
-              { 'Content-Type': 'text/html', 'WWW-Authenticate': 'Basic realm="gzcompanion-usage", charset="UTF-8"' })
-          : send(res, 401, { ok: false, error: 'unauthorized' }, { 'WWW-Authenticate': 'Bearer realm="gzcompanion-usage"' });
+              { 'Content-Type': 'text/html', 'WWW-Authenticate': DASHBOARD_CHALLENGE })
+          : send(res, 401, { ok: false, error: 'unauthorized' }, { 'WWW-Authenticate': API_CHALLENGES });
     }
     let stats;
     try {
@@ -130,9 +137,9 @@ export function createServer({ db, config, logger, clock = Date.now }) {
       return send(res, 503, { ok: false, error: 'temporarily unavailable' });
     }
     if (!html) return send(res, 200, stats);
-    return send(res, 200, renderDashboard(stats, clock()), {
+    return send(res, 200, renderDashboard(stats), {
       'Content-Type': 'text/html',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      'Content-Security-Policy': DASHBOARD_CSP,
       'X-Frame-Options': 'DENY',
     });
   }

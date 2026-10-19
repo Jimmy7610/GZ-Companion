@@ -90,9 +90,15 @@ fixed operational lines and aggregated counts - never an installation id, IP, he
 Abuse protection uses global limits only, deliberately not per-IP.
 
 **What the aggregates are for:** the private, token-protected statistics show only totals -
-unique installations, installations active in the last 24 hours / 7 days / 30 days, and active
-installations per GZ Companion version. They answer "is the mod used?" and "which versions are
-still in use (and need support)?". Individual installations are never listed.
+unique installations; installations active in the last 24 hours / 7 days / 30 days; how many were
+last heard from within 24 h, 1-7 days, 7-30 days or longer ago; new installations per day over the
+last 30 days (from `first_seen`); the latest heartbeat and newest installation time (`MAX` values);
+and active installations per GZ Companion version with their share. They answer "is the mod used?",
+"is it growing?" and "which versions are still in use (and need support)?". Everything is computed
+from the same four stored columns - no history, events or extra data are recorded for it - and
+individual installations are never listed. With very few installations, an aggregate can of course
+correspond to a single installation (for example the latest heartbeat time); that is why the
+statistics are private.
 
 ## 6. Activation status
 

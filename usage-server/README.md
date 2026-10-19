@@ -21,11 +21,11 @@ Zero npm dependencies - only Node.js 24 built-ins: `node:http`, `node:sqlite`, `
 | `src/server.js` | routing, method/content-type checks, 1 KB body limit, timeouts, error handling |
 | `src/validation.js` | strict heartbeat validation |
 | `src/db.js` | SQLite schema + prepared statements (no dynamic SQL) |
-| `src/stats.js` | aggregate statistics |
+| `src/stats.js` | aggregate statistics (one read snapshot; Swedish calendar days) |
 | `src/auth.js` | constant-time token check (bearer or basic) |
 | `src/limits.js` | global token-bucket abuse limits (no client identity) |
 | `src/log.js` | privacy-safe logger |
-| `src/dashboard.js` | server-rendered aggregate dashboard (no JavaScript) |
+| `src/dashboard.js` | private dashboard: self-contained HTML/CSS + one hash-pinned inline script, no external assets |
 
 `node:sqlite` is marked experimental in Node 24 (it works and is stable in practice); the start
 command passes `--disable-warning=ExperimentalWarning` to keep the log clean.
@@ -36,7 +36,7 @@ command passes `--disable-warning=ExperimentalWarning` to keep the log clean.
 |---|---|---|
 | PUBLIC | `POST /api/gzcompanion/heartbeat` | Body exactly `{"installationId":"<UUID>","version":"<version>"}` -> `200 {"ok":true}` |
 | PRIVATE | `GET /api/gzcompanion/stats` | Aggregate JSON |
-| PRIVATE | `GET /stats` | Aggregate HTML dashboard (Swedish) |
+| PRIVATE | `GET /stats` | Aggregate dashboard (Swedish), refreshes from the stats API every 60 s |
 
 Heartbeat responses: `200` stored; `400` invalid (malformed JSON, not exactly the two fields, bad
 UUID, bad version); `405` not POST (with `Allow: POST`); `413` body over 1 KB; `415` not
@@ -49,13 +49,40 @@ Validation: `installationId` = canonical UUID (8-4-4-4-12 hex, valid variant), s
 Stats response (aggregates only - no installation ids, ever):
 
 ```json
-{"uniqueInstallations":42,"active24h":11,"active7d":26,"active30d":35,
- "versions":[{"version":"0.1.0-alpha.12","active30d":28}]}
+{"generatedAt":1792411200000,"timeZone":"Europe/Stockholm",
+ "uniqueInstallations":42,"active24h":11,"active7d":26,"active30d":35,
+ "latestHeartbeat":1792410900000,"newestInstallation":1792380000000,"versionCount":3,
+ "activityBuckets":{"active24h":11,"day2to7":15,"day8to30":9,"inactive30dPlus":7},
+ "newInstallations30d":[{"date":"2026-09-20","count":0}, "... 30 entries ...", {"date":"2026-10-19","count":2}],
+ "versions":[{"version":"0.1.0-alpha.12","active30d":28,"percent":80},{"version":"0.1.0-alpha.11","active30d":7,"percent":20}]}
 ```
 
-"Active in the last N" = latest heartbeat inside the window (inclusive). The client sends at most one
-heartbeat per 24 h, so `active24h` approximates daily active installations. `versions` groups the
-30-day-active installations by their current version, most used first.
+Everything is computed from the existing table (`version`, `first_seen`, `last_seen`) in one read
+snapshot, so the numbers always agree with each other. Times are epoch milliseconds.
+
+- **Active in the last N** = latest heartbeat inside the window (inclusive). The client sends at most
+  one heartbeat per 24 h, so `active24h` approximates daily active installations.
+- **`latestHeartbeat` / `newestInstallation`** = `MAX(last_seen)` / `MAX(first_seen)`; `null` when empty.
+- **`activityBuckets`** = mutually exclusive groups by the *current* `last_seen`: <= 24 h, > 24 h-7 d,
+  > 7-30 d, > 30 d. They always add up to `uniqueInstallations`. A snapshot, not history.
+- **`newInstallations30d`** = installations whose `first_seen` falls on each of the last 30 calendar
+  days in Swedish time (DST-aware), oldest first, today last, every day present (zeros included).
+- **`versions`** groups the 30-day-active installations by their current version, most used first
+  (ties by name), with their share in percent (one decimal); `versionCount` is the number of entries.
+
+### Dashboard
+
+`/stats` is a Swedish dashboard meant to be left open: KPI cards, latest heartbeat / newest
+installation / versions in use, a daily bar chart of new installations (with a table view), version
+distribution and the activity buckets. It refreshes from `/api/gzcompanion/stats` every 60 s (and on
+"Uppdatera"); if a refresh fails it keeps the last values and shows "Kan inte uppdatera".
+
+- No framework, CDN, web font, analytics or external request; inline CSS and one inline script that
+  the Content-Security-Policy allows only by its SHA-256 hash (`connect-src 'self'`).
+- The token is never in the page, its JavaScript or a URL: the refresh call is same-origin and inside
+  the protection space the browser authenticated for `/stats`, so the browser re-sends its own Basic
+  credentials. (The API's 401 also offers a Basic challenge for that reason.)
+- The initial numbers are embedded as escaped JSON, so the page renders immediately.
 
 ## Database
 
@@ -79,8 +106,8 @@ backwards), never `first_seen`. WAL mode, `busy_timeout` 5 s, `secure_delete` on
 One secret, `STATS_TOKEN`, from the environment (never in git), accepted as
 `Authorization: Bearer <token>` (API/scripts) or HTTP Basic with the token as password (any user
 name) so a browser can open `/stats` through its normal login prompt. Compared in constant time on
-SHA-256 digests. Unauthenticated requests get `401` (`WWW-Authenticate: Bearer` for the API,
-`Basic` for the dashboard). **Recommended extra layer:** a Cloudflare Access application on the two
+SHA-256 digests. Unauthenticated requests get `401` (`WWW-Authenticate: Basic` for the dashboard;
+`Basic` and `Bearer` for the API). **Recommended extra layer:** a Cloudflare Access application on the two
 private paths (see `deploy/cloudflared-ingress.example.yml`).
 
 ## Privacy

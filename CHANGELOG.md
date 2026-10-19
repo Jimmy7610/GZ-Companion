@@ -28,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   limits, and a token-protected aggregate stats API and Swedish dashboard (`/stats`). Includes
   systemd, Cloudflare Tunnel and backup assets plus the `deploy/server-setup.sh` deployment
   script. Deployed at `gzcompanion.taren.se`.
+- **Usage dashboard** - the private `/stats` page is now a responsive Swedish dashboard meant to be
+  left open: KPI cards, latest heartbeat / newest installation / versions in use, new installations
+  per day over the last 30 days (Swedish calendar days, zero days included), version distribution
+  with counts and percentages, and mutually exclusive activity buckets by current last heartbeat.
+  Refreshes every 60 s and on "Uppdatera"; on failure it keeps the last values and shows "Kan inte
+  uppdatera". Vanilla HTML/CSS/JS with no external resources; the token is never in the page. The
+  private stats API returns the matching aggregates. Computed from the existing table - no new data
+  is stored.
 
 ### Changed
 - Privacy wording: the absolute "no telemetry" claims in Inställningar, README and the product
