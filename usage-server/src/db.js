@@ -44,6 +44,9 @@ export function openDatabase(path) {
     WHERE last_seen >= ?
     GROUP BY version
     ORDER BY active30d DESC, version ASC`);
+  const countFirstSeenBetween = db.prepare('SELECT COUNT(*) AS n FROM installations WHERE first_seen >= ? AND first_seen < ?');
+  const maxLastSeen = db.prepare('SELECT MAX(last_seen) AS t FROM installations');
+  const maxFirstSeen = db.prepare('SELECT MAX(first_seen) AS t FROM installations');
 
   return {
     /** @returns {boolean} true if this installation was not stored before */
@@ -61,6 +64,29 @@ export function openDatabase(path) {
     },
     versionsActiveSince(sinceMs) {
       return versionsSince.all(sinceMs).map((r) => ({ version: r.version, active30d: Number(r.active30d) }));
+    },
+    /** Installations whose first heartbeat is in [startMs, endMs). */
+    countFirstSeenBetween(startMs, endMs) {
+      return Number(countFirstSeenBetween.get(startMs, endMs).n);
+    },
+    /** Latest heartbeat time of any installation (aggregate MAX), or null when empty. */
+    maxLastSeen() {
+      const t = maxLastSeen.get().t;
+      return t === null ? null : Number(t);
+    },
+    /** Newest installation's first heartbeat time (aggregate MAX), or null when empty. */
+    maxFirstSeen() {
+      const t = maxFirstSeen.get().t;
+      return t === null ? null : Number(t);
+    },
+    /** Runs {@code fn} inside one read transaction so all its queries see the same snapshot. */
+    readSnapshot(fn) {
+      db.exec('BEGIN');
+      try {
+        return fn();
+      } finally {
+        db.exec('COMMIT');
+      }
     },
     /** Test-only inspection of one row. */
     rowForTesting(installationId) {
