@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "gzcompanion-gametest",
+  "version": "1.0.0",
+  "name": "GZ Companion client game tests",
+  "description": "Development-only runtime tests for GZ Companion. Never shipped.",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "se.jimmyeliasson.gzcompanion.gametest.GZCompanionClientGameTest"
+    ]
+  },
+  "depends": {
+    "gzcompanion": "*",
+    "fabric-client-gametest-api-v1": "*"
+  }
+}

@@ -80,6 +80,10 @@ public class KistorTabComponent implements TextInputHandler {
         return state.searchFocused;
     }
 
+    public String getSearchText() {
+        return state.searchText;
+    }
+
     /**
      * Opens "Hitta material i kistor" for a planner's material requirement set (Settlement /
      * Byggplaner). The request itself is session-only state in {@link KistorRuntime}.

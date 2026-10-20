@@ -461,6 +461,10 @@ public class GZCompanionMainScreen extends Screen {
         return super.charTyped(event);
     }
 
+    public TabType getActiveTab() {
+        return activeTab;
+    }
+
     public void setActiveTab(TabType tab) {
         if (tab != null) {
             this.activeTab = tab;

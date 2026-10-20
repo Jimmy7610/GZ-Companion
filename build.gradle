@@ -66,3 +66,19 @@ jar {
 test {
     useJUnitPlatform()
 }
+
+// Client game tests (src/gametest): launch the real Minecraft client in build/run/clientGameTest and
+// drive GZ Companion through real input - see src/gametest/java/.../GZCompanionClientGameTest.java.
+// Run with: gradlew runClientGameTest (twice: the second run verifies data after a game restart).
+// Only the integrated singleplayer server is used, so no EULA is accepted on anyone's behalf.
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "gzcompanion-gametest"
+        enableGameTests = false
+        enableClientGameTests = true
+        eula = false
+        clearRunDirectory = false
+        username = "GZTester"
+    }
+}
