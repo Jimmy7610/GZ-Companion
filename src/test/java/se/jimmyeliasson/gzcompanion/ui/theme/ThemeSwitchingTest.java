@@ -110,7 +110,7 @@ class ThemeSwitchingTest {
             byte[] head = ttf.readNBytes(4);
             assertArrayEquals(new byte[]{0, 1, 0, 0}, head, "TrueType font header");
         }
-        try (InputStream lic = getClass().getResourceAsStream("/assets/gzcompanion/font/tydlig/LICENSE_DEJAVU.txt")) {
+        try (InputStream lic = getClass().getResourceAsStream("/assets/gzcompanion/font/tydlig/license_dejavu.txt")) {
             assertNotNull(lic, "The DejaVu/Bitstream Vera license must ship with the font");
             assertTrue(new String(lic.readAllBytes(), StandardCharsets.UTF_8).contains("Bitstream Vera"));
         }

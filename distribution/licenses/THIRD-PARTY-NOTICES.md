@@ -47,7 +47,7 @@ Source: https://dejavu-fonts.github.io/
 A subset of `DejaVuSans.ttf` (Latin/Swedish, punctuation, arrows, shapes and UI symbols) is bundled
 inside the mod jar at `assets/gzcompanion/font/tydlig/dejavu_sans_subset.ttf`, unmodified apart from
 subsetting and keeping its original "DejaVu Sans" name (the license forbids only the names
-"Bitstream" and "Vera"). The full license text ships next to it as `LICENSE_DEJAVU.txt`.
+"Bitstream" and "Vera"). The full license text ships next to it as `license_dejavu.txt` (lower-case: Minecraft resource paths must be).
 
 ## What is never bundled or redistributed
 

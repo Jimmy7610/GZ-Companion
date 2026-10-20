@@ -40,7 +40,7 @@ Switching takes effect on the next frame - no restart, no screen rebuild.
 `font/tydlig/dejavu_sans_subset.ttf` (DejaVu Sans subset to Latin/Swedish, punctuation, arrows,
 shapes and the UI symbols - 115 KB) followed by a `reference` to `minecraft:default`, so any glyph
 outside the subset still renders in Minecraft's font. DejaVu Sans' license (Bitstream Vera-derived,
-DejaVu changes public domain) ships next to it as `LICENSE_DEJAVU.txt` and is listed in
+DejaVu changes public domain) ships next to it as `license_dejavu.txt` and is listed in
 `distribution/licenses/THIRD-PARTY-NOTICES.md`.
 
 ## 4. Persistence
