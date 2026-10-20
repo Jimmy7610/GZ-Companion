@@ -65,9 +65,9 @@ never silently receiving a prerelease (see `UpdateChannel`).
   "schemaVersion": 1,
   "version": "0.1.0-alpha.3",
   "channel": "alpha",
-  "minecraftVersion": "26.1.2",
+  "minecraftVersion": "26.3",
   "fabricLoaderVersion": "0.19.5",
-  "fabricApiVersion": "0.155.3+26.1.2",
+  "fabricApiVersion": "0.164.0+26.3",
   "installer": {
     "fileName": "GZ-Companion-Setup.exe",
     "sha256": "<64-hex-char lowercase SHA-256 of the exact installer bytes>",
@@ -163,7 +163,7 @@ GZ-Companion-Setup.exe --apply-update --wait-pid <minecraftPid> --from-version <
 When the player presses "Stäng och uppdatera": the mod re-verifies the downloaded installer's
 hash, starts it in this mode, and **only if that process actually starts** does it request a
 graceful Minecraft shutdown (`Minecraft.stop()` - verified via `javap` against the real Minecraft
-26.1.2 jar to be a trivial, thread-safe flag flip the client's own main loop unwinds from normally;
+26.1.2 and 26.3 jars to be a trivial, thread-safe flag flip the client's own main loop unwinds from normally;
 never `Runtime.halt`/`System.exit`). This ordering means a failure to start the updater never
 leaves the game already closed with nothing able to apply the update.
 

@@ -7,7 +7,7 @@ import net.minecraft.client.gui.components.toasts.SystemToast;
  * "Chat messages can't be verified" warning, and only while the player turned on the optional
  * "Dölj varningen ..." setting (default off).
  *
- * <p>In Minecraft 26.1.2 that warning is exactly one {@link SystemToast} whose token is
+ * <p>In Minecraft 26.1.2 and 26.3 (re-verified with javap and the client game tests) that warning is exactly one {@link SystemToast} whose token is
  * {@link SystemToast.SystemToastId#UNSECURE_SERVER_WARNING}. That id is referenced nowhere else
  * in the client - it is created only in {@code ClientPacketListener.handleLogin} - so matching on
  * the id alone identifies this warning precisely: no text matching, no heuristics, and every other

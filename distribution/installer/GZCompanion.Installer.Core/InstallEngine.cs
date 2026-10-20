@@ -641,7 +641,7 @@ public sealed class InstallEngine
     /// - The shared library cache (<see cref="InstallPaths.SharedLibrariesDir"/>) is NEVER deleted
     ///   or touched by uninstall, under any circumstance. Leaving cached jars behind is strictly
     ///   safer than risking another installation.
-    /// - Our specific Fabric version directory (e.g. versions/fabric-loader-0.19.5-26.1.2/) is
+    /// - Our specific Fabric version directory (e.g. versions/fabric-loader-0.19.5-26.3/) is
     ///   only removed if we can positively confirm no OTHER profile, in EITHER existing profile
     ///   file, still references that exact version id. If neither profile file exists, or our own
     ///   installed.json can't tell us which version we installed, the version directory is left

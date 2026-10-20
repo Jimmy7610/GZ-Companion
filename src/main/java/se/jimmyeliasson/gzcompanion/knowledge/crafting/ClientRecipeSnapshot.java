@@ -46,7 +46,7 @@ public record ClientRecipeSnapshot(
      * A stable identity for this recipe. The primary, load-bearing component is
      * {@code recipeDisplayId}, backed by {@code RecipeDisplayEntry.id().index()} - a real,
      * legitimately client-visible integer the server itself assigns to distinguish each synced
-     * recipe (confirmed by inspecting the Minecraft 26.1.2 {@code RecipeDisplayEntry} record:
+     * recipe (confirmed by inspecting the Minecraft 26.1.2 {@code RecipeDisplayEntry} record, unchanged in 26.3:
      * {@code id()} returns a {@code RecipeDisplayId} wrapping that integer, kept stable for the
      * lifetime of the connection - {@code ClientRecipeBook} never reassigns it to an existing
      * recipe, even though the map backing {@code getCollections()} can otherwise iterate in a

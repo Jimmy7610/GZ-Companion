@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Minecraft 26.3** - GZ Companion now targets Minecraft 26.3 (Fabric Loader 0.19.5, Fabric API
+  0.164.0+26.3, Loom 1.18.4). Ported to 26.3's SDL input: key constants from `InputConstants`,
+  mouse clicks translated from 26.3's 1-based buttons (otherwise every left click in the tabs would
+  have been ignored), and Companion text fields now start/stop Minecraft's text input (otherwise
+  typing would have stopped). Screen/HUD access moved to `gui` / `gui.hud`. Home and diagnostics
+  show the Minecraft version actually running. The installer installs the single VERIFIED entry
+  of `compatibility.json` instead of a hard-coded Minecraft version. See
+  `docs/MINECRAFT-26.3-MIGRATION.md`.
+
+### Fixed
+- The anonymous usage counter is inactive in development runs, so test runs never reach the
+  production statistics.
+- The bundled DejaVu license file has a valid (lower-case) resource path; Minecraft no longer logs
+  an error about it on every launch.
+
+### Added
+- Client game tests (`gradlew runClientGameTest`) that drive the real Minecraft client through every
+  Minecraft-facing feature, including a game-restart persistence check.
+
 ## [0.1.0-alpha.12] - 2026-10-19
 
 ### Highlights

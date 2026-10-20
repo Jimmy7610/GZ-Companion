@@ -221,7 +221,7 @@ retry, no per-frame retry.
 
 **Recipe identity.** `ClientRecipeSnapshot.stableKey()` is backed by `recipeDisplayId` -
 `RecipeDisplayEntry.id().index()`, a real integer the *server itself* assigns per synced recipe
-(confirmed by decompiling the Minecraft 26.1.2 `RecipeDisplayEntry` record). This is legitimately
+(confirmed by decompiling the Minecraft 26.1.2 `RecipeDisplayEntry` record; unchanged in 26.3). This is legitimately
 client-visible data, not an invented identifier, and it is stable for the life of the connection -
 `ClientRecipeBook` never reassigns it to an existing recipe. `readClientRecipeBook()` also dedupes
 by this id, since the same `RecipeDisplayEntry` can legitimately appear in more than one

@@ -32,7 +32,7 @@ Verification status strictly separates **technical compatibility** from **live s
   "name": "GZ Companion GameZone Rule Pack",
   "author": "Jimmy Eliasson",
   "compatibleCompanionVersions": ">=0.1.0-alpha.1",
-  "testedMinecraftVersions": ["26.1.2"],
+  "testedMinecraftVersions": ["26.3"],
   "targetHost": "play.gamezonemc.se",
   "verification": {
     "source": "GZ Companion Initial Alpha Schema",

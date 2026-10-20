@@ -109,7 +109,8 @@ never indexed as a physical chest.
 
 ## 4. Supported Storage — Milestone 3
 
-Explicit allow-list, verified against Minecraft 26.1.2's actual block and menu classes:
+Explicit allow-list, verified against Minecraft's actual block and menu classes (26.1.2, and again on 26.3
+by the client game tests, which open each one with a real use-key press):
 
 | Storage kind | Block class | Menu class actually opened |
 | :--- | :--- | :--- |
@@ -316,7 +317,7 @@ become spaces; capped at 32 characters. Edited inline from the FÖRVARING detail
 
 The detail pane's action row includes "Kopiera koord.", which copies the anchor position as plain
 text (e.g. `"120 64 -32"`, matching the format already used for coordinate search) to the local OS
-clipboard via the real, current Minecraft 26.1.2 API — `Minecraft.getInstance().keyboardHandler
+clipboard via the real Minecraft API (unchanged from 26.1.2 to 26.3) — `Minecraft.getInstance().keyboardHandler
 .setClipboard(String)` — no reflection, no hacks. A temporary "Kopierat!" confirmation replaces the
 button label for two seconds. This is a pure local convenience; nothing is sent anywhere, and
 chat is never used for the confirmation.
@@ -330,7 +331,7 @@ Stored snapshots contain item ids, not ItemStacks, so `chest.bridge.ChestItemIco
 - resolves the id against the running client's own item registry with
   `BuiltInRegistries.ITEM.getOptional(...)` (never `getValue`, which would silently turn an
   unknown/future id into Air), memoized with a bounded cache;
-- renders with the real 26.1.2 `GuiGraphicsExtractor.fakeItem(ItemStack, x, y)` — the same call
+- renders with the real `GuiGraphicsExtractor.fakeItem(ItemStack, x, y)` (26.1.2 and 26.3) — the same call
   Crafting/Settlement/Byggplaner already use. Icons smaller than 16 px (10 px in dense rows) are
   drawn by scaling the extractor's own 2D pose (`pose().pushMatrix()/translate/scale`), so text
   next to them stays on the normal pixel grid;

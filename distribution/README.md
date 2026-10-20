@@ -17,7 +17,7 @@ distribution/
 
 ## What this installer does, in one sentence
 
-Downloads the exact official Fabric Loader + Fabric API for Minecraft 26.1.2 from Fabric's and
+Downloads the exact official Fabric Loader + Fabric API for the target Minecraft version (26.3) from Fabric's and
 Modrinth's own servers, drops GZ Companion's own jar (embedded in the exe) alongside them in a
 brand-new, fully isolated game directory, and adds one new profile - "GZ Companion - GameZone" -
 to the player's existing Minecraft Launcher, without touching anything else already there.
@@ -30,8 +30,10 @@ installing it.
 ## compatibility.json
 
 The installer refuses to install anything not listed here with `"status": "VERIFIED"`. For this
-release that's exactly one entry: Minecraft 26.1.2 / Fabric Loader 0.19.5 / Fabric API
-0.155.3+26.1.2 / GZ Companion 0.1.0-alpha.2. Future releases add new entries here rather than the
+release that's exactly one entry: Minecraft 26.3 / Fabric Loader 0.19.5 / Fabric API
+0.164.0+26.3 (up to v0.1.0-alpha.12 it was Minecraft 26.1.2 / Fabric API 0.155.3+26.1.2). The
+installer installs the manifest's single VERIFIED entry - the Minecraft version is never hard-coded
+in the installer itself. Future releases change entries here rather than the
 installer guessing at compatibility - see `RELEASING.md` for the exact version-bump workflow, and
 `docs/UPDATES.md` for how `0.1.0-alpha.3` and later are delivered through the in-app updater
 instead of a manual reinstall.

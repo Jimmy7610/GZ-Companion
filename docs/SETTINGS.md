@@ -54,7 +54,7 @@ meaningless toggles" rule, it was left out rather than shipped as a no-op.
 
 ### "Dölj varningen om overifierad chatt"
 
-Optional, default **off** (vanilla behavior). In Minecraft 26.1.2 the warning is one
+Optional, default **off** (vanilla behavior). In Minecraft 26.1.2 and 26.3 the warning is one
 `SystemToast` created in exactly one place, `ClientPacketListener.handleLogin`, with the token
 `SystemToast.SystemToastId.UNSECURE_SERVER_WARNING` - an id no other client code uses. When the
 setting is on, `mixin.ToastManagerMixin` cancels `ToastManager.addToast` for that one token only

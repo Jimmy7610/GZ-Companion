@@ -17,7 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Real Minecraft 26.1.2 client-side snapshot extractor.
+ * Real Minecraft client-side snapshot extractor (26.3).
  * Only reads legitimate local player inventory and current key mappings.
  */
 public class MinecraftGuideSnapshotProvider implements GuideSnapshotProvider {

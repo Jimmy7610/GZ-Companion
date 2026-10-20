@@ -49,7 +49,7 @@ GZ Companion directory - this was wrong and has been corrected:
 %APPDATA%\.minecraft\                          <- the launcher's own root (SHARED, never wiped)
     launcher_profiles.json                     <- Win32/standalone launcher profile file
     launcher_profiles_microsoft_store.json     <- Microsoft Store/Xbox app launcher profile file
-    versions\fabric-loader-0.19.5-26.1.2\...   <- Fabric's version JSON
+    versions\fabric-loader-0.19.5-26.3\...     <- Fabric's version JSON
     libraries\...                              <- Fabric's loader libraries (asm, sponge-mixin, etc.)
 
 %LOCALAPPDATA%\GZ Companion\minecraft\          <- fully isolated GAME directory (gameDir)
@@ -147,7 +147,7 @@ Remove-Item -Recurse -Force $test
 | Fabric Loader version profile JSON | Downloaded live from `https://meta.fabricmc.net/v2/versions/loader/{mc}/{loader}/profile/json` at install time | Shared `.minecraft\versions\` | The response's own `id` field is checked against `compatibility.json` before anything is written |
 | Fabric Loader's library jars (asm, sponge-mixin, fabric-loader itself, etc.) | Downloaded from `https://maven.fabricmc.net/` at install time, using the exact relative paths and hashes the Meta API response itself provides | Shared `.minecraft\libraries\` | SHA-256 from that same API response (Fabric's own authoritative source); the one jar Fabric's API doesn't hash - `fabric-loader-{version}.jar` - falls back to an independently-verified hash pinned in `compatibility.json` |
 | Fabric API mod jar | Downloaded from Modrinth's CDN (`https://cdn.modrinth.com/...`), URL pinned in `compatibility.json` | Isolated `mods\` | SHA-256 pinned in `compatibility.json`, independently computed from a real download whose SHA-512 was cross-checked against Modrinth's own published version metadata |
-| Vanilla Minecraft 26.1.2 itself (client jar, assets, libraries) | **Not touched by this installer at all.** The Fabric profile JSON has `"inheritsFrom": "26.1.2"`; the official Minecraft Launcher downloads the vanilla version natively (from Mojang's own servers) the first time the "GZ Companion - GameZone" profile is played. This is the same mechanism Fabric's own installer relies on. | Launcher-managed | Mojang's own launcher handles this end-to-end; we never fetch or verify it ourselves |
+| Vanilla Minecraft itself (client jar, assets, libraries) | **Not touched by this installer at all.** The Fabric profile JSON has `"inheritsFrom": "26.3"`; the official Minecraft Launcher downloads the vanilla version natively (from Mojang's own servers) the first time the "GZ Companion - GameZone" profile is played. This is the same mechanism Fabric's own installer relies on. | Launcher-managed | Mojang's own launcher handles this end-to-end; we never fetch or verify it ourselves |
 
 Every download is HTTPS-only (`HttpsFileDownloader` throws if given a non-HTTPS URL). Nothing is
 ever executed - only jars and JSON are written to disk, and no downloaded script is ever run.
@@ -202,7 +202,7 @@ The installer will **never** install a Minecraft version whose manifest entry is
   - **Never** deletes anything under `.minecraft\libraries` - leaving a cached jar behind is
     strictly safer than risking another installation that might still need it.
   - Only deletes our own specific Fabric version directory (e.g.
-    `versions\fabric-loader-0.19.5-26.1.2\`) if it can positively confirm - by reading **every**
+    `versions\fabric-loader-0.19.5-26.3\`) if it can positively confirm - by reading **every**
     existing profile file (Win32 and/or Microsoft Store) - that no OTHER profile, in EITHER file,
     still has that exact `lastVersionId`. A reference from just one of the two files is enough to
     keep it. If our own `installed.json` can't say which version we installed, the version

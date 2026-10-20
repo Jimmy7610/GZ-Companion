@@ -16,7 +16,7 @@ import java.util.Map;
  *
  * <p>Resolution goes through the running client's own item registry via
  * {@code BuiltInRegistries.ITEM.getOptional} - an unknown or future id resolves to "no icon"
- * instead of silently becoming Air. Rendering uses the real 26.1.2
+ * instead of silently becoming Air. Rendering uses the real (26.1.2 / 26.3)
  * {@link GuiGraphicsExtractor#fakeItem(ItemStack, int, int)} (the same call the Crafting,
  * Settlement and Byggplaner tabs already use); smaller-than-16px icons are drawn by scaling the
  * extractor's own 2D pose, so text alignment around them stays on the normal pixel grid.

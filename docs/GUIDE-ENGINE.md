@@ -1,6 +1,6 @@
 # Guide Engine & Progression Architecture
 
-GZ Companion includes a modular, data-driven, client-side **Guide Engine** for Minecraft 26.1.2 (Fabric, Java 25).
+GZ Companion includes a modular, data-driven, client-side **Guide Engine** for Minecraft 26.3 (Fabric, Java 25).
 
 ## 1. Core Principles
 
@@ -26,7 +26,7 @@ GZ Companion includes a modular, data-driven, client-side **Guide Engine** for M
   "schemaVersion": 1,
   "contentVersion": "2026.09.09.1",
   "locale": "sv-SE",
-  "testedMinecraftVersions": ["26.1.2"],
+  "testedMinecraftVersions": ["26.3"],
   "guides": [
     {
       "id": "minecraft-beginner",
@@ -122,7 +122,7 @@ Guide progression and content are validated across three distinct tiers:
    - Condition types and structures validated (unknown condition types and malformed types safely rejected).
 
 2. **Registry & Tag Validated (Runtime / Initialization)**:
-   - **Item ID Validation**: Item IDs verified directly against Minecraft 26.1.2 vanilla item registries (`BuiltInRegistries.ITEM`).
+   - **Item ID Validation**: Item IDs verified directly against the running Minecraft version's vanilla item registries (`BuiltInRegistries.ITEM`).
    - **Guide Tag Validation**: Guide inventory tags verified against Guide snapshot-supported Minecraft tags (`GuideSupportedTags`, e.g. `minecraft:logs`, `minecraft:planks`, `minecraft:beds`, `minecraft:coals`, `minecraft:wool`). Unsupported tags are rejected at validation time to guarantee observability.
    - **Minecraft Version Compatibility**: Verified against `testedMinecraftVersions` (sets `GuideLoadStatus.INCOMPATIBLE` if mismatched).
 

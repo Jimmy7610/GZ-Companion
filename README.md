@@ -1,6 +1,6 @@
 # GZ Companion
 
-[![Minecraft 26.1.2](https://img.shields.io/badge/Minecraft-26.1.2-brightgreen.svg)](https://minecraft.net/)
+[![Minecraft 26.3](https://img.shields.io/badge/Minecraft-26.3-brightgreen.svg)](https://minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Modloader-Fabric-blue.svg)](https://fabricmc.net/)
 [![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](https://adoptium.net/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -52,7 +52,7 @@ GZ Companion is designed strictly within ethical fair-play boundaries.
 ### Milestone 3 — Chest Manager (Kistor)
 - **"Senast känt innehåll" (Last Known Contents)**: Indexes ONLY storage the player has personally and legitimately opened — never live, never scanned. See [Chest Manager](docs/CHEST-MANAGER.md) for the full fair-play boundary.
 - **Real Opened-Storage Capture**: A physical block right-click plus a correlated, matching menu open together start a capture session; the visible snapshot updates while the screen is open and is finalized once on close.
-- **Explicit Storage Allow-List**: Chest, Trapped Chest, Barrel, placed Shulker Box, Hopper, Dispenser, and Dropper — verified against actual Minecraft 26.1.2 block/menu classes. Everything else (furnaces, anvils, Ender Chests, plugin GUIs) is explicitly excluded.
+- **Explicit Storage Allow-List**: Chest, Trapped Chest, Barrel, placed Shulker Box, Hopper, Dispenser, and Dropper — verified against the actual Minecraft block/menu classes (re-verified on 26.3 by the client game tests). Everything else (furnaces, anvils, Ender Chests, plugin GUIs) is explicitly excluded.
 - **Searchable, Filterable, Sortable Local Index**: Search by item, label, storage type, dimension, or coordinates; filter by storage type; sort by recency, name, or type — across your own already-opened storage, never a world search.
 - **Local Custom Labels & Copy Coordinates**: Name a chest "Gruvbas" locally, and copy its coordinates to the clipboard — both pure local conveniences, never written to a sign, chat, or a server command.
 - **Explicit `StorageShape`**: Single, double, or unknown-shape chests are shown honestly and distinctly — never guessed.
@@ -160,6 +160,7 @@ The compiled mod JAR will be located at:
 - [Architecture](docs/ARCHITECTURE.md): Structural layout and layer isolation.
 - [Chest Manager](docs/CHEST-MANAGER.md): Fair-play boundary, capture lifecycle, and persistence for the Kistor module.
 - [Privacy](docs/PRIVACY.md): The anonymous active-installation counter - what is sent, when, and how the backend handles it.
+- [Minecraft 26.3 migration](docs/MINECRAFT-26.3-MIGRATION.md): What changed for 26.3, how it was verified, and what still needs the real GameZoneMC 26.3 server.
 - [Usage backend](usage-server/README.md): The `gzcompanion-usage` service - routes, schema, privacy, deployment.
 - [Themes](docs/THEMES.md): The "Utseende" theme system and the Tydlig font.
 - [Events](docs/EVENTS.md): Public event-schedule source, caching, time-zone rules, and failure behaviour.

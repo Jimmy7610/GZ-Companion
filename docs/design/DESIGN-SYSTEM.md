@@ -6,8 +6,8 @@ Authoritative visual specifications for GZ Companion, derived from [GZ-COMPANION
 
 ## 1. Core Principles & Rendering Model
 
-### Critical Minecraft 26.1.2 ARGB Color Model
-- **Explicit 32-bit ARGB**: In Minecraft 26.1.2, all color parameters passed into GUI rendering methods (`extractor.fill`, `extractor.text`, badges) must include an explicit Alpha byte (`0xAARRGGBB`).
+### Critical Minecraft 26.x ARGB Color Model
+- **Explicit 32-bit ARGB**: In Minecraft 26.1.2 and 26.3, all color parameters passed into GUI rendering methods (`extractor.fill`, `extractor.text`, badges) must include an explicit Alpha byte (`0xAARRGGBB`).
 - **Opaque Color Tokens**: All opaque colors (typography, borders, icons, status indicators) must use `0xFF` alpha (e.g., `0xFFF8FAFC`, `0xFF10B981`). An integer without alpha (`0x00RRGGBB`) renders completely invisible.
 - **Glass / Translucent Tokens**: Surfaces deliberately declare intended transparency (e.g. `0xF0` for dialog panel, `0xCC` for cards, `0x80` for recessed wells).
 
