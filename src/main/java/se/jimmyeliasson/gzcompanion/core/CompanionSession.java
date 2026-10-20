@@ -130,7 +130,8 @@ public class CompanionSession {
      * endpoint is configured). Shares the GameZone runtime - no executor/HttpClient of its own.
      * See docs/PRIVACY.md. */
     private final UsageHeartbeatService usageHeartbeatService =
-            UsageHeartbeatService.createDefault(gameZoneLiveDataRuntime, CompanionConstants::getModVersion);
+            UsageHeartbeatService.createDefault(gameZoneLiveDataRuntime, CompanionConstants::getModVersion,
+                    CompanionConstants.isDevelopmentEnvironment());
 
     /** THE single shared background executor for local-disk persistence work that must not block
      * the tick/render/main thread - see {@link LocalPersistenceRuntime}'s own doc comment. */

@@ -89,6 +89,18 @@ class UsageHeartbeatServiceTest {
     }
 
     @Test
+    @DisplayName("In a development environment (runClient, game tests) the production wiring is inactive - test runs never count")
+    void inactiveInDevelopmentEnvironment() {
+        GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test");
+        UsageHeartbeatService dev = UsageHeartbeatService.createDefault(runtime, () -> "1", true);
+        assertFalse(dev.isActive());
+        for (int i = 0; i < 5; i++) dev.onClientActive();
+        assertFalse(runtime.isExecutorInitializedForTesting(), "No worker thread was started");
+        assertFalse(runtime.isHttpClientInitializedForTesting(), "No HTTP client was created");
+        assertTrue(UsageHeartbeatService.createDefault(runtime, () -> "1", false).isActive(), "an installed jar keeps counting");
+    }
+
+    @Test
     @DisplayName("Production wiring is active, yet construction starts no thread and creates no HTTP client")
     void productionWiringActiveButLazy() {
         GameZoneLiveDataRuntime runtime = new GameZoneLiveDataRuntime("0.1.0-test");

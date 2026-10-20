@@ -63,8 +63,19 @@ public final class UsageHeartbeatService {
 
     /** The production wiring: active only once {@link HeartbeatEndpoint#PRODUCTION} is set. */
     public static UsageHeartbeatService createDefault(GameZoneLiveDataRuntime runtime, Supplier<String> version) {
+        return createDefault(runtime, version, false);
+    }
+
+    /**
+     * @param developmentEnvironment true when running from the development workspace ({@code runClient},
+     *        client game tests) - the counter is then inactive, so developer and automated test runs can
+     *        never add installations to the real statistics. Decided by the caller, so this package
+     *        never touches Fabric or Minecraft code.
+     */
+    public static UsageHeartbeatService createDefault(GameZoneLiveDataRuntime runtime, Supplier<String> version, boolean developmentEnvironment) {
         HeartbeatTransport transport = HeartbeatEndpoint.PRODUCTION
                 .filter(HeartbeatEndpoint::isValid)
+                .filter(uri -> !developmentEnvironment)
                 .<HeartbeatTransport>map(uri -> new HttpHeartbeatTransport(runtime, uri))
                 .orElse(null);
         return new UsageHeartbeatService(JsonInstallationIdentityStore.createDefault(), transport, runtime, version);

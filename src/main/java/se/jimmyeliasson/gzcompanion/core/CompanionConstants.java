@@ -50,6 +50,15 @@ public final class CompanionConstants {
         }
     }
 
+    /** True when running from the development workspace (Loom runClient / game tests), never for an installed jar. */
+    public static boolean isDevelopmentEnvironment() {
+        try {
+            return FabricLoader.getInstance().isDevelopmentEnvironment();
+        } catch (Throwable ignored) {
+            return false; // no loader at all (plain unit tests)
+        }
+    }
+
     /**
      * Obtains the single source of truth for the mod version from Fabric Loader.
      */
