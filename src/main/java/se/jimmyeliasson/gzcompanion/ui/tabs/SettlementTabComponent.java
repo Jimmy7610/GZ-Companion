@@ -5,7 +5,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.world.item.ItemStack;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import se.jimmyeliasson.gzcompanion.chest.material.PlannerMaterialRequests;
 import se.jimmyeliasson.gzcompanion.chest.model.StoredContainer;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
@@ -28,6 +28,7 @@ import se.jimmyeliasson.gzcompanion.settlement.SettlementLiveView;
 import se.jimmyeliasson.gzcompanion.settlement.SettlementPlannerManager;
 import se.jimmyeliasson.gzcompanion.settlement.storage.MemberNote;
 import se.jimmyeliasson.gzcompanion.settlement.storage.SettlementPlannerProfile;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.ItemHoverTooltips;
@@ -1247,7 +1248,7 @@ public class SettlementTabComponent implements TextInputHandler {
     // ------------------------------------------------------------------
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
         if (layout == null) layout = SettlementLayout.calculate(bounds);
 
         if (layout.modeBtnRect().contains(mouseX, mouseY)) {
@@ -1328,7 +1329,7 @@ public class SettlementTabComponent implements TextInputHandler {
         if (event == null || focusedField == null || !editingMember) return false;
         int key = event.key();
 
-        if (key == GLFW.GLFW_KEY_BACKSPACE) {
+        if (key == InputConstants.KEY_BACKSPACE) {
             if (focusedField == EditField.NAME && !editName.isEmpty()) {
                 editName = editName.substring(0, editName.length() - 1);
             } else if (focusedField == EditField.NOTE && !editNote.isEmpty()) {
@@ -1336,11 +1337,11 @@ public class SettlementTabComponent implements TextInputHandler {
             }
             return true;
         }
-        if (key == GLFW.GLFW_KEY_TAB) {
+        if (key == InputConstants.KEY_TAB) {
             focusedField = (focusedField == EditField.NAME) ? EditField.NOTE : EditField.NAME;
             return true;
         }
-        if (key == GLFW.GLFW_KEY_ESCAPE) {
+        if (key == InputConstants.KEY_ESCAPE) {
             cancelEditMember();
             return true;
         }

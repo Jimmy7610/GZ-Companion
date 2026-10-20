@@ -9,6 +9,7 @@ import se.jimmyeliasson.gzcompanion.bounty.BountyManager;
 import se.jimmyeliasson.gzcompanion.bounty.BountySnapshot;
 import se.jimmyeliasson.gzcompanion.bounty.BountyStatus;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
@@ -498,7 +499,7 @@ public class BountiesTabComponent {
     // ------------------------------------------------------------------
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
 
         // List row selection is resolved by re-deriving the clicked row's index from the CURRENT
         // snapshot/layout at click time (never trusting stale per-frame Hit closures for row

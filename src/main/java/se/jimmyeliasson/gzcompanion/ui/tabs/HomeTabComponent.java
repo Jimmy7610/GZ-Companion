@@ -18,6 +18,7 @@ import se.jimmyeliasson.gzcompanion.guide.GuideEngine;
 import se.jimmyeliasson.gzcompanion.guide.model.GuideStep;
 import se.jimmyeliasson.gzcompanion.guide.progress.GuideContext;
 import se.jimmyeliasson.gzcompanion.minecraft.OnlinePlayerSnapshot;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.HomeCopy;
@@ -189,7 +190,7 @@ public class HomeTabComponent {
         // 3. VERSION STRIP (Weighted allocations)
         GZTheme.drawCard(extractor, versionRect, GZTheme.COLOR_CARD_BG, GZTheme.COLOR_BORDER_SUBTLE);
         UiRect[] badges = layout.versionBadgeRects();
-        drawMiniBadge(extractor, font, badges[0], HomeCopy.STRIP_HEADER_MINECRAFT, CompanionConstants.TARGET_MINECRAFT_VERSION, GZTheme.COLOR_TEXT_PRIMARY);
+        drawMiniBadge(extractor, font, badges[0], HomeCopy.STRIP_HEADER_MINECRAFT, CompanionConstants.runningMinecraftVersion(), GZTheme.COLOR_TEXT_PRIMARY);
         drawMiniBadge(extractor, font, badges[1], HomeCopy.STRIP_HEADER_COMPANION, CompanionConstants.getModVersion(), GZTheme.COLOR_MINT);
         drawMiniBadge(extractor, font, badges[2], HomeCopy.STRIP_HEADER_RULE_PACK, packVersion, GZTheme.COLOR_TEXT_PRIMARY);
         drawMiniBadge(extractor, font, badges[3], HomeCopy.STRIP_HEADER_STATUS, compat.overallStatus().getDisplayName(), compat.overallStatus().getArgbColor());
@@ -757,7 +758,7 @@ public class HomeTabComponent {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
 
         if (showAdvisor) {
             for (AdvisorHit hit : advisorHitTargets) {

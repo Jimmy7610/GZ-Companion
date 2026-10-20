@@ -5,7 +5,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.knowledge.commands.CommandCatalog;
 import se.jimmyeliasson.gzcompanion.knowledge.commands.CommandCategory;
@@ -13,6 +13,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.commands.CommandDefinition;
 import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeModuleStatus;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationMetadata;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationStatus;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.ReferenceModeBanner;
@@ -389,7 +390,7 @@ public class CommandsTabComponent implements TextInputHandler {
     // ------------------------------------------------------------------
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
         if (layout == null) layout = CommandsLayout.calculate(bounds);
 
         CompanionSession session = CompanionSession.getInstance();
@@ -508,13 +509,13 @@ public class CommandsTabComponent implements TextInputHandler {
         int key = event.key();
 
         if (searchFocused) {
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (key == InputConstants.KEY_BACKSPACE) {
                 if (!searchText.isEmpty()) {
                     searchText = searchText.substring(0, searchText.length() - 1);
                 }
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (key == InputConstants.KEY_ESCAPE) {
                 searchFocused = false;
                 return true;
             }

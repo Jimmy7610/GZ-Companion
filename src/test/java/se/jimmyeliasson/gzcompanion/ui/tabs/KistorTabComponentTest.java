@@ -66,10 +66,10 @@ class KistorTabComponentTest {
         KistorTabComponent tab = new KistorTabComponent();
         se.jimmyeliasson.gzcompanion.ui.tabs.kistor.KistorUiState state = tab.stateForTesting();
         state.beginEdit(se.jimmyeliasson.gzcompanion.ui.tabs.kistor.KistorUiState.EditField.NOTE, "Källaren");
-        assertTrue(tab.keyPressed(new net.minecraft.client.input.KeyEvent(org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE, 0, 0)));
+        assertTrue(tab.keyPressed(new net.minecraft.client.input.KeyEvent(com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 0, 0)));
         assertNull(state.editField);
         assertFalse(tab.isTextInputFocused());
-        assertFalse(tab.keyPressed(new net.minecraft.client.input.KeyEvent(org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE, 0, 0)),
+        assertFalse(tab.keyPressed(new net.minecraft.client.input.KeyEvent(com.mojang.blaze3d.platform.InputConstants.KEY_ESCAPE, 0, 0)),
                 "With nothing focused ESC is left for the screen to close the Companion");
     }
 

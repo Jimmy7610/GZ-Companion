@@ -26,7 +26,7 @@ class GuideLoaderTest {
         assertNotNull(manifest, "Manifest must not be null");
         assertEquals("2026.09.09.1", manifest.contentVersion());
         assertEquals("sv-SE", manifest.locale());
-        assertTrue(manifest.testedMinecraftVersions().contains("26.1.2"));
+        assertTrue(manifest.testedMinecraftVersions().contains(se.jimmyeliasson.gzcompanion.core.CompanionConstants.TARGET_MINECRAFT_VERSION));
         assertFalse(manifest.guides().isEmpty(), "Manifest should contain at least 1 guide");
 
         List<GuideDefinition> guides = result.guides();

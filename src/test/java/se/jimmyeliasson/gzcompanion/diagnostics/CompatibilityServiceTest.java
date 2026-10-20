@@ -16,7 +16,7 @@ class CompatibilityServiceTest {
         RulePack pack = loader.loadBundled();
 
         CompatibilityService service = new CompatibilityService();
-        CompatibilityResult result = service.evaluate(pack, "26.1.2");
+        CompatibilityResult result = service.evaluate(pack, se.jimmyeliasson.gzcompanion.core.CompanionConstants.TARGET_MINECRAFT_VERSION);
 
         assertNotNull(result);
         assertEquals(CompatibilityStatus.UNVERIFIED, result.overallStatus());
@@ -40,7 +40,7 @@ class CompatibilityServiceTest {
     @DisplayName("Should report incompatible for null rule pack")
     void testNullRulePack() {
         CompatibilityService service = new CompatibilityService();
-        CompatibilityResult result = service.evaluate(null, "26.1.2");
+        CompatibilityResult result = service.evaluate(null, se.jimmyeliasson.gzcompanion.core.CompanionConstants.TARGET_MINECRAFT_VERSION);
 
         assertNotNull(result);
         assertEquals(CompatibilityStatus.INCOMPATIBLE, result.overallStatus());

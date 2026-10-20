@@ -4,7 +4,7 @@ import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import se.jimmyeliasson.gzcompanion.ui.layout.CraftingLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 
@@ -62,11 +62,11 @@ class CraftingTabInputTest {
         tab.mouseClicked(search.x() + 2, search.y() + 2, 0, BOUNDS, null);
         assertTrue(tab.isTextInputFocused());
 
-        boolean consumed = tab.keyPressed(new KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        boolean consumed = tab.keyPressed(new KeyEvent(InputConstants.KEY_ESCAPE, 0, 0));
         assertTrue(consumed);
         assertFalse(tab.isTextInputFocused());
 
-        boolean secondConsumed = tab.keyPressed(new KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        boolean secondConsumed = tab.keyPressed(new KeyEvent(InputConstants.KEY_ESCAPE, 0, 0));
         assertFalse(secondConsumed);
     }
 

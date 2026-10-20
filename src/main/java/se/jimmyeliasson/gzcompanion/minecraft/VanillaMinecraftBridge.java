@@ -59,7 +59,7 @@ public class VanillaMinecraftBridge implements MinecraftBridge {
 
     @Override
     public String getMinecraftVersion() {
-        return CompanionConstants.TARGET_MINECRAFT_VERSION;
+        return CompanionConstants.runningMinecraftVersion();
     }
 
     @Override
@@ -105,7 +105,7 @@ public class VanillaMinecraftBridge implements MinecraftBridge {
         if (screen instanceof Screen mcScreen) {
             Minecraft client = Minecraft.getInstance();
             if (client != null) {
-                client.setScreen(mcScreen);
+                client.gui.setScreen(mcScreen);
             }
         }
     }
@@ -123,7 +123,7 @@ public class VanillaMinecraftBridge implements MinecraftBridge {
         try {
             Minecraft client = Minecraft.getInstance();
             if (client != null && client.getConnection() != null) {
-                PlayerTabOverlay tabOverlay = client.gui != null ? client.gui.getTabList() : null;
+                PlayerTabOverlay tabOverlay = client.gui != null ? client.gui.hud.getTabList() : null;
                 for (PlayerInfo info : client.getConnection().getListedOnlinePlayers()) {
                     GameProfile profile = info.getProfile();
                     if (profile == null || profile.name() == null || profile.name().isBlank()) continue;
@@ -156,7 +156,7 @@ public class VanillaMinecraftBridge implements MinecraftBridge {
         try {
             Minecraft client = Minecraft.getInstance();
             if (client != null && client.gui != null) {
-                PlayerTabOverlay tabOverlay = client.gui.getTabList();
+                PlayerTabOverlay tabOverlay = client.gui.hud.getTabList();
                 if (tabOverlay instanceof PlayerTabOverlayAccessor accessor) {
                     Component header = accessor.gzcompanion$getHeader();
                     if (header != null) {

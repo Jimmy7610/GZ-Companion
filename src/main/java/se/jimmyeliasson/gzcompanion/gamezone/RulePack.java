@@ -21,7 +21,7 @@ public record RulePack(
     public static RulePack empty(String warning) {
         RulePackManifest fallbackManifest = new RulePackManifest(
             "1.0.0", "gamezone", "0.0.0-fallback", "Empty Pack", "Fallback",
-            "*", List.of("26.1.2"), "play.gamezonemc.se",
+            "*", List.of(se.jimmyeliasson.gzcompanion.core.CompanionConstants.TARGET_MINECRAFT_VERSION), "play.gamezonemc.se",
             new RulePackManifest.VerificationInfo("Fallback", "", se.jimmyeliasson.gzcompanion.diagnostics.CompatibilityStatus.UNKNOWN),
             Collections.emptyMap()
         );

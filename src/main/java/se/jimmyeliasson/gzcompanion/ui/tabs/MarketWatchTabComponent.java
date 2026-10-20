@@ -6,7 +6,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.world.item.ItemStack;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import se.jimmyeliasson.gzcompanion.chest.bridge.MinecraftPlayerPoseReader;
 import se.jimmyeliasson.gzcompanion.chest.model.DimensionNames;
 import se.jimmyeliasson.gzcompanion.chest.nav.ChestNavigationManager;
@@ -26,6 +26,7 @@ import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNavigation;
 import se.jimmyeliasson.gzcompanion.marketwatch.MarketWatchNotesManager;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchNote;
 import se.jimmyeliasson.gzcompanion.marketwatch.storage.MarketWatchSavedLocation;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.ItemHoverTooltips;
@@ -729,7 +730,7 @@ public class MarketWatchTabComponent implements TextInputHandler {
     // ------------------------------------------------------------------
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
         if (layout == null) layout = MarketWatchLayout.calculate(bounds);
 
         boolean insideSearch = layout.searchRect().contains(mouseX, mouseY);
@@ -812,7 +813,7 @@ public class MarketWatchTabComponent implements TextInputHandler {
         int key = event.key();
 
         if (editing && focusedField != null) {
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (key == InputConstants.KEY_BACKSPACE) {
                 if (focusedField == EditField.ITEM && !editItemText.isEmpty()) {
                     editItemText = editItemText.substring(0, editItemText.length() - 1);
                 } else if (focusedField == EditField.NOTE && !editNoteText.isEmpty()) {
@@ -826,12 +827,12 @@ public class MarketWatchTabComponent implements TextInputHandler {
                 }
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_TAB) {
+            if (key == InputConstants.KEY_TAB) {
                 focusedField = nextField(focusedField);
                 revealFocusedField = true;
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (key == InputConstants.KEY_ESCAPE) {
                 cancelEdit();
                 return true;
             }
@@ -839,11 +840,11 @@ public class MarketWatchTabComponent implements TextInputHandler {
         }
 
         if (!editing && searchFocused) {
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (key == InputConstants.KEY_BACKSPACE) {
                 if (!searchText.isEmpty()) searchText = searchText.substring(0, searchText.length() - 1);
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (key == InputConstants.KEY_ESCAPE) {
                 searchFocused = false;
                 return true;
             }

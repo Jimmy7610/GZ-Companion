@@ -53,7 +53,7 @@ class RulePackRegressionTest {
         assertTrue(minimalPack.parsers().isEmpty());
 
         CompatibilityService service = new CompatibilityService();
-        CompatibilityResult result = service.evaluate(minimalPack, "26.1.2");
+        CompatibilityResult result = service.evaluate(minimalPack, se.jimmyeliasson.gzcompanion.core.CompanionConstants.TARGET_MINECRAFT_VERSION);
         assertNotNull(result);
     }
 
@@ -72,13 +72,13 @@ class RulePackRegressionTest {
         RulePackLoader loader = new RulePackLoader();
         RulePack pack = loader.loadBundled();
 
-        assertTrue(pack.manifest().testedMinecraftVersions().contains("26.1.2"), "Manifest must list 26.1.2");
+        assertTrue(pack.manifest().testedMinecraftVersions().contains(se.jimmyeliasson.gzcompanion.core.CompanionConstants.TARGET_MINECRAFT_VERSION), "Manifest must list the target Minecraft version");
         
         CompatibilityService service = new CompatibilityService();
-        CompatibilityResult result = service.evaluate(pack, "26.1.2");
+        CompatibilityResult result = service.evaluate(pack, se.jimmyeliasson.gzcompanion.core.CompanionConstants.TARGET_MINECRAFT_VERSION);
         
         boolean hasMinecraftWarning = result.moduleReports().stream()
                 .anyMatch(r -> "minecraft".equals(r.moduleId()) && r.status() == CompatibilityStatus.WARNING);
-        assertFalse(hasMinecraftWarning, "Minecraft 26.1.2 should not have version warnings");
+        assertFalse(hasMinecraftWarning, "The target Minecraft version should not have version warnings");
     }
 }

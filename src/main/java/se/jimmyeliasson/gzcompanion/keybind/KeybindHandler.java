@@ -5,7 +5,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.resources.Identifier;
-import org.lwjgl.glfw.GLFW;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 
 /**
@@ -23,15 +22,15 @@ public final class KeybindHandler {
 
         openMenuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.gzcompanion.open",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_G,
+            InputConstants.Type.KEYBOARD,
+            InputConstants.KEY_G,
             category
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openMenuKey.consumeClick()) {
-                if (client.screen == null) {
-                    client.setScreen(new GZCompanionMainScreen());
+                if (client.gui.screen() == null) {
+                    client.gui.setScreen(new GZCompanionMainScreen());
                 }
             }
         });

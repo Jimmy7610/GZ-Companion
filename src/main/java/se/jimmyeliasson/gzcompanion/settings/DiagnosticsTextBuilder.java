@@ -17,7 +17,7 @@ public final class DiagnosticsTextBuilder {
         StringBuilder sb = new StringBuilder();
         sb.append("GZ Companion-diagnostik\n");
         sb.append("Companion-version: ").append(CompanionConstants.getModVersion()).append('\n');
-        sb.append("Minecraft-version: ").append(CompanionConstants.TARGET_MINECRAFT_VERSION).append('\n');
+        sb.append("Minecraft-version: ").append(CompanionConstants.runningMinecraftVersion()).append('\n');
         sb.append("Rule Pack-version: ").append(session.getActiveRulePack() != null
                 ? session.getActiveRulePack().manifest().packVersion() : "okänd").append('\n');
         sb.append("Aktiv profil: ").append(session.getCurrentServerProfile()).append('\n');

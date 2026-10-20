@@ -281,7 +281,7 @@ class GuideEngineTest {
                         real.manifest().schemaVersion(),
                         real.manifest().contentVersion(),
                         real.manifest().locale(),
-                        List.of("1.19.2", "1.20.1"), // Missing 26.1.2
+                        List.of("1.19.2", "1.20.1"), // Missing the target version
                         real.manifest().guides()
                 );
                 return new LoadResult(incompatibleManifest, real.guides(), real.warnings(), real.errors());

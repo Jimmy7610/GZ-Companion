@@ -26,7 +26,7 @@ class RulePackLoaderTest {
         assertEquals("1.0.0", manifest.schemaVersion());
         assertEquals("gamezone", manifest.profile());
         assertEquals("play.gamezonemc.se", manifest.targetHost());
-        assertTrue(manifest.testedMinecraftVersions().contains("26.1.2"), "Must support 26.1.2");
+        assertTrue(manifest.testedMinecraftVersions().contains(se.jimmyeliasson.gzcompanion.core.CompanionConstants.TARGET_MINECRAFT_VERSION), "Must list the target Minecraft version");
         assertNotNull(manifest.verification());
         assertEquals(CompatibilityStatus.UNVERIFIED, manifest.verification().status());
         assertFalse(manifest.name().contains("Official"), "Manifest name must not claim official status");

@@ -6,7 +6,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.world.item.ItemStack;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeModuleStatus;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationMetadata;
@@ -21,6 +21,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.crafting.RecipeKind;
 import se.jimmyeliasson.gzcompanion.knowledge.crafting.bridge.MinecraftRecipeDisplayAdapter;
 import se.jimmyeliasson.gzcompanion.knowledge.items.CustomItemKnowledge;
 import se.jimmyeliasson.gzcompanion.knowledge.items.ItemKnowledgeBase;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.ItemHoverTooltips;
@@ -899,7 +900,7 @@ public class CraftingTabComponent implements TextInputHandler {
     // ------------------------------------------------------------------
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
         if (layout == null) layout = CraftingLayout.calculate(bounds);
 
         boolean insideSearch = layout.searchRect().contains(mouseX, mouseY);
@@ -1018,13 +1019,13 @@ public class CraftingTabComponent implements TextInputHandler {
         int key = event.key();
 
         if (searchFocused) {
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (key == InputConstants.KEY_BACKSPACE) {
                 if (!searchText.isEmpty()) {
                     searchText = searchText.substring(0, searchText.length() - 1);
                 }
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (key == InputConstants.KEY_ESCAPE) {
                 searchFocused = false;
                 return true;
             }

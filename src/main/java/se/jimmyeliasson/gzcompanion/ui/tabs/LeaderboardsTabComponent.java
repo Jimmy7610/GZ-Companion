@@ -11,6 +11,7 @@ import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardGroup;
 import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardManager;
 import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardSnapshot;
 import se.jimmyeliasson.gzcompanion.leaderboard.LeaderboardStatus;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
@@ -451,7 +452,7 @@ public class LeaderboardsTabComponent {
     // ------------------------------------------------------------------
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
 
         List<UiRect> pickerRects = pickerHitTargets.stream().map(Hit::rect).toList();
         List<UiRect> normalRects = hitTargets.stream().map(Hit::rect).toList();

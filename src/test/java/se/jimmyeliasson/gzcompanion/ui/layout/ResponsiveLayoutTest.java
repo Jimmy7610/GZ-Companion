@@ -102,7 +102,7 @@ class ResponsiveLayoutTest {
         for (UiRect b : badges) {
             assertTrue(home.versionRect().contains(b), "Version badge must stay inside version strip");
         }
-        assertTrue(badges[0].width() >= 55, "Minecraft badge width should accommodate 26.1.2");
+        assertTrue(badges[0].width() >= 55, "Minecraft badge width should accommodate a version like 26.1.2");
         assertTrue(badges[1].width() >= 85, "Companion badge width should accommodate 0.1.0-alpha.1");
         assertTrue(badges[2].width() >= 80, "Rule Pack badge width should accommodate Ej laddad / version");
         assertTrue(badges[3].width() >= 65, "Status badge width should accommodate Overifierad");

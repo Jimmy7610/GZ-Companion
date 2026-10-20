@@ -73,7 +73,7 @@ public final class KistorNavigationHudElement implements HudElement {
             if (client == null || client.font == null || client.getWindow() == null) return;
             // Any open screen (Companion, a storage menu, inventory...) covers the HUD anyway, and
             // Kistor shows its own NAVIGERAR banner - but chatting keeps the guidance visible.
-            if (client.screen != null && !(client.screen instanceof ChatScreen)) return;
+            if (client.gui.screen() != null && !(client.gui.screen() instanceof ChatScreen)) return;
 
             long now = System.currentTimeMillis();
             if (now - lastContextCheckAtMs >= CONTEXT_CHECK_INTERVAL_MS) {
@@ -152,7 +152,7 @@ public final class KistorNavigationHudElement implements HudElement {
     private static int bossBarCount(Minecraft client) {
         try {
             if (client.gui == null) return 0;
-            Object overlay = client.gui.getBossOverlay();
+            Object overlay = client.gui.hud.getBossOverlay();
             if (overlay instanceof BossHealthOverlayAccessor accessor) {
                 return Math.min(MAX_BOSS_BARS_CONSIDERED, accessor.gzcompanion$getEvents().size());
             }

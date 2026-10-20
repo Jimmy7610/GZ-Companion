@@ -3,7 +3,7 @@ package se.jimmyeliasson.gzcompanion.chest;
 import net.minecraft.client.input.CharacterEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 import se.jimmyeliasson.gzcompanion.ui.tabs.KistorTabComponent;
 
@@ -75,13 +75,13 @@ class KistorTabInputTest {
         tab.mouseClicked(search.x() + 2, search.y() + 2, 0, BOUNDS, null);
         assertTrue(tab.isTextInputFocused());
 
-        boolean consumed = tab.keyPressed(new net.minecraft.client.input.KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        boolean consumed = tab.keyPressed(new net.minecraft.client.input.KeyEvent(InputConstants.KEY_ESCAPE, 0, 0));
         assertTrue(consumed, "The first ESC must be consumed by the tab (unfocus), not fall through to closing");
         assertFalse(tab.isTextInputFocused(), "Search must be unfocused after the first ESC");
 
         // A second ESC now finds nothing focused and must NOT be consumed by the tab, allowing
         // GZCompanionMainScreen to close the Companion normally.
-        boolean secondConsumed = tab.keyPressed(new net.minecraft.client.input.KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        boolean secondConsumed = tab.keyPressed(new net.minecraft.client.input.KeyEvent(InputConstants.KEY_ESCAPE, 0, 0));
         assertFalse(secondConsumed, "With nothing focused, the tab must not consume ESC - the screen should close");
     }
 
@@ -94,7 +94,7 @@ class KistorTabInputTest {
         tab.mouseClicked(search.x() + 2, search.y() + 2, 0, BOUNDS, null);
         tab.charTyped(new CharacterEvent((int) 'g'));
 
-        boolean consumed = tab.keyPressed(new net.minecraft.client.input.KeyEvent(GLFW.GLFW_KEY_BACKSPACE, 0, 0));
+        boolean consumed = tab.keyPressed(new net.minecraft.client.input.KeyEvent(InputConstants.KEY_BACKSPACE, 0, 0));
         assertTrue(consumed);
         assertTrue(tab.isTextInputFocused(), "Backspace must not unfocus the field");
     }

@@ -4,7 +4,7 @@ import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import se.jimmyeliasson.gzcompanion.ui.layout.CommandsLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.UiRect;
 
@@ -64,11 +64,11 @@ class CommandsTabInputTest {
         tab.mouseClicked(search.x() + 2, search.y() + 2, 0, BOUNDS, null);
         assertTrue(tab.isTextInputFocused());
 
-        boolean consumed = tab.keyPressed(new KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        boolean consumed = tab.keyPressed(new KeyEvent(InputConstants.KEY_ESCAPE, 0, 0));
         assertTrue(consumed);
         assertFalse(tab.isTextInputFocused());
 
-        boolean secondConsumed = tab.keyPressed(new KeyEvent(GLFW.GLFW_KEY_ESCAPE, 0, 0));
+        boolean secondConsumed = tab.keyPressed(new KeyEvent(InputConstants.KEY_ESCAPE, 0, 0));
         assertFalse(secondConsumed, "With nothing focused, ESC must fall through so the screen can close");
     }
 
@@ -81,7 +81,7 @@ class CommandsTabInputTest {
         tab.mouseClicked(search.x() + 2, search.y() + 2, 0, BOUNDS, null);
         tab.charTyped(new CharacterEvent((int) 'g'));
 
-        boolean consumed = tab.keyPressed(new KeyEvent(GLFW.GLFW_KEY_BACKSPACE, 0, 0));
+        boolean consumed = tab.keyPressed(new KeyEvent(InputConstants.KEY_BACKSPACE, 0, 0));
         assertTrue(consumed);
         assertTrue(tab.isTextInputFocused());
     }

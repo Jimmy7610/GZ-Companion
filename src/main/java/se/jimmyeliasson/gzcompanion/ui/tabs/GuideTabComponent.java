@@ -9,6 +9,7 @@ import se.jimmyeliasson.gzcompanion.guide.bridge.GuidePlayerSnapshot;
 import se.jimmyeliasson.gzcompanion.guide.condition.GuideConditionEvaluator;
 import se.jimmyeliasson.gzcompanion.guide.model.*;
 import se.jimmyeliasson.gzcompanion.guide.progress.GuideContext;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
@@ -541,7 +542,7 @@ public class GuideTabComponent {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
         if (layout == null) layout = GuideLayout.calculate(bounds);
 
         CompanionSession session = CompanionSession.getInstance();

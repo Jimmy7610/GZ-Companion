@@ -9,6 +9,7 @@ import se.jimmyeliasson.gzcompanion.keybind.KeybindHandler;
 import se.jimmyeliasson.gzcompanion.settings.CompanionSettings;
 import se.jimmyeliasson.gzcompanion.settings.DiagnosticsTextBuilder;
 import se.jimmyeliasson.gzcompanion.settings.SettingsManager;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
@@ -420,7 +421,7 @@ public class SettingsTabComponent {
     // ------------------------------------------------------------------
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
         if (layout == null) layout = SettingsLayout.calculate(bounds);
 
         for (RowHit hit : hitTargets) {

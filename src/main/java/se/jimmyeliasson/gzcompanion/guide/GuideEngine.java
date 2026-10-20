@@ -70,7 +70,7 @@ public class GuideEngine {
             }
 
             // Check Minecraft version compatibility against manifest tested versions
-            String currentMcVersion = se.jimmyeliasson.gzcompanion.core.CompanionConstants.TARGET_MINECRAFT_VERSION;
+            String currentMcVersion = se.jimmyeliasson.gzcompanion.core.CompanionConstants.runningMinecraftVersion();
             if (manifest != null && manifest.testedMinecraftVersions() != null && !manifest.testedMinecraftVersions().isEmpty()) {
                 if (!manifest.testedMinecraftVersions().contains(currentMcVersion)) {
                     this.loadStatus = GuideLoadStatus.INCOMPATIBLE;

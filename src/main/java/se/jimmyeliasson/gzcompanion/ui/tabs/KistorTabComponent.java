@@ -4,7 +4,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import se.jimmyeliasson.gzcompanion.chest.ChestManager;
 import se.jimmyeliasson.gzcompanion.chest.KistorRuntime;
 import se.jimmyeliasson.gzcompanion.chest.bridge.MinecraftPlayerPoseReader;
@@ -18,6 +18,7 @@ import se.jimmyeliasson.gzcompanion.chest.nav.NavigationDestination;
 import se.jimmyeliasson.gzcompanion.chest.nav.PlayerPose;
 import se.jimmyeliasson.gzcompanion.core.CompanionSession;
 import se.jimmyeliasson.gzcompanion.settings.CompanionSettings;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
@@ -310,7 +311,7 @@ public class KistorTabComponent implements TextInputHandler {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
         ensureLayout(bounds);
         if (layout == null) return false;
 
@@ -498,16 +499,16 @@ public class KistorTabComponent implements TextInputHandler {
         int key = event.key();
 
         if (state.editField != null) {
-            if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (key == InputConstants.KEY_ESCAPE) {
                 state.cancelEdit();
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+            if (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
                 CompanionSession session = CompanionSession.getInstance();
                 KistorStorageView.commitEdit(state, session.getChestManager(), session.getCurrentStorageContext(), state.selectedStorage);
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (key == InputConstants.KEY_BACKSPACE) {
                 if (!state.editText.isEmpty()) {
                     state.editText = state.editText.substring(0, state.editText.length() - 1);
                 }
@@ -517,13 +518,13 @@ public class KistorTabComponent implements TextInputHandler {
         }
 
         if (state.searchFocused) {
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (key == InputConstants.KEY_BACKSPACE) {
                 if (!state.searchText.isEmpty()) {
                     state.searchText = state.searchText.substring(0, state.searchText.length() - 1);
                 }
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_ESCAPE || key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+            if (key == InputConstants.KEY_ESCAPE || key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER) {
                 state.searchFocused = false;
                 return true;
             }

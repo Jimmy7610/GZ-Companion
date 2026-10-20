@@ -5,7 +5,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.world.item.ItemStack;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import se.jimmyeliasson.gzcompanion.building.BuildingPlanManager;
 import se.jimmyeliasson.gzcompanion.building.storage.BuildingPlan;
 import se.jimmyeliasson.gzcompanion.building.storage.BuildingRequirementKey;
@@ -19,6 +19,7 @@ import se.jimmyeliasson.gzcompanion.knowledge.common.KnowledgeModuleStatus;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationMetadata;
 import se.jimmyeliasson.gzcompanion.knowledge.common.VerificationStatus;
 import se.jimmyeliasson.gzcompanion.knowledge.crafting.bridge.MinecraftRecipeDisplayAdapter;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.ItemHoverTooltips;
@@ -858,7 +859,7 @@ public class BuildingsTabComponent implements TextInputHandler {
     // ------------------------------------------------------------------
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
         if (layout == null) layout = BuildingLayout.calculate(bounds);
 
         boolean insideSearch = layout.searchRect().contains(mouseX, mouseY);
@@ -956,11 +957,11 @@ public class BuildingsTabComponent implements TextInputHandler {
         int key = event.key();
 
         if (renamingPlanId != null) {
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (key == InputConstants.KEY_BACKSPACE) {
                 if (!renameText.isEmpty()) renameText = renameText.substring(0, renameText.length() - 1);
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (key == InputConstants.KEY_ESCAPE) {
                 renamingPlanId = null;
                 return true;
             }
@@ -968,11 +969,11 @@ public class BuildingsTabComponent implements TextInputHandler {
         }
 
         if (searchFocused) {
-            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+            if (key == InputConstants.KEY_BACKSPACE) {
                 if (!searchText.isEmpty()) searchText = searchText.substring(0, searchText.length() - 1);
                 return true;
             }
-            if (key == GLFW.GLFW_KEY_ESCAPE) {
+            if (key == InputConstants.KEY_ESCAPE) {
                 searchFocused = false;
                 return true;
             }

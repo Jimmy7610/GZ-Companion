@@ -9,6 +9,7 @@ import se.jimmyeliasson.gzcompanion.events.EventScheduleManager;
 import se.jimmyeliasson.gzcompanion.events.EventScheduleSnapshot;
 import se.jimmyeliasson.gzcompanion.events.EventScheduleStatus;
 import se.jimmyeliasson.gzcompanion.events.EventScheduleView;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.IconId;
@@ -266,7 +267,7 @@ public class EventsTabComponent {
     // ------------------------------------------------------------------
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
         for (Hit hit : hitTargets) {
             if (hit.rect().contains(mouseX, mouseY)) {
                 hit.action().run();

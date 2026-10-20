@@ -2,6 +2,7 @@ package se.jimmyeliasson.gzcompanion.ui.tabs;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import se.jimmyeliasson.gzcompanion.ui.UiMouseButton;
 import se.jimmyeliasson.gzcompanion.ui.GZCompanionMainScreen;
 import se.jimmyeliasson.gzcompanion.ui.GZTheme;
 import se.jimmyeliasson.gzcompanion.ui.TabType;
@@ -57,7 +58,7 @@ public class PlaceholderTabComponent {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button, UiRect bounds, GZCompanionMainScreen mainScreen) {
-        if (button != 0) return false;
+        if (button != UiMouseButton.LEFT) return false;
         calculateLayout(bounds);
 
         if (backBtnRect.contains(mouseX, mouseY)) {

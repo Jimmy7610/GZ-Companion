@@ -7,7 +7,7 @@ import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import se.jimmyeliasson.gzcompanion.core.CompanionConstants;
 import se.jimmyeliasson.gzcompanion.ui.layout.MainScreenLayout;
 import se.jimmyeliasson.gzcompanion.ui.layout.TextUtil;
@@ -33,6 +33,10 @@ import se.jimmyeliasson.gzcompanion.ui.tabs.SettlementTabComponent;
  */
 public class GZCompanionMainScreen extends Screen {
     private TabType activeTab = TabType.HEM;
+    /** Starts/stops Minecraft's text input (26.3+, SDL) whenever a Companion text field gains/loses focus. */
+    private final TextInputFocusTracker textInputFocus = new TextInputFocusTracker(focused -> {
+        if (this.minecraft != null) this.minecraft.onTextInputFocusChange(this, focused);
+    });
     private final HomeTabComponent homeTab = new HomeTabComponent();
     private final OnlineTabComponent onlineTab = new OnlineTabComponent();
     private final se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent guideTab = new se.jimmyeliasson.gzcompanion.ui.tabs.GuideTabComponent();
@@ -90,6 +94,8 @@ public class GZCompanionMainScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) {
+        // Catches focus changes that did not come from an input event (e.g. a tab opened programmatically).
+        syncTextInputFocus();
         Font font = this.font;
         this.layout = MainScreenLayout.calculate(this.width, this.height);
 
@@ -208,9 +214,16 @@ public class GZCompanionMainScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean isDoubleClick) {
+        boolean handled = handleMouseClicked(event, isDoubleClick);
+        syncTextInputFocus();
+        return handled;
+    }
+
+    private boolean handleMouseClicked(MouseButtonEvent event, boolean isDoubleClick) {
         double mouseX = event.x();
         double mouseY = event.y();
-        int button = event.button();
+        // Translate Minecraft's version-specific button number once (26.3: left = 1) into Companion's own (left = 0).
+        int button = UiMouseButton.fromMinecraft(event.button());
 
         if (layout == null) {
             this.layout = MainScreenLayout.calculate(this.width, this.height);
@@ -406,6 +419,12 @@ public class GZCompanionMainScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
+        boolean handled = handleKeyPressed(event);
+        syncTextInputFocus();
+        return handled;
+    }
+
+    private boolean handleKeyPressed(KeyEvent event) {
         int keyCode = event.key();
         TextInputHandler textInput = activeTextInputHandler();
 
@@ -414,7 +433,7 @@ public class GZCompanionMainScreen extends Screen {
         // the character normally; only this global close action is suppressed.
         boolean textInputFocused = textInput != null && textInput.isTextInputFocused();
 
-        if (keyCode == GLFW.GLFW_KEY_G && !textInputFocused) {
+        if (keyCode == InputConstants.KEY_G && !textInputFocused) {
             this.onClose();
             return true;
         }
@@ -425,7 +444,7 @@ public class GZCompanionMainScreen extends Screen {
             return true;
         }
 
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == InputConstants.KEY_ESCAPE) {
             this.onClose();
             return true;
         }
@@ -446,5 +465,19 @@ public class GZCompanionMainScreen extends Screen {
         if (tab != null) {
             this.activeTab = tab;
         }
+        syncTextInputFocus();
+    }
+
+    @Override
+    public void removed() {
+        // Never leave Minecraft's text input running after the Companion closes.
+        textInputFocus.release();
+        super.removed();
+    }
+
+    /** Tells Minecraft whether a Companion text field currently has focus - see {@link TextInputFocusTracker}. */
+    private void syncTextInputFocus() {
+        TextInputHandler textInput = activeTextInputHandler();
+        textInputFocus.sync(textInput != null && textInput.isTextInputFocused());
     }
 }
