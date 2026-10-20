@@ -75,4 +75,46 @@ public class CompatibilityManifestTests
     {
         Assert.Throws<ManifestParseException>(() => CompatibilityManifest.Parse("{}"));
     }
+
+    [Fact]
+    public void FindInstallTarget_ReturnsTheSingleVerifiedEntry()
+    {
+        var target = CompatibilityManifest.Parse(SampleJson).FindInstallTarget();
+        Assert.NotNull(target);
+        Assert.Equal(SupportStatus.Verified, target!.Status);
+        Assert.Equal("26.1.2", target.MinecraftVersion); // the fixture's verified entry - never the UNSUPPORTED one
+    }
+
+    [Fact]
+    public void FindInstallTarget_IsNullWithoutAVerifiedEntry()
+    {
+        string json = SampleJson.Replace("\"status\": \"VERIFIED\"", "\"status\": \"COMPATIBLE\"");
+        Assert.Null(CompatibilityManifest.Parse(json).FindInstallTarget());
+    }
+
+    [Fact]
+    public void FindInstallTarget_NeverPicksBetweenTwoVerifiedEntries()
+    {
+        string json = SampleJson.Replace("\"status\": \"UNSUPPORTED\"", "\"status\": \"VERIFIED\"");
+        Assert.Null(CompatibilityManifest.Parse(json).FindInstallTarget());
+    }
+
+    [Fact]
+    public void RealManifest_TargetsTheMinecraft263Stack()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !dir.EnumerateFiles("GZCompanion.Installer.slnx").Any()) dir = dir.Parent;
+        Assert.NotNull(dir);
+        var manifest = CompatibilityManifest.Parse(File.ReadAllText(Path.Combine(dir!.FullName, "..", "compatibility.json")));
+
+        var target = manifest.FindInstallTarget();
+        Assert.NotNull(target);
+        Assert.Equal("26.3", target!.MinecraftVersion);
+        Assert.Equal("0.19.5", target.FabricLoaderVersion);
+        Assert.Equal("0.164.0+26.3", target.FabricApiVersion);
+        Assert.Equal("fabric-api-0.164.0+26.3.jar", target.FabricApi.FileName);
+        Assert.Equal("fabric-loader-0.19.5-26.3", target.FabricLoader.ProfileId);
+        Assert.Contains("/loader/26.3/0.19.5/", target.FabricLoader.ProfileJsonUrl);
+        Assert.Equal($"gzcompanion-{target.CompanionVersion}.jar", target.CompanionJar.FileName);
+    }
 }

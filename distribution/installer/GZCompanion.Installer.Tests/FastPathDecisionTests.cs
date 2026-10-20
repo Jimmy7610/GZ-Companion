@@ -47,4 +47,19 @@ public class FastPathDecisionTests
         var installed = new InstalledState("0.1.0-alpha.2", "26.1.2", "0.19.5", "0.140.0+26.1.2", "2026-09-12T00:00:00Z");
         Assert.True(FastPathDecision.CanUseFastPath(installed, Target()));
     }
+
+    [Fact]
+    public void Alpha12On26_1_2_UpgradingToTheReal26_3Manifest_RequiresFullPath()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !dir.EnumerateFiles("GZCompanion.Installer.slnx").Any()) dir = dir.Parent;
+        Assert.NotNull(dir);
+        var target = CompatibilityManifest.Parse(File.ReadAllText(Path.Combine(dir!.FullName, "..", "compatibility.json"))).FindInstallTarget();
+        Assert.NotNull(target);
+
+        // What a player's installed.json says after installing the published v0.1.0-alpha.12.
+        var installed = new InstalledState("0.1.0-alpha.12", "26.1.2", "0.19.5", "0.155.3+26.1.2", "2026-10-19T00:00:00Z");
+        Assert.False(FastPathDecision.CanUseFastPath(installed, target!),
+            "Moving to a new Minecraft version must reinstall the Fabric profile (full path), even though the loader version is unchanged.");
+    }
 }

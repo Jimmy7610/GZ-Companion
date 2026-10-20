@@ -1,23 +1,23 @@
 ﻿{
     "schemaVersion":  1,
-    "generatedAt":  "2026-10-19T07:58:56Z",
+    "generatedAt":  "2026-10-20T22:24:13Z",
     "supported":  [
                       {
                           "status":  "VERIFIED",
                           "companionVersion":  "0.1.0-alpha.12",
-                          "minecraftVersion":  "26.1.2",
+                          "minecraftVersion":  "26.3",
                           "fabricLoaderVersion":  "0.19.5",
-                          "fabricApiVersion":  "0.155.3+26.1.2",
+                          "fabricApiVersion":  "0.164.0+26.3",
                           "companionJar":  {
                                                "fileName":  "gzcompanion-0.1.0-alpha.12.jar",
-                                               "sha256":  "461f0cc88becc1e2fbe05aeca8730a681eb52b90aef4f412b4103c73718f1621",
-                                               "sizeBytes":  1105873,
+                                               "sha256":  "3eff59c2821db556227d2f0e502dbb18c04448521b5e709ff92d0a3ef142399e",
+                                               "sizeBytes":  1108965,
                                                "source":  "embedded",
                                                "note":  "Bundled inside the installer as an embedded resource - built from this repository via .\\gradlew.bat build. Never downloaded."
                                            },
                           "fabricLoader":  {
-                                               "profileId":  "fabric-loader-0.19.5-26.1.2",
-                                               "profileJsonUrl":  "https://meta.fabricmc.net/v2/versions/loader/26.1.2/0.19.5/profile/json",
+                                               "profileId":  "fabric-loader-0.19.5-26.3",
+                                               "profileJsonUrl":  "https://meta.fabricmc.net/v2/versions/loader/26.3/0.19.5/profile/json",
                                                "note":  "Official Fabric Meta API. The returned JSON is the exact launcher version profile - it is fetched live at install time (not baked into this manifest) so library coordinates/hashes always come from Fabric\u0027s own authoritative source. Each library it lists is downloaded from https://maven.fabricmc.net/ and verified against the sha256 that same response provides.",
                                                "knownGoodFallback":  {
                                                                          "note":  "Fabric\u0027s profile response does not include a hash for the fabric-loader jar itself. This is our own independently-verified fallback hash, computed once from a real download, used only if the live response omits it again.",
@@ -28,12 +28,12 @@
                                                                      }
                                            },
                           "fabricApi":  {
-                                            "fileName":  "fabric-api-0.155.3+26.1.2.jar",
-                                            "downloadUrl":  "https://cdn.modrinth.com/data/P7dR8mSH/versions/3dM0X6ou/fabric-api-0.155.3%2B26.1.2.jar",
-                                            "source":  "https://modrinth.com/mod/fabric-api/version/0.155.3+26.1.2",
-                                            "sha256":  "7fe7bea3dbb7b2e9ff998ab583130cd62fab22ab8a5229656ff14b2e648c91dd",
-                                            "sha512":  "fa0308b42e9cd0dc3ff946f246d199d74547e0c946d7e3c9780a2537155307baf25129f69bd1349273babf879ffb4608b7e4af0740938f9c0f7b371b1c67d6ca",
-                                            "sizeBytes":  2521340,
+                                            "fileName":  "fabric-api-0.164.0+26.3.jar",
+                                            "downloadUrl":  "https://cdn.modrinth.com/data/P7dR8mSH/versions/LEklt8GT/fabric-api-0.164.0%2B26.3.jar",
+                                            "source":  "https://modrinth.com/mod/fabric-api/version/0.164.0+26.3",
+                                            "sha256":  "5a75198715a50a86787658617b03b97da9936d32df04896748c12135ba709de3",
+                                            "sha512":  "2ce7b0826f75801a56e8150eb5ceca467cdf8b4b44e160b5a5381e5412567d024f46a16c679f29c4a9346b2687fa1740f91ed6026a31b2ed1f3d4b5035968d69",
+                                            "sizeBytes":  1775592,
                                             "note":  "sha256/sizeBytes computed locally from a file whose sha512 was independently verified to match the value Modrinth\u0027s API itself publishes for this exact version."
                                         }
                       }
@@ -43,5 +43,5 @@
                          "COMPATIBLE":  "Reserved for future releases believed to work but not yet fully QA-verified.",
                          "UNSUPPORTED":  "Reserved for future releases explicitly known not to work - the installer must refuse these."
                      },
-    "policy":  "The installer must never install a Minecraft version/entry that is not present in this manifest with status VERIFIED. For this release, Minecraft 26.1.2 is the only supported target."
+    "policy":  "The installer must never install a Minecraft version/entry that is not present in this manifest with status VERIFIED. For this release, Minecraft 26.3 is the only supported target."
 }

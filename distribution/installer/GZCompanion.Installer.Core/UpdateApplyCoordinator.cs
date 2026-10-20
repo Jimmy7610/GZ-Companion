@@ -106,10 +106,10 @@ public sealed class UpdateApplyCoordinator
 
         progress?.Report(new UpdateApplyProgress(UpdateApplyPhase.Verifying, "Minecraft är stängt. Verifierar installation..."));
 
-        var target = req.Manifest.FindByMinecraftVersion("26.1.2");
+        var target = req.Manifest.FindInstallTarget();
         if (target is null)
         {
-            const string msg = "Minecraft 26.1.2 finns inte i den här uppdateringens kompatibilitetsmanifest.";
+            const string msg = "Den här uppdateringens kompatibilitetsmanifest har ingen verifierad Minecraft-version.";
             progress?.Report(new UpdateApplyProgress(UpdateApplyPhase.Failed, msg));
             return new UpdateApplyOutcome(UpdateApplyPhase.Failed, null, msg, UsedFastPath: false);
         }

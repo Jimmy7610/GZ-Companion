@@ -3,12 +3,12 @@ using GZCompanion.Installer.Core;
 
 namespace GZCompanion.Installer.App;
 
-/// <summary>One "Minecraft 26.1.2  ✓ Hittad" row: a fixed label plus a check mark and a mutable status suffix.</summary>
+/// <summary>One "Minecraft 26.3 (målversion)  ✓ Stöds" row: a fixed label plus a check mark and a mutable status suffix.</summary>
 internal sealed class StatusRow
 {
     private readonly Label _check;
     private readonly Label _text;
-    private readonly string _label;
+    private string _label;
 
     public StatusRow(Panel parent, int y, string label)
     {
@@ -17,6 +17,13 @@ internal sealed class StatusRow
         _text = new Label { Text = label, ForeColor = Theme.TextSecondary, Location = new Point(32, y), AutoSize = true, Font = Theme.BodyFont };
         parent.Controls.Add(_check);
         parent.Controls.Add(_text);
+    }
+
+    /// <summary>Replaces the fixed label (e.g. once the target versions are read from the manifest).</summary>
+    public void SetLabel(string label)
+    {
+        _label = label;
+        _text.Text = label;
     }
 
     public void SetPending()
@@ -127,10 +134,11 @@ public sealed class MainForm : Form
         _rowWindows = new StatusRow(_statusCard, 8, "Windows");
         _rowLauncher = new StatusRow(_statusCard, 34, "Minecraft Launcher");
         // "(målversion)" makes clear this is the version this installer TARGETS/supports, not a
-        // claim that Minecraft 26.1.2 is already installed on this machine.
-        _rowMcVersion = new StatusRow(_statusCard, 60, "Minecraft 26.1.2 (målversion)");
-        _rowLoader = new StatusRow(_statusCard, 86, "Fabric Loader 0.19.5");
-        _rowApi = new StatusRow(_statusCard, 112, "Fabric API 0.155.3+26.1.2");
+        // claim that this Minecraft version is already installed on this machine. The exact versions
+        // come from the embedded compatibility.json once it is loaded (ApplyTargetLabels).
+        _rowMcVersion = new StatusRow(_statusCard, 60, "Minecraft (målversion)");
+        _rowLoader = new StatusRow(_statusCard, 86, "Fabric Loader");
+        _rowApi = new StatusRow(_statusCard, 112, "Fabric API");
         _rowCompanion = new StatusRow(_statusCard, 138, $"GZ Companion v{Program.InstallerVersion}");
 
         _warningLabel = new Label
@@ -257,8 +265,14 @@ public sealed class MainForm : Form
         await Task.Run(() =>
         {
             _manifest = LoadManifest();
-            _target = _manifest.FindByMinecraftVersion("26.1.2");
+            _target = _manifest.FindInstallTarget();
         });
+        if (_target is not null)
+        {
+            _rowMcVersion.SetLabel($"Minecraft {_target.MinecraftVersion} (målversion)");
+            _rowLoader.SetLabel($"Fabric Loader {_target.FabricLoaderVersion}");
+            _rowApi.SetLabel($"Fabric API {_target.FabricApiVersion}");
+        }
 
         var windows = EnvironmentDetection.CheckWindowsVersion(Environment.OSVersion.Version);
         var launcher = EnvironmentDetection.CheckLauncher(_paths);

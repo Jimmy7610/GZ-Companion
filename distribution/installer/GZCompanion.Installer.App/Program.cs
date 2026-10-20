@@ -113,10 +113,10 @@ internal static class Program
         {
             manifest = CompatibilityManifest.Parse(await reader.ReadToEndAsync());
         }
-        var target = manifest.FindByMinecraftVersion("26.1.2");
+        var target = manifest.FindInstallTarget();
         if (target is null)
         {
-            Log("FEL: Minecraft 26.1.2 finns inte i den här installerarens kompatibilitetsmanifest.");
+            Log("FEL: Den här installerarens kompatibilitetsmanifest har ingen verifierad Minecraft-version.");
             return 1;
         }
         Log($"Mål: Minecraft {target.MinecraftVersion}, Fabric Loader {target.FabricLoaderVersion}, Fabric API {target.FabricApiVersion}, GZ Companion {target.CompanionVersion}");

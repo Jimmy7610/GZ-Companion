@@ -80,6 +80,18 @@ public sealed record CompatibilityManifest(int SchemaVersion, string GeneratedAt
     /// </summary>
     public bool IsInstallable(string minecraftVersion)
         => FindByMinecraftVersion(minecraftVersion) is { Status: SupportStatus.Verified };
+
+    /// <summary>
+    /// The one stack this installer build installs: the manifest's single VERIFIED entry. Returns null
+    /// when there is none - or more than one, since an installer must never pick between targets on its
+    /// own. Keeps the Minecraft version out of the installer code: moving to a new Minecraft version
+    /// only changes compatibility.json.
+    /// </summary>
+    public SupportedEntry? FindInstallTarget()
+    {
+        var verified = Supported.Where(e => e.Status == SupportStatus.Verified).ToList();
+        return verified.Count == 1 ? verified[0] : null;
+    }
 }
 
 public sealed class ManifestParseException : Exception
